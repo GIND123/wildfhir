@@ -1,0 +1,7 @@
+source_id,source_type,parameter,value,unit,observed_at,site_code,site_name,latitude,longitude,evidence_url
+pl-agency-001,agency,EC,1.20,mS/cm,2022-07-24T08:00:00Z,oder-kostrzyn,Oder at Kostrzyn,52.5887,14.6495,
+copernicus-s2,satellite,NDCI,0.18,1,2022-07-25T10:15:00Z,oder-kostrzyn,Oder at Kostrzyn,52.5887,14.6495,
+pl-agency-001,agency,electrical conductivity,2.35,mS/cm,2022-07-27T08:00:00Z,oder-kostrzyn,Oder at Kostrzyn,52.5887,14.6495,
+copernicus-s2,satellite,normalized difference chlorophyll index,0.43,1,2022-07-28T10:15:00Z,oder-kostrzyn,Oder at Kostrzyn,52.5887,14.6495,
+de-agency-002,agency,dissolved O2,3.60,mg/L,2022-07-29T07:30:00Z,oder-frankfurt,Oder at Frankfurt,52.3471,14.5506,
+

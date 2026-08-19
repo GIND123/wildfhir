@@ -1,0 +1,33 @@
+# Curated mappings are the authoritative baseline. An LLM adapter may propose
+# candidates later, but it must never bypass the review state machine.
+system: http://hl7.eu/fhir/ig/oah/CodeSystem/temporarySystem-oah-eu
+rules:
+  - code: electrical-conductivity
+    display: Electrical conductivity
+    aliases: [conductivity, electrical conductivity, ec, salinity proxy]
+    accepted_units: [mS/cm]
+    unit_conversions:
+      uS/cm: { factor: 0.001, target: mS/cm }
+  - code: ndci
+    display: Normalized Difference Chlorophyll Index (NDCI)
+    aliases: [ndci, normalized difference chlorophyll index, sentinel chlorophyll index]
+    accepted_units: ['1']
+  - code: waterTemperature
+    display: Water temperature
+    aliases: [water temperature, stream temperature, temp water]
+    accepted_units: [Cel]
+    unit_conversions:
+      degC: { factor: 1.0, target: Cel }
+  - code: dissolved-oxygen
+    display: Dissolved Oxygen
+    aliases: [dissolved oxygen, dissolved o2, do]
+    accepted_units: [mg/L]
+  - code: ph
+    display: pH
+    aliases: [ph, pH]
+    accepted_units: ['[pH]']
+  - code: chloride
+    display: Chloride
+    aliases: [chloride, cl-, chloride dissolved]
+    accepted_units: [mg/L]
+

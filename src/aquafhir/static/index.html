@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="AquaFHIR Bridge review and alert dashboard" />
+    <title>AquaFHIR Bridge</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <nav>
+        <a class="brand" href="/">AquaFHIR <span>Bridge</span></a>
+        <div class="nav-actions">
+          <span id="mode-badge" class="badge">Connecting</span>
+          <a href="/docs" target="_blank" rel="noreferrer">API docs ↗</a>
+        </div>
+      </nav>
+      <div class="hero-copy">
+        <p class="eyebrow">ONE HEALTH INTEROPERABILITY</p>
+        <h1>Turn water signals into reviewed, actionable health data.</h1>
+        <p>
+          Normalize agency, citizen, and satellite readings into the OneAquaHealth
+          FHIR profile. Every mapping is reviewed; every decision is traceable.
+        </p>
+        <div class="hero-actions">
+          <button id="replay-button" class="primary">Replay Oder demo</button>
+          <button id="refresh-button" class="secondary">Refresh data</button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="metrics" aria-label="Pipeline status">
+        <article><strong id="proposal-count">0</strong><span>Mapping proposals</span></article>
+        <article><strong id="pending-count">0</strong><span>Awaiting review</span></article>
+        <article><strong id="alert-count">0</strong><span>Policy alerts</span></article>
+        <article><strong id="chain-status">—</strong><span>Audit chain</span></article>
+      </section>
+
+      <section class="workspace-grid">
+        <article class="panel ingest-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">INGEST</p>
+              <h2>New environmental reading</h2>
+            </div>
+          </div>
+          <form id="reading-form">
+            <label>Parameter<input name="parameter" value="electrical conductivity" required /></label>
+            <div class="form-row">
+              <label>Value<input name="value" type="number" step="any" value="2.35" required /></label>
+              <label>UCUM unit<input name="unit" value="mS/cm" required /></label>
+            </div>
+            <label>Site name<input name="site_name" value="Oder at Kostrzyn" required /></label>
+            <div class="form-row">
+              <label>Latitude<input name="latitude" type="number" step="any" value="52.5887" required /></label>
+              <label>Longitude<input name="longitude" type="number" step="any" value="14.6495" required /></label>
+            </div>
+            <button class="primary" type="submit">Propose FHIR mapping</button>
+          </form>
+        </article>
+
+        <article class="panel pipeline-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">FLOW</p>
+              <h2>Controlled publication</h2>
+            </div>
+          </div>
+          <ol class="flow">
+            <li><span>01</span><div><strong>Ingest</strong><small>Preserve source and evidence</small></div></li>
+            <li><span>02</span><div><strong>Propose</strong><small>Terminology + UCUM candidate</small></div></li>
+            <li><span>03</span><div><strong>Review</strong><small>Human approval is mandatory</small></div></li>
+            <li><span>04</span><div><strong>Publish</strong><small>OAH R4 transaction bundle</small></div></li>
+            <li><span>05</span><div><strong>Alert</strong><small>Policy check + audit record</small></div></li>
+          </ol>
+        </article>
+      </section>
+
+      <section class="panel wide-panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">REVIEW QUEUE</p><h2>Terminology proposals</h2></div>
+          <span class="muted">Approval writes Location + Organization + Observation</span>
+        </div>
+        <div id="proposal-list" class="card-list"><p class="empty">No proposals yet.</p></div>
+      </section>
+
+      <section class="lower-grid">
+        <article class="panel">
+          <div class="panel-heading"><div><p class="eyebrow">ALERTS</p><h2>One Health inbox</h2></div></div>
+          <div id="alert-list" class="card-list"><p class="empty">No thresholds crossed.</p></div>
+        </article>
+        <article class="panel">
+          <div class="panel-heading"><div><p class="eyebrow">PROVENANCE</p><h2>Tamper-evident trail</h2></div></div>
+          <div id="provenance-list" class="timeline"><p class="empty">No events recorded.</p></div>
+        </article>
+      </section>
+    </main>
+
+    <div id="toast" role="status" aria-live="polite"></div>
+    <script src="/assets/app.js" defer></script>
+  </body>
+</html>
+

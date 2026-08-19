@@ -1,0 +1,27 @@
+# Demonstration policy only. These values are deliberately not described as
+# regulatory WFD/EQS limits. Replace them with approved, site-specific policy.
+policy_id: oder-replay-demo-v1
+policy_status: demo-not-for-operational-use
+rules:
+  - code: electrical-conductivity
+    operator: gte
+    value: 2.0
+    unit: mS/cm
+    severity: high
+    message: Conductivity pattern warrants cross-border ecological review.
+    audiences: [public-health, veterinary, water-authority]
+  - code: ndci
+    operator: gte
+    value: 0.35
+    unit: '1'
+    severity: high
+    message: Satellite chlorophyll proxy warrants bloom investigation.
+    audiences: [public-health, veterinary, water-authority]
+  - code: dissolved-oxygen
+    operator: lte
+    value: 4.0
+    unit: mg/L
+    severity: critical
+    message: Low dissolved oxygen may threaten aquatic life.
+    audiences: [veterinary, water-authority]
+

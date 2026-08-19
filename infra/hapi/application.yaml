@@ -1,0 +1,31 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/hapi
+    username: hapi
+    password: ${POSTGRES_PASSWORD:hapi-local-only}
+    driverClassName: org.postgresql.Driver
+  jpa:
+    properties:
+      hibernate.dialect: ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgresDialect
+      hibernate.search.enabled: false
+
+hapi:
+  fhir:
+    fhir_version: R4
+    allow_external_references: true
+    allow_cascading_deletes: false
+    subscription:
+      resthook_enabled: true
+    implementationguides:
+      oah:
+        name: hl7.eu.fhir.oah
+        version: 0.1.0-ci-build
+        packageUrl: https://build.fhir.org/ig/hl7-eu/oah/package.tgz
+        installMode: STORE_AND_INSTALL
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
