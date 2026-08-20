@@ -16,6 +16,38 @@
 - Never describe an alert as diagnosis or guaranteed prevention.
 - Complete data-protection, equity, accessibility, and cross-border governance reviews.
 
+## AI co-pilot (Gemini)
+
+The model layer is a proposer only. These gates keep it that way.
+
+- Keep `requires_review = true` unconditional. No confidence value, model version, or
+  operator setting may auto-approve a mapping, and no model output may reach the FHIR
+  publisher or the threshold engine directly.
+- Pin the model version explicitly (`GEMINI_MODEL`) and record it with every proposal.
+  Re-run the evaluation set before changing it; a silent model upgrade is a change to
+  clinical-adjacent behaviour.
+- Version every prompt template (`prompts.py` ids) and treat a wording change as a
+  reviewable change. The rendered prompt hash is already chained; add template-diff
+  review to the release process.
+- Build a labelled evaluation set of real multilingual source labels with expert-assigned
+  OAH codes. Track precision, recall, refusal rate (`NO_MATCH`), and the rate at which
+  reviewers override the model. Publish the numbers alongside the release.
+- Measure reviewer over-trust directly: sample approvals and re-check them blind. A
+  co-pilot that raises throughput while lowering review quality is a net safety loss.
+- Constrain the vocabulary at the API boundary (`responseSchema` enums) *and* re-check it
+  in code after the response, as `coding_llm.py` does. Never trust the schema alone.
+- Keep all unit arithmetic in `coding.py`. A model may name a unit; it must never compute
+  a published quantity.
+- Treat unstructured intake text as untrusted input. Add prompt-injection tests, cap input
+  size, and remember that extraction output is still gated by human review.
+- Route advisory drafts through an accountable authority before any external send. The
+  `draft` status and the stored disclaimer are the current, deliberately weak, control.
+- Set a per-tenant quota and a circuit breaker. Confirm the pipeline still functions with
+  the key removed — that path is tested, keep it tested.
+- Review the provider's data-handling terms against your data-protection assessment before
+  sending any real monitoring data, and record the legal basis for the transfer.
+
+
 ## Security
 
 - Put both APIs behind TLS and an API gateway; remove direct public HAPI access.

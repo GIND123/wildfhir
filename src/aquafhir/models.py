@@ -18,6 +18,13 @@ class ReviewStatus(StrEnum):
     REJECTED = "rejected"
 
 
+class ProposerKind(StrEnum):
+    """Which proposer produced a mapping. Never affects review requirements."""
+
+    CURATED = "curated-rules"
+    GEMINI_ASSISTED = "gemini-assisted"
+
+
 class RawReading(BaseModel):
     source_id: str = Field(min_length=1, max_length=120)
     source_type: SourceType
@@ -39,6 +46,29 @@ class Coding(BaseModel):
     display: str
 
 
+class AiAttribution(BaseModel):
+    """Everything an auditor needs to reconstruct one model call."""
+
+    provider: str = "google-gemini"
+    model: str
+    template_id: str
+    prompt_hash: str
+    response_hash: str
+    latency_ms: int
+    grounded_codes: list[str] = Field(default_factory=list)
+    evidence: list[str] = Field(default_factory=list)
+    model_confidence: float | None = None
+    disagreed_with_rules: bool = False
+    needs_expert_review: bool = False
+
+
+class CandidateCoding(BaseModel):
+    code: str
+    display: str
+    score: float
+    origin: str
+
+
 class MappingProposal(BaseModel):
     id: str
     reading: RawReading
@@ -52,6 +82,9 @@ class MappingProposal(BaseModel):
     reviewer: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     reviewed_at: datetime | None = None
+    proposer: ProposerKind = ProposerKind.CURATED
+    candidates: list[CandidateCoding] = Field(default_factory=list)
+    ai: AiAttribution | None = None
 
 
 class ReviewDecision(BaseModel):
@@ -65,6 +98,17 @@ class ReviewDecision(BaseModel):
         if (self.normalized_value is None) != (self.normalized_unit is None):
             raise ValueError("normalized_value and normalized_unit must be supplied together")
         return self
+
+
+class BatchReviewDecision(BaseModel):
+    """Approve several inspected proposals under one named reviewer.
+
+    Each id is still decided, stored, and hash-chained individually, so a batch
+    sign-off is not a shortcut around the review state machine.
+    """
+
+    reviewer: str = Field(min_length=1, max_length=120)
+    proposal_ids: list[str] = Field(min_length=1, max_length=100)
 
 
 class RejectDecision(BaseModel):
@@ -87,11 +131,76 @@ class Alert(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class AlertBriefing(BaseModel):
+    """An AI-drafted, human-approved-before-use advisory for one audience."""
+
+    id: str
+    alert_id: str
+    audience: str
+    headline: str
+    summary: str
+    recommended_actions: list[str]
+    uncertainty: str
+    escalation_question: str
+    status: str = "draft"
+    disclaimer: str = (
+        "AI-drafted decision support. Not a public warning, clinical advice, or "
+        "veterinary advice. An accountable authority must review before any use."
+    )
+    ai: AiAttribution | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class SiteAssessment(BaseModel):
+    site_code: str
+    assessment: str
+
+
+class SituationReport(BaseModel):
+    headline: str
+    situation: str
+    by_site: list[SiteAssessment] = Field(default_factory=list)
+    data_gaps: list[str] = Field(default_factory=list)
+    next_steps: list[str] = Field(default_factory=list)
+    observations_considered: int = 0
+    alerts_considered: int = 0
+    pending_reviews: int = 0
+    disclaimer: str = (
+        "Generated from this bridge's own stored records only. No external data, "
+        "no prediction, no regulatory determination."
+    )
+    ai: AiAttribution | None = None
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class IntakeRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=20000)
+    source_id: str = Field(default="unstructured-intake", min_length=1, max_length=120)
+    source_type: SourceType = SourceType.AGENCY
+    default_site_code: str = Field(default="unknown-site", min_length=1, max_length=100)
+    default_site_name: str = Field(default="Unknown site", min_length=1, max_length=200)
+    default_latitude: float = Field(default=52.5887, ge=-90, le=90)
+    default_longitude: float = Field(default=14.6495, ge=-180, le=180)
+
+
+class IntakeResult(BaseModel):
+    proposals: list[MappingProposal] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    extracted_count: int = 0
+    rejected_count: int = 0
+    ai: AiAttribution | None = None
+
+
 class ApprovalResult(BaseModel):
     proposal: MappingProposal
     observation: dict[str, Any]
     fhir_response: dict[str, Any]
     alerts: list[Alert]
+
+
+class BatchApprovalResult(BaseModel):
+    approved: list[ApprovalResult] = Field(default_factory=list)
+    failures: list[dict[str, str]] = Field(default_factory=list)
 
 
 class ProvenanceEntry(BaseModel):
@@ -108,3 +217,14 @@ class ChainVerification(BaseModel):
     valid: bool
     entries_checked: int
     first_invalid_sequence: int | None = None
+
+
+class AiStatus(BaseModel):
+    enabled: bool
+    provider: str = "google-gemini"
+    model: str
+    assist_mode: str
+    assist_below_confidence: float
+    confidence_ceiling: float
+    features: list[str] = Field(default_factory=list)
+    detail: str

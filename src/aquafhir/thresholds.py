@@ -18,8 +18,8 @@ OPERATORS: dict[str, Callable[[float, float], bool]] = {
 
 
 class ThresholdPolicy:
-    def __init__(self, path: Path) -> None:
-        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+    def __init__(self, path: Path | str) -> None:
+        document = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
         self.policy_id: str = document["policy_id"]
         self.status: str = document["policy_status"]
         self.rules: list[dict[str, Any]] = document["rules"]

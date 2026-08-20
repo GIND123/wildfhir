@@ -12,6 +12,7 @@
       <nav>
         <a class="brand" href="/">AquaFHIR <span>Bridge</span></a>
         <div class="nav-actions">
+          <span id="ai-badge" class="badge badge-ai" title="AI co-pilot status">AI —</span>
           <span id="mode-badge" class="badge">Connecting</span>
           <a href="/docs" target="_blank" rel="noreferrer">API docs ↗</a>
         </div>
@@ -21,11 +22,14 @@
         <h1>Turn water signals into reviewed, actionable health data.</h1>
         <p>
           Normalize agency, citizen, and satellite readings into the OneAquaHealth
-          FHIR profile. Every mapping is reviewed; every decision is traceable.
+          FHIR profile. Gemini proposes the terminology and drafts the advisory;
+          a human approves everything; every step is hash-chained.
         </p>
         <div class="hero-actions">
           <button id="replay-button" class="primary">Replay Oder demo</button>
-          <button id="refresh-button" class="secondary">Refresh data</button>
+          <button id="approve-all-button" class="secondary">Approve pending queue</button>
+          <button id="situation-button" class="secondary">AI situation report</button>
+          <button id="refresh-button" class="secondary">Refresh</button>
         </div>
       </div>
     </header>
@@ -35,6 +39,7 @@
         <article><strong id="proposal-count">0</strong><span>Mapping proposals</span></article>
         <article><strong id="pending-count">0</strong><span>Awaiting review</span></article>
         <article><strong id="alert-count">0</strong><span>Policy alerts</span></article>
+        <article><strong id="briefing-count">0</strong><span>AI advisories</span></article>
         <article><strong id="chain-status">—</strong><span>Audit chain</span></article>
       </section>
 
@@ -42,15 +47,15 @@
         <article class="panel ingest-panel">
           <div class="panel-heading">
             <div>
-              <p class="eyebrow">INGEST</p>
+              <p class="eyebrow">INGEST · STRUCTURED</p>
               <h2>New environmental reading</h2>
             </div>
           </div>
           <form id="reading-form">
-            <label>Parameter<input name="parameter" value="electrical conductivity" required /></label>
+            <label>Parameter<input name="parameter" value="Leitfähigkeit" required /></label>
             <div class="form-row">
-              <label>Value<input name="value" type="number" step="any" value="2.35" required /></label>
-              <label>UCUM unit<input name="unit" value="mS/cm" required /></label>
+              <label>Value<input name="value" type="number" step="any" value="2350" required /></label>
+              <label>Source unit<input name="unit" value="uS/cm" required /></label>
             </div>
             <label>Site name<input name="site_name" value="Oder at Kostrzyn" required /></label>
             <div class="form-row">
@@ -58,24 +63,48 @@
               <label>Longitude<input name="longitude" type="number" step="any" value="14.6495" required /></label>
             </div>
             <button class="primary" type="submit">Propose FHIR mapping</button>
+            <small>
+              The default is deliberately a German field label with a non-UCUM unit —
+              exactly what string matching alone cannot resolve.
+            </small>
           </form>
         </article>
 
-        <article class="panel pipeline-panel">
+        <article class="panel">
           <div class="panel-heading">
             <div>
-              <p class="eyebrow">FLOW</p>
-              <h2>Controlled publication</h2>
+              <p class="eyebrow">INGEST · UNSTRUCTURED</p>
+              <h2>Paste a bulletin or field note</h2>
             </div>
+            <span id="intake-availability" class="muted"></span>
           </div>
-          <ol class="flow">
-            <li><span>01</span><div><strong>Ingest</strong><small>Preserve source and evidence</small></div></li>
-            <li><span>02</span><div><strong>Propose</strong><small>Terminology + UCUM candidate</small></div></li>
-            <li><span>03</span><div><strong>Review</strong><small>Human approval is mandatory</small></div></li>
-            <li><span>04</span><div><strong>Publish</strong><small>OAH R4 transaction bundle</small></div></li>
-            <li><span>05</span><div><strong>Alert</strong><small>Policy check + audit record</small></div></li>
-          </ol>
+          <form id="intake-form">
+            <label>
+              Free text
+              <textarea name="text" rows="8" required>WIOŚ Szczecin — Odra / Oder at Kostrzyn, 27.07.2022 08:00 UTC.
+Leitfähigkeit 2350 uS/cm (Vortag 1200 uS/cm). Gelöster Sauerstoff 3,6 mg/L.
+Sentinel-2 NDCI im Abschnitt bei 0,43.
+Angler melden tote Fische flussabwärts — keine Messung vorhanden.</textarea>
+            </label>
+            <div class="form-row">
+              <label>Site code<input name="default_site_code" value="oder-kostrzyn" required /></label>
+              <label>Source id<input name="source_id" value="wios-szczecin-bulletin" required /></label>
+            </div>
+            <button class="primary" type="submit" id="intake-submit">Extract readings with Gemini</button>
+            <small>Extraction is literal. Nothing is inferred, and every result still needs review.</small>
+          </form>
+          <div id="intake-warnings" class="warn-list"></div>
         </article>
+      </section>
+
+      <section class="panel wide-panel flow-panel">
+        <ol class="flow">
+          <li><span>01</span><div><strong>Ingest</strong><small>Source and evidence preserved</small></div></li>
+          <li><span>02</span><div><strong>Propose</strong><small>Gemini + curated catalog</small></div></li>
+          <li><span>03</span><div><strong>Review</strong><small>Human approval is mandatory</small></div></li>
+          <li><span>04</span><div><strong>Publish</strong><small>OAH R4 transaction bundle</small></div></li>
+          <li><span>05</span><div><strong>Alert</strong><small>Policy check, then advisory</small></div></li>
+        </ol>
       </section>
 
       <section class="panel wide-panel">
@@ -84,6 +113,14 @@
           <span class="muted">Approval writes Location + Organization + Observation</span>
         </div>
         <div id="proposal-list" class="card-list"><p class="empty">No proposals yet.</p></div>
+      </section>
+
+      <section id="situation-panel" class="panel wide-panel hidden">
+        <div class="panel-heading">
+          <div><p class="eyebrow">AI SITUATION REPORT</p><h2 id="situation-headline">—</h2></div>
+          <span class="muted">Grounded only in this bridge's stored records</span>
+        </div>
+        <div id="situation-body"></div>
       </section>
 
       <section class="lower-grid">
@@ -102,4 +139,3 @@
     <script src="/assets/app.js" defer></script>
   </body>
 </html>
-

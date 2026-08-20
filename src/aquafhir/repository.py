@@ -7,6 +7,7 @@ from typing import Any
 
 from aquafhir.models import (
     Alert,
+    AlertBriefing,
     ChainVerification,
     MappingProposal,
     ProvenanceEntry,
@@ -49,6 +50,17 @@ class Repository:
                     document TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS briefings (
+                    id TEXT PRIMARY KEY,
+                    alert_id TEXT NOT NULL,
+                    audience TEXT NOT NULL,
+                    document TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_briefings_alert
+                    ON briefings(alert_id);
+                CREATE INDEX IF NOT EXISTS idx_observations_created
+                    ON observations(created_at);
                 CREATE TABLE IF NOT EXISTS cursors (
                     name TEXT PRIMARY KEY,
                     value TEXT NOT NULL
@@ -211,3 +223,92 @@ class Repository:
             hash=row["hash"],
             created_at=datetime.fromisoformat(row["created_at"]),
         )
+
+    # -- alerts, briefings, and observation inventory ----------------------
+
+    def get_alert(self, alert_id: str) -> Alert | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT document FROM alerts WHERE id = ?", (alert_id,)
+            ).fetchone()
+        return Alert.model_validate_json(row["document"]) if row else None
+
+    def save_briefing(self, briefing: AlertBriefing) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """INSERT INTO briefings(id, alert_id, audience, document, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET document = excluded.document""",
+                (
+                    briefing.id,
+                    briefing.alert_id,
+                    briefing.audience,
+                    _canonical(briefing.model_dump(mode="json")),
+                    briefing.created_at.isoformat(),
+                ),
+            )
+
+    def list_briefings(
+        self, alert_id: str | None = None, limit: int = 100
+    ) -> list[AlertBriefing]:
+        query = "SELECT document FROM briefings"
+        parameters: tuple[Any, ...] = ()
+        if alert_id:
+            query += " WHERE alert_id = ?"
+            parameters = (alert_id,)
+        query += " ORDER BY created_at DESC LIMIT ?"
+        with self._connect() as connection:
+            rows = connection.execute(query, (*parameters, limit)).fetchall()
+        return [AlertBriefing.model_validate_json(row["document"]) for row in rows]
+
+    def get_observation(self, observation_id: str) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT document FROM observations WHERE id = ?", (observation_id,)
+            ).fetchone()
+        return json.loads(row["document"]) if row else None
+
+    def list_observations(self, limit: int = 100) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT document FROM observations ORDER BY created_at DESC LIMIT ?", (limit,)
+            ).fetchall()
+        return [json.loads(row["document"]) for row in rows]
+
+    def observation_summaries(
+        self, limit: int = 100, site_code: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Flatten stored Observations into rows safe to put in a prompt.
+
+        Only fields the pipeline itself produced are exposed. Nothing here is
+        free text a source could use to steer a model.
+        """
+        summaries = [observation_summary(item) for item in self.list_observations(limit)]
+        if site_code:
+            summaries = [item for item in summaries if item["site_code"] == site_code]
+        return summaries
+
+    def count_proposals_by_status(self) -> dict[str, int]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT json_extract(document, '$.status') AS status, COUNT(*) AS total "
+                "FROM proposals GROUP BY status"
+            ).fetchall()
+        return {row["status"]: row["total"] for row in rows}
+
+
+def observation_summary(observation: dict[str, Any]) -> dict[str, Any]:
+    coding = (observation.get("code", {}).get("coding") or [{}])[0]
+    quantity = observation.get("valueQuantity", {})
+    tags = observation.get("meta", {}).get("tag") or [{}]
+    subject = observation.get("subject", {}).get("reference", "Location/unknown")
+    return {
+        "observation_id": observation.get("id", "unknown"),
+        "code": coding.get("code", "unknown"),
+        "display": observation.get("code", {}).get("text", ""),
+        "value": quantity.get("value"),
+        "unit": quantity.get("code", ""),
+        "observed_at": observation.get("effectiveDateTime", ""),
+        "site_code": subject.rsplit("/", 1)[-1],
+        "source_type": tags[0].get("code", "unknown"),
+    }

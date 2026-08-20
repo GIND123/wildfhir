@@ -3,4 +3,8 @@
 __pycache__
 .pytest_cache
 aquafhir.db
-
+.env
+.ruff_cache
+htmlcov
+.coverage
+tests
