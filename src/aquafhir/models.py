@@ -69,10 +69,25 @@ class CandidateCoding(BaseModel):
     origin: str
 
 
+class TerminologyMatch(BaseModel):
+    """One UMLS-suggested real-world code for a curated OAH display term.
+
+    A suggestion only -- see `ReviewDecision.secondary_coding`. Nothing in
+    this pipeline ever attaches one without an explicit reviewer choice.
+    """
+
+    system: str
+    code: str
+    display: str
+    vocabulary: str
+    score: float
+
+
 class MappingProposal(BaseModel):
     id: str
     reading: RawReading
     coding: Coding | None
+    secondary_coding: Coding | None = None
     normalized_value: float | None
     normalized_unit: str | None
     confidence: float = Field(ge=0, le=1)
@@ -92,6 +107,7 @@ class ReviewDecision(BaseModel):
     coding: Coding | None = None
     normalized_value: float | None = None
     normalized_unit: str | None = None
+    secondary_coding: Coding | None = None
 
     @model_validator(mode="after")
     def quantity_override_is_complete(self) -> "ReviewDecision":
@@ -227,4 +243,11 @@ class AiStatus(BaseModel):
     assist_below_confidence: float
     confidence_ceiling: float
     features: list[str] = Field(default_factory=list)
+    detail: str
+
+
+class UmlsStatus(BaseModel):
+    enabled: bool
+    provider: str = "nlm-umls-uts"
+    vocabularies: list[str] = Field(default_factory=list)
     detail: str

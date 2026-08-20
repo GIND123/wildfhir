@@ -48,6 +48,28 @@ The model layer is a proposer only. These gates keep it that way.
   sending any real monitoring data, and record the legal basis for the transfer.
 
 
+## Terminology crosswalk (UMLS)
+
+The crosswalk is a suggester only, same posture as the Gemini co-pilot. These gates keep it
+that way.
+
+- Complete the UMLS Terminology Services (UTS) license before any real query — a
+  request was submitted 2026-08-19 and is pending NLM's review. Confirm the license terms
+  cover the intended redistribution of any LOINC/SNOMED CT display text surfaced to
+  reviewers before going beyond a demo.
+- Never attach a `secondary_coding` automatically. `ReviewDecision.secondary_coding` must
+  stay an explicit, reviewer-supplied field, never a default or a score threshold.
+- Hash-chain the full UMLS query and response the same way `AiAttribution` already does for
+  Gemini (prompt hash, response hash, latency), not just the current
+  `reviewer_attached_secondary_coding` boolean.
+- Re-check the returned vocabulary against `UMLS_VOCABULARIES` in code, not only via the
+  `sabs` search parameter — `terminology.py` already does this; keep it that way if the
+  vocabulary list grows.
+- Set a per-tenant quota, cache repeat lookups for the same display text, and add a circuit
+  breaker; UTS is a shared, rate-limited public service.
+- Confirm the pipeline still functions with `UMLS_API_KEY` removed — that path is tested,
+  keep it tested.
+
 ## Security
 
 - Put both APIs behind TLS and an API gateway; remove direct public HAPI access.

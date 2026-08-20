@@ -4,30 +4,34 @@ Interactive documentation is available at `/docs`; the OpenAPI document is `/ope
 
 ## Endpoints
 
-| Method | Path | Purpose | Needs Gemini |
-|---|---|---|---|
-| `GET` | `/api/v1/health` | Process, policy, FHIR write mode, and AI mode | no |
-| `GET` | `/api/v1/ai/status` | Which AI features are wired and what bounds them | no |
-| `POST` | `/api/v1/proposals` | Validate a raw reading and create a pending mapping | optional |
-| `GET` | `/api/v1/proposals` | List recent proposals | no |
-| `GET` | `/api/v1/proposals/{id}` | Read one proposal | no |
-| `POST` | `/api/v1/replay` | Load `data/oder-replay.csv` as pending proposals | optional |
-| `POST` | `/api/v1/intake` | Extract readings from an unstructured note | **yes** |
-| `POST` | `/api/v1/proposals/{id}/approve` | Publish reviewed resources and evaluate policy | no |
-| `POST` | `/api/v1/proposals/{id}/reject` | Reject a proposal with a reason | no |
-| `POST` | `/api/v1/proposals/approve-batch` | Sign off several inspected proposals at once | no |
-| `GET` | `/api/v1/alerts` | List generated alert intents | no |
-| `POST` | `/api/v1/alerts/{id}/briefings?audience=` | Draft an audience-specific advisory | **yes** |
-| `GET` | `/api/v1/alerts/{id}/briefings` | List drafts for one alert | no |
-| `GET` | `/api/v1/briefings` | List all advisory drafts | no |
-| `POST` | `/api/v1/ai/situation-report` | Summarise stored observations and alerts | **yes** |
-| `GET` | `/api/v1/provenance` | List newest hash-chain entries | no |
-| `GET` | `/api/v1/provenance/verify` | Recompute and verify the complete chain | no |
-| `POST` | `/api/v1/subscriptions?callback_url=...` | Install or preview the R4 rest-hook Subscription | no |
-| `POST` | `/api/v1/webhooks/fhir` | Receive an R4 rest-hook notification and evaluate updates | no |
+| Method | Path | Purpose | Needs Gemini | Needs UMLS |
+|---|---|---|---|---|
+| `GET` | `/api/v1/health` | Process, policy, FHIR write mode, AI mode, and terminology-crosswalk mode | no | no |
+| `GET` | `/api/v1/ai/status` | Which AI features are wired and what bounds them | no | no |
+| `GET` | `/api/v1/terminology/status` | Whether the UMLS crosswalk is enabled and which vocabularies it searches | no | no |
+| `POST` | `/api/v1/proposals` | Validate a raw reading and create a pending mapping | optional | no |
+| `GET` | `/api/v1/proposals` | List recent proposals | no | no |
+| `GET` | `/api/v1/proposals/{id}` | Read one proposal | no | no |
+| `GET` | `/api/v1/proposals/{id}/terminology-suggestions` | Suggest real LOINC/SNOMED CT candidates for the proposal's OAH code | no | **yes** |
+| `POST` | `/api/v1/replay` | Load `data/oder-replay.csv` as pending proposals | optional | no |
+| `POST` | `/api/v1/intake` | Extract readings from an unstructured note | **yes** | no |
+| `POST` | `/api/v1/proposals/{id}/approve` | Publish reviewed resources and evaluate policy; accepts an optional `secondary_coding` | no | no |
+| `POST` | `/api/v1/proposals/{id}/reject` | Reject a proposal with a reason | no | no |
+| `POST` | `/api/v1/proposals/approve-batch` | Sign off several inspected proposals at once | no | no |
+| `GET` | `/api/v1/alerts` | List generated alert intents | no | no |
+| `POST` | `/api/v1/alerts/{id}/briefings?audience=` | Draft an audience-specific advisory | **yes** | no |
+| `GET` | `/api/v1/alerts/{id}/briefings` | List drafts for one alert | no | no |
+| `GET` | `/api/v1/briefings` | List all advisory drafts | no | no |
+| `POST` | `/api/v1/ai/situation-report` | Summarise stored observations and alerts | **yes** | no |
+| `GET` | `/api/v1/provenance` | List newest hash-chain entries | no | no |
+| `GET` | `/api/v1/provenance/verify` | Recompute and verify the complete chain | no | no |
+| `POST` | `/api/v1/subscriptions?callback_url=...` | Install or preview the R4 rest-hook Subscription | no | no |
+| `POST` | `/api/v1/webhooks/fhir` | Receive an R4 rest-hook notification and evaluate updates | no | no |
 
 "Optional" means the endpoint works without a key and simply produces a curated-rules
-proposal instead of a Gemini-assisted one.
+proposal instead of a Gemini-assisted one. The same idea applies to the "Needs UMLS" column:
+without `UMLS_API_KEY`, `/api/v1/terminology/*` returns `503` and every other endpoint is
+unaffected.
 
 ## Review rules
 
@@ -35,6 +39,9 @@ proposal instead of a Gemini-assisted one.
 - Approval needs a non-empty reviewer, coding, numeric normalized value, and UCUM unit.
 - A reviewer can replace the proposed `Coding`. Quantity corrections require both
   `normalized_value` and `normalized_unit`, so a unit cannot be changed without an explicit value.
+- A reviewer may also supply `secondary_coding` (typically a UMLS-suggested LOINC/SNOMED CT
+  candidate from `GET .../terminology-suggestions`), which becomes a second entry in
+  `Observation.code.coding`. It is never inferred or attached automatically.
 - Approved and rejected decisions are immutable through the API.
 - `approve-batch` is not a bypass: each id is validated, decided, stored, and hash-chained
   individually, and per-item failures are returned rather than aborting the batch.
@@ -74,6 +81,28 @@ into the provenance chain on approval and rejection.
 matching did. That case is capped at confidence 0.80 and surfaced in the dashboard, because
 it is the case a reviewer most needs to look at.
 
+## Terminology crosswalk response fields
+
+`GET /api/v1/proposals/{id}/terminology-suggestions` returns up to 5 `TerminologyMatch`
+objects, ranked by name similarity to the proposal's curated OAH display text:
+
+```json
+[
+  {
+    "system": "http://loinc.org",
+    "code": "11556-8",
+    "display": "Dissolved oxygen",
+    "vocabulary": "LNC",
+    "score": 1.0
+  }
+]
+```
+
+`system` is the canonical FHIR coding system URI for the UMLS root source (`LNC` →
+`http://loinc.org`, `SNOMEDCT_US` → `http://snomed.info/sct`); `code` is the source
+vocabulary's own code, not a UMLS CUI. Pass any one candidate back verbatim as
+`secondary_coding` on approval to publish it as a second `Coding`.
+
 ## Error contract
 
 | Status | Meaning |
@@ -82,8 +111,8 @@ it is the case a reviewer most needs to look at.
 | `404` | Proposal, alert, or replay dataset does not exist |
 | `409` | Proposal state or mapping is incompatible with the requested decision |
 | `422` | Request body failed validation (for example a half-specified quantity override) |
-| `502` | Gemini was reachable but returned an error, a block, or unparseable content |
-| `503` | An AI-only endpoint was called without `GEMINI_API_KEY` configured |
+| `502` | Gemini or UMLS was reachable but returned an error, a block, or unparseable content |
+| `503` | An AI-only or UMLS-only endpoint was called without `GEMINI_API_KEY` / `UMLS_API_KEY` configured |
 
 FHIR upstream errors currently propagate as `500`; map them to a stable `502` problem
 document before production.

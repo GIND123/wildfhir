@@ -52,6 +52,26 @@ class Settings(BaseSettings):
     def gemini_enabled(self) -> bool:
         return bool(self.gemini_api_key.strip())
 
+    # --- UMLS terminology crosswalk --------------------------------------
+    # Suggests a real LOINC/SNOMED CT code alongside the curated OAH code.
+    # Read from UMLS_API_KEY -- the single `apiKey` UTS profile credential
+    # (https://documentation.uts.nlm.nih.gov/rest/authentication.html), not
+    # an OAuth2 client_id/client_secret pair. An absent key disables the
+    # feature only; the OAH coding and FHIR pipeline is unaffected.
+    umls_api_key: str = ""
+    umls_api_base: str = "https://uts-ws.nlm.nih.gov/rest"
+    umls_timeout_seconds: float = 15.0
+    umls_max_retries: int = 2
+    umls_vocabularies: str = "LNC,SNOMEDCT_US"
+
+    @property
+    def umls_enabled(self) -> bool:
+        return bool(self.umls_api_key.strip())
+
+    @property
+    def umls_vocabulary_list(self) -> list[str]:
+        return [item.strip() for item in self.umls_vocabularies.split(",") if item.strip()]
+
 
 @lru_cache
 def get_settings() -> Settings:

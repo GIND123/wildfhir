@@ -31,6 +31,8 @@ from aquafhir.models import (
     RejectDecision,
     ReviewDecision,
     SituationReport,
+    TerminologyMatch,
+    UmlsStatus,
 )
 from aquafhir.repository import Repository
 from aquafhir.service import (
@@ -40,7 +42,9 @@ from aquafhir.service import (
     InvalidReviewStateError,
     ProposalNotFoundError,
 )
+from aquafhir.terminology import TerminologyCrosswalk
 from aquafhir.thresholds import ThresholdPolicy
+from aquafhir.umls import UMLSClient, UMLSError
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -80,8 +84,20 @@ def build_coding_agent(settings: Settings, gemini: GeminiClient) -> CodingPropos
     )
 
 
+def build_umls_client(settings: Settings) -> UMLSClient:
+    return UMLSClient(
+        api_key=settings.umls_api_key,
+        api_base=settings.umls_api_base,
+        timeout=settings.umls_timeout_seconds,
+        max_retries=settings.umls_max_retries,
+    )
+
+
 def build_service(settings: Settings) -> BridgeService:
     gemini = build_gemini_client(settings)
+    umls = build_umls_client(settings)
+    if not umls.enabled:
+        logger.info("UMLS_API_KEY not set; terminology crosswalk suggestions are disabled")
     return BridgeService(
         repository=Repository(settings.database_path),
         coding_agent=build_coding_agent(settings, gemini),
@@ -93,6 +109,9 @@ def build_service(settings: Settings) -> BridgeService:
         ),
         intake=UnstructuredIntake(gemini),
         briefing_writer=BriefingWriter(gemini),
+        terminology=TerminologyCrosswalk(
+            umls, vocabularies=tuple(settings.umls_vocabulary_list)
+        ),
         replay_path=settings.replay_data_path,
     )
 
@@ -128,6 +147,14 @@ async def gemini_error_handler(_: Request, error: GeminiError) -> JSONResponse:
     )
 
 
+@app.exception_handler(UMLSError)
+async def umls_error_handler(_: Request, error: UMLSError) -> JSONResponse:
+    return JSONResponse(
+        status_code=502,
+        content={"detail": f"UMLS upstream failure: {error}"},
+    )
+
+
 def get_service(request: Request) -> BridgeService:
     return request.app.state.service
 
@@ -148,6 +175,7 @@ def health(service: Service) -> dict[str, Any]:
         "threshold_policy_status": service.thresholds.status,
         "ai_mode": "gemini" if settings.gemini_enabled else "deterministic-only",
         "ai_model": settings.gemini_model if settings.gemini_enabled else None,
+        "terminology_crosswalk": "umls" if settings.umls_enabled else "off",
     }
 
 
@@ -176,6 +204,25 @@ def ai_status(service: Service) -> AiStatus:
             "to FHIR, and no model output changes an alert decision."
             if enabled
             else "GEMINI_API_KEY is not set. The deterministic pipeline is fully functional."
+        ),
+    )
+
+
+@app.get("/api/v1/terminology/status", response_model=UmlsStatus)
+def terminology_status(service: Service) -> UmlsStatus:
+    settings = get_settings()
+    enabled = settings.umls_enabled
+    return UmlsStatus(
+        enabled=enabled,
+        vocabularies=settings.umls_vocabulary_list if enabled else [],
+        detail=(
+            "UMLS UTS search suggests a second LOINC/SNOMED CT coding for a reviewer "
+            "to attach at approval time. It never selects the published OAH code and "
+            "never changes an alert decision."
+            if enabled
+            else "UMLS_API_KEY is not set (license pending or not configured). The OAH "
+            "coding and FHIR pipeline is unaffected; approved Observations simply "
+            "carry one coding."
         ),
     )
 
@@ -233,6 +280,18 @@ def get_proposal(proposal_id: str, service: Service) -> MappingProposal:
     if not proposal:
         raise HTTPException(status_code=404, detail="Proposal not found")
     return proposal
+
+
+@app.get(
+    "/api/v1/proposals/{proposal_id}/terminology-suggestions",
+    response_model=list[TerminologyMatch],
+    summary="Suggest a real LOINC/SNOMED CT crosswalk for a proposal's OAH code (UMLS)",
+)
+def terminology_suggestions(proposal_id: str, service: Service) -> list[TerminologyMatch]:
+    try:
+        return service.suggest_terminology(proposal_id)
+    except ProposalNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Proposal not found") from error
 
 
 @app.post("/api/v1/proposals/{proposal_id}/approve", response_model=ApprovalResult)

@@ -138,6 +138,15 @@ form small { color: var(--muted); font-size: 12px; line-height: 1.5; }
 .warn-list { display: grid; gap: 6px; margin-top: 14px; }
 .warn { margin: 0; color: var(--warning); font-size: 12px; line-height: 1.5; }
 
+.terminology { margin-top: 10px; }
+.chip-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.chip-button {
+  padding: 5px 10px; font-size: 11px; font-weight: 700; border-radius: 100px;
+  background: var(--surface-2); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line);
+}
+.chip-button:hover { box-shadow: inset 0 0 0 1px var(--aqua); }
+.chip-button.picked { background: rgba(82, 224, 176, .18); color: var(--aqua); box-shadow: inset 0 0 0 1px var(--aqua); }
+
 .briefing {
   margin-top: 12px; padding: 14px; border-radius: 8px;
   background: rgba(82, 224, 176, .06); border: 1px solid var(--line);

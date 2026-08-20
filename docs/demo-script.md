@@ -9,10 +9,14 @@ data **and cannot publish anything**. Land that and the standards story lands wi
    <https://aistudio.google.com/apikey>).
 2. Set `GEMINI_ASSIST_MODE=always` for the recording so every card shows its AI
    attribution. `auto` is the sensible default outside a demo.
-3. Run `docker compose up --build` and wait for all three services to become healthy.
-4. Open the dashboard and the HAPI UI in separate tabs.
-5. Confirm the header shows `AI gemini-2.5-flash · always`, `FHIR enabled`, and an audit
-   chain of `VALID`.
+3. If the UMLS license has been approved by NLM by demo day, put the key from
+   <https://uts.nlm.nih.gov/uts/profile> in `.env` as `UMLS_API_KEY=...`. If not, skip this —
+   the badge reads `UMLS off`, the "Suggest LOINC/SNOMED" beat below is skipped, and nothing
+   else in the script changes.
+4. Run `docker compose up --build` and wait for all three services to become healthy.
+5. Open the dashboard and the HAPI UI in separate tabs.
+6. Confirm the header shows `AI gemini-2.5-flash · always`, `FHIR enabled`, and an audit
+   chain of `VALID` (plus `UMLS LNC/SNOMEDCT_US` if the key is set).
 
 Rehearse once, then **stop rebuilding**. Repeated `docker compose up --build` re-pulls
 `hapiproject/hapi` and `postgres` and can hit Docker Hub's anonymous pull limit on shared
@@ -42,10 +46,14 @@ original labels preserved and a warning that the anglers' dead-fish report carri
 measurement and was not extracted. Two AI stages, both landing in the same place: a human's
 work queue.
 
-**2:50–3:30 — Standards, not a chart.** Approve a proposal. Show the Observation in HAPI:
-the OAH profile URL in `meta.profile`, a `Location` subject, an `Organization` performer,
-an effective time, and a UCUM-coded quantity. This is the interoperability claim, and it is
-checkable.
+**2:50–3:30 — Standards, not a chart.** If `UMLS_API_KEY` is set, click **Suggest
+LOINC/SNOMED (UMLS)** on the pending card first and pick the top candidate — say plainly
+that this closes the exact gap the OAH IG's own conformance notes flag: the temporary
+project code system is what OAH uses today, LOINC/SNOMED CT is what a hospital already has
+loaded, and a reviewer decides whether to publish both. Approve the proposal. Show the
+Observation in HAPI: the OAH profile URL in `meta.profile`, a `Location` subject, an
+`Organization` performer, an effective time, a UCUM-coded quantity, and — if UMLS ran —
+two entries in `code.coding`. This is the interoperability claim, and it is checkable.
 
 **3:30–4:20 — Alert and advisory.** Press **Replay Oder demo**, then **Approve pending
 queue**. Three readings cross the demonstration policy. Note that the *policy engine*
@@ -73,6 +81,9 @@ authorities review and communicate the warning.
   normalized UCUM quantity cannot be published.
 - Model down or key missing → delete `GEMINI_API_KEY` and restart. Everything still works;
   the badge reads `AI off` and the AI-only endpoints return `503` with an explanation.
+- *"Why isn't the LOINC/SNOMED coding automatic?"* Because a wrong crosswalk is worse than
+  none — UMLS ranks candidates by name similarity only, and a reviewer decides. The same
+  answer as the coding co-pilot: suggest, never select.
 
 ## Evidence to capture
 
@@ -82,3 +93,4 @@ authorities review and communicate the warning.
 - Reviewer override rate, and the `NO_MATCH` refusal rate.
 - Validator output against the frozen OAH package.
 - Exact demo policy id, model id, prompt-template ids, and source-data checksum.
+- Whether the UMLS crosswalk ran, which vocabularies it searched, and the code picked.

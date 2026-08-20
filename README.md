@@ -1,12 +1,32 @@
 # AquaFHIR Bridge
 
-AquaFHIR Bridge is a FHIR-native One Health data bus with a **reviewed Gemini co-pilot**. It converts heterogeneous water and Earth-observation readings — including free-text agency bulletins — into reviewed [OneAquaHealth FHIR R4](https://build.fhir.org/ig/hl7-eu/oah/) resources, publishes them to a HAPI FHIR server, evaluates an explicit alert policy, drafts audience-specific advisories, and records each transformation in a tamper-evident audit chain.
+AquaFHIR Bridge is a FHIR-native One Health data bus with a **reviewed Gemini co-pilot** and a **UMLS-suggested LOINC/SNOMED CT crosswalk**. It converts heterogeneous water and Earth-observation readings — including free-text agency bulletins — into reviewed [OneAquaHealth FHIR R4](https://build.fhir.org/ig/hl7-eu/oah/) resources, publishes them to a HAPI FHIR server, evaluates an explicit alert policy, drafts audience-specific advisories, and records each transformation in a tamper-evident audit chain.
 
-The AI is deliberately bounded. Gemini decides *which curated code a messy label means*, *which measurements a note literally contains*, and *how to phrase an advisory*. Deterministic code decides *the published number*, *whether review is required* (always), *whether an alert fires*, and *what is written to FHIR*. Remove the API key and the whole pipeline still runs — that path is tested.
+The AI is deliberately bounded, and so is the terminology assist built on top of it. Gemini decides *which curated code a messy label means*, *which measurements a note literally contains*, and *how to phrase an advisory*. The UMLS UTS Metathesaurus decides only *which real LOINC/SNOMED CT concepts sound like this curated code's name* — a reviewer must explicitly pick one before it is attached. Deterministic code decides *the published number*, *whether review is required* (always), *whether an alert fires*, and *what is written to FHIR*. Remove either API key and the whole pipeline still runs — both paths are tested.
 
 This repository contains only the first concept from the source brief: **the One Health data bus and reviewed coding agent**. It does not include the separate BloomGuard prediction product or StreamSentinel symptom-surveillance concept.
 
 > Status: detailed prototype boilerplate. It is suitable for a hackathon demonstration and engineering handoff, not clinical, veterinary, public-warning, or regulatory production use.
+
+## Current status: done vs. pending
+
+**Done and tested (87 offline tests, no live Gemini or UMLS call ever runs in CI):**
+
+- Curated OAH terminology coding and reviewed unit conversion ([coding.py](src/aquafhir/coding.py))
+- Gemini coding co-pilot, unstructured-bulletin intake, audience advisory drafting, grounded situation reports — all human-reviewed, all degrade cleanly with no key ([coding_llm.py](src/aquafhir/coding_llm.py), [intake.py](src/aquafhir/intake.py), [briefing.py](src/aquafhir/briefing.py))
+- **UMLS terminology crosswalk** — suggests real LOINC/SNOMED CT codes for a curated OAH code; a reviewer explicitly attaches one at approval, and it is published as a second `Coding` on the FHIR Observation ([umls.py](src/aquafhir/umls.py), [terminology.py](src/aquafhir/terminology.py); see [§ The UMLS terminology crosswalk](#the-umls-terminology-crosswalk))
+- HAPI FHIR R4 publication against the real `hl7.eu.fhir.oah` profiles, transaction bundles, Subscription install and rest-hook processing ([fhir.py](src/aquafhir/fhir.py))
+- Versioned, unit-aware threshold policy with audience routing ([thresholds.py](src/aquafhir/thresholds.py))
+- SQLite-backed, hash-chained provenance for every proposal, decision, alert, and model/terminology call
+- A dependency-free review dashboard, including a UMLS suggestion picker on each pending proposal
+- Docker Compose stack: bridge + HAPI + PostgreSQL, pinned image versions
+
+**Pending — tracked honestly rather than hidden:**
+
+- **UMLS license approval.** Requested from NLM on 2026-08-19; NLM's stated review window is 3 business days. `UMLS_API_KEY` is empty until then, so `/api/v1/terminology/*` returns `503` with an explanation and the rest of the pipeline is unaffected — exactly the same degradation contract `GEMINI_API_KEY` already has. Once approved, copy the API key from your [UTS profile](https://uts.nlm.nih.gov/uts/profile) into `.env`; no code change is needed.
+- **UMLS call provenance detail.** Approval today hash-chains only a boolean (`reviewer_attached_secondary_coding`). A production version should hash-chain the exact UMLS query/response the same way Gemini calls already are (prompt hash, response hash, latency) — tracked in [production-checklist.md](docs/production-checklist.md).
+- **Live Earth-observation and agency connectors.** Still replaying the transparent synthetic Oder CSV; a real Copernicus Sentinel-2 or national river-monitoring feed is the next highest-value addition (see [§ Judging-criteria mapping](#judging-criteria-mapping), Scale row).
+- Everything else listed in [§ Implemented versus production work](#implemented-versus-production-work).
 
 ## Hackathon alignment
 
@@ -21,8 +41,8 @@ Built for the **IEEE OneAquaHealth Global Hackathon 2026**, an EU Horizon Europe
 | Criterion | How this repository addresses it |
 |---|---|
 | **Impact & Alignment with the OneAquaHealth mission** | Every environmental reading is normalized into the *same* FHIR resource model the OneAquaHealth project already publishes, and a crossed threshold routes an alert to human-health, veterinary, *and* water-authority audiences in one step — the ecosystem→health link is the product, not a bolt-on chart. |
-| **Innovation & Creativity** | A working Gemini co-pilot that maps multilingual, abbreviated, and free-text source data onto OAH terminology under enum-constrained grounding, and drafts audience-specific advisories — with a hash-chained ledger recording the model id and the exact prompt hash behind every proposal (§ [The Gemini co-pilot](#the-gemini-co-pilot)). FHIR-for-environment bridges with reviewer gating are rare; ones that can *prove* what the model was asked are rarer. |
-| **Architecture** | HAPI FHIR R4 loaded with the real `hl7.eu.fhir.oah` package, R4 rest-hook Subscriptions, a versioned/unit-aware alert policy, a swappable `CodingProposer` contract the model plugs into without touching the FHIR or alerting layers, and documented sequence diagrams (see [architecture.md](docs/architecture.md)). 70 tests, all offline. |
+| **Innovation & Creativity** | A working Gemini co-pilot that maps multilingual, abbreviated, and free-text source data onto OAH terminology under enum-constrained grounding, and drafts audience-specific advisories — with a hash-chained ledger recording the model id and the exact prompt hash behind every proposal (§ [The Gemini co-pilot](#the-gemini-co-pilot)). Layered on top, a **UMLS UTS crosswalk** suggests a real LOINC/SNOMED CT code for the same curated OAH concept, so a reviewer can publish both the project-specific code and a standard one a downstream EHR already understands (§ [The UMLS terminology crosswalk](#the-umls-terminology-crosswalk)). FHIR-for-environment bridges with reviewer gating are rare; ones that also close the "temporary code system → real terminology" gap are rarer still. |
+| **Architecture** | HAPI FHIR R4 loaded with the real `hl7.eu.fhir.oah` package, R4 rest-hook Subscriptions, a versioned/unit-aware alert policy, a swappable `CodingProposer` contract the model plugs into without touching the FHIR or alerting layers, an independent `TerminologyCrosswalk` service that degrades the same way, and documented sequence diagrams (see [architecture.md](docs/architecture.md)). 87 tests, all offline. |
 | **UX** | A dependency-free review dashboard shows the proposal queue with the model's quoted evidence, competing candidates, and a visible flag when the AI disagrees with the curated rules — then audience-tagged alert cards with one-click advisory drafting. The reviewer sees what the model saw. See the [demo script](docs/demo-script.md). |
 | **Scale** | Config-driven terminology ([coding-rules.yaml](config/coding-rules.yaml)) and policy ([thresholds.yaml](config/thresholds.yaml)) — adding an indicator is a YAML edit, and the model's vocabulary widens with it automatically. `auto` assist mode spends a model call only where rules are weak, so cost scales with novelty rather than volume. Gap analysis in § [Implemented versus production work](#implemented-versus-production-work). |
 
@@ -44,10 +64,11 @@ The end-to-end slice is intentionally narrow:
 2. Propose an OAH terminology code and normalize the unit to UCUM, using curated rules first and a grounded Gemini call only where those rules are weak.
 3. Require a person to approve or reject the proposal. No confidence score, and no model, bypasses review.
 4. Build and validate an OAH `Location` and environmental `Observation` against their profiles.
-5. Publish those resources plus the source `Organization` as one HAPI FHIR R4 transaction, or return them in dry-run mode.
-6. Evaluate a versioned demonstration threshold policy — deterministically, with no model involvement — and route any alert to human-health, veterinary, and/or water-authority audiences.
-7. Draft an audience-specific advisory for a routed alert, marked `draft` and disclaimed, from the facts the policy engine already established.
-8. Hash-chain every proposal, decision, alert, and model call — including the prompt hash and model id — so later modification is detectable.
+5. Optionally suggest a real LOINC/SNOMED CT code for the proposal's OAH concept via UMLS; a reviewer may attach one, never the other way around.
+6. Publish those resources — the OAH coding, and the reviewer-attached secondary coding if any — plus the source `Organization` as one HAPI FHIR R4 transaction, or return them in dry-run mode.
+7. Evaluate a versioned demonstration threshold policy — deterministically, with no model involvement — and route any alert to human-health, veterinary, and/or water-authority audiences.
+8. Draft an audience-specific advisory for a routed alert, marked `draft` and disclaimed, from the facts the policy engine already established.
+9. Hash-chain every proposal, decision, alert, model call, and terminology-crosswalk attachment — including the prompt hash and model id where applicable — so later modification is detectable.
 
 The included Oder replay is synthetic demonstration data shaped around the 2022 incident narrative. It is not a scientifically reconstructed incident dataset, and the sample thresholds are not WFD/EQS limits.
 
@@ -68,7 +89,9 @@ flowchart LR
     C -->|weak match or unknown unit| Y[Gemini coding co-pilot]
     Y -->|catalog code + unit name| C
     C -->|pending proposal| D[Human review UI]
-    D -->|approve| E[OAH FHIR bundle builder]
+    D -->|suggest crosswalk| W[UMLS UTS search]
+    W -->|candidate LOINC/SNOMED| D
+    D -->|approve, optional secondary coding| E[OAH FHIR bundle builder]
     D -->|reject| P[(Hash-chained audit)]
     E --> F[(HAPI FHIR R4)]
     F -->|R4 rest-hook Subscription| G[Policy engine]
@@ -85,11 +108,15 @@ flowchart LR
     G --> P
     Y --> P
     Z --> P
+    W --> P
 ```
 
 Gemini appears in three places and in none of them can it publish: it feeds the *proposal*
 queue, it feeds the *draft* advisory queue, and every call it makes is hash-chained with
-its model id and prompt hash. The policy engine and the FHIR builder never see a model.
+its model id and prompt hash. UMLS appears in exactly one place and cannot publish either:
+it only ever offers the review UI a candidate second coding, which a reviewer must choose
+to carry into the bundle builder. The policy engine and the FHIR builder never see a model
+or a UMLS response directly — only what a human already decided to approve.
 
 The prototype keeps its review queue, alerts, and provenance in SQLite. HAPI uses PostgreSQL. That separation makes the boundary clear: FHIR is the interoperable record; workflow state is application state. See [architecture.md](docs/architecture.md) for component and sequence details.
 
@@ -99,17 +126,24 @@ Requirements: Docker Engine/Desktop with Compose v2.
 
 ```bash
 cp .env.example .env
-# Add your key: GEMINI_API_KEY=...   (free at https://aistudio.google.com/apikey)
+# Add your keys:
+#   GEMINI_API_KEY=...   (free at https://aistudio.google.com/apikey)
+#   UMLS_API_KEY=...     (free at https://uts.nlm.nih.gov/uts/profile, after NLM approves
+#                          your UMLS license -- typically a 3-business-day review)
 docker compose up --build
 ```
 
 On PowerShell, use `Copy-Item .env.example .env` instead of `cp`.
 
-The key is optional. Without it the bridge starts in deterministic-only mode: the header
-badge reads `AI off`, curated coding and the full FHIR/alerting pipeline work normally, and
-the four AI endpoints return `503` with an explanation rather than failing obscurely.
-Compose reads `.env` for substitution and passes the key through as an environment
-variable; `.dockerignore` keeps `.env` out of the image so no key is baked into a layer.
+Both keys are optional and independent. Without `GEMINI_API_KEY` the bridge starts in
+deterministic-only mode: the header badge reads `AI off`, curated coding and the full
+FHIR/alerting pipeline work normally, and the AI endpoints return `503` with an explanation
+rather than failing obscurely. Without `UMLS_API_KEY` the terminology-crosswalk badge reads
+`UMLS off`, the "Suggest LOINC/SNOMED" action disappears from the review UI, and
+`/api/v1/terminology/*` returns the same kind of explanatory `503` — approvals simply carry
+one coding instead of two. Compose reads `.env` for substitution and passes both keys through
+as environment variables; `.dockerignore` keeps `.env` out of the image so neither key is
+baked into a layer.
 
 Open:
 
@@ -120,7 +154,9 @@ Open:
 
 HAPI can take a minute or two on its first start while PostgreSQL initializes and the `hl7.eu.fhir.oah#0.1.0-ci-build` package is installed. The Compose image is pinned to HAPI `v8.10.0-3`; pin it by digest as well before a controlled deployment.
 
-In the dashboard, choose **Replay Oder demo**, inspect each terminology proposal, and approve it (or use **Approve pending queue**). Three of the five readings cross the demonstration policy and create audience-specific alert cards; press **Draft veterinary** on one to see Gemini write the advisory. The header shows the FHIR write mode (`enabled` vs `dry-run`) and the AI mode (`gemini-2.5-flash · auto` vs `AI off`).
+In the dashboard, choose **Replay Oder demo**, inspect each terminology proposal, and approve it (or use **Approve pending queue**). Three of the five readings cross the demonstration policy and create audience-specific alert cards; press **Draft veterinary** on one to see Gemini write the advisory. The header shows the FHIR write mode (`enabled` vs `dry-run`), the AI mode (`gemini-2.5-flash · auto` vs `AI off`), and the terminology-crosswalk mode (`UMLS LNC/SNOMEDCT_US` vs `UMLS off`).
+
+With `UMLS_API_KEY` set, a pending proposal also shows **Suggest LOINC/SNOMED (UMLS)**. Click it, then click a candidate chip to mark it "will attach on approval" — the next **Approve** on that card publishes an Observation with two codings: the curated OAH one and the reviewer-picked LOINC/SNOMED CT one.
 
 To submit the harder case, use the structured form's default — the German label
 `Leitfähigkeit` with unit `uS/cm`. Curated alias matching scores it at 0.31 and refuses;
@@ -146,18 +182,19 @@ FHIR_BASE_URL=http://localhost:8080/fhir
 FHIR_WRITE_ENABLED=false
 GEMINI_API_KEY=your-key-or-leave-empty
 GEMINI_ASSIST_MODE=auto
+UMLS_API_KEY=your-key-or-leave-empty
 ```
 
 Then start and test:
 
 ```bash
 uvicorn aquafhir.main:app --reload
-pytest          # 70 tests, fully offline — no key needed, no network touched
+pytest          # 87 tests, fully offline — no keys needed, no network touched
 ruff check .
 ```
 
-The suite never calls Gemini. `tests/fakes.py` replaces only the HTTP hop, so the schema
-construction, JSON parsing, hashing, and every guardrail still run for real.
+The suite never calls Gemini or UMLS. `tests/fakes.py` replaces only the HTTP hop for each,
+so the schema construction, JSON parsing, hashing, and every guardrail still run for real.
 
 ## Try the API
 
@@ -245,6 +282,24 @@ curl -X POST http://localhost:8000/api/v1/proposals/PROPOSAL_ID/approve \
 The override is recorded in the provenance payload alongside the model's prompt hash, so
 the disagreement itself is auditable.
 
+With `UMLS_API_KEY` set, ask for a real-terminology crosswalk on a pending proposal, then
+carry the pick into approval as `secondary_coding`:
+
+```bash
+curl "http://localhost:8000/api/v1/proposals/PROPOSAL_ID/terminology-suggestions"
+
+curl -X POST http://localhost:8000/api/v1/proposals/PROPOSAL_ID/approve \
+  -H "Content-Type: application/json" \
+  -d '{
+    "reviewer":"reviewer@example.org",
+    "secondary_coding":{"system":"http://loinc.org","code":"11556-8","display":"Dissolved oxygen"}
+  }'
+```
+
+The resulting Observation carries both codings in `code.coding`: the curated OAH one first,
+the reviewer-attached LOINC/SNOMED CT one second. Without a key, the suggestions endpoint
+returns `503` and approval works exactly as before, with one coding.
+
 See [api.md](docs/api.md) for every endpoint and error contract.
 
 ## FHIR conformance choices
@@ -264,7 +319,9 @@ The builder therefore creates all required surrounding resources, uses `http://u
 http://hl7.eu/fhir/ig/oah/StructureDefinition/observation-indicators-oah
 ```
 
-The OAH IG currently carries environmental concepts such as `electrical-conductivity`, `dissolved-oxygen`, `waterTemperature`, and `ndci` in its temporary project code system. The scaffold uses those codes rather than inventing unsupported LOINC mappings. Add a second LOINC or SNOMED CT coding only after terminology review.
+The OAH IG currently carries environmental concepts such as `electrical-conductivity`, `dissolved-oxygen`, `waterTemperature`, and `ndci` in its temporary project code system. The scaffold uses those codes rather than inventing unsupported LOINC mappings.
+
+A second coding is now supported, but only after terminology review by a person: the UMLS crosswalk (§ [The UMLS terminology crosswalk](#the-umls-terminology-crosswalk)) suggests a real LOINC/SNOMED CT candidate for the curated code's display text, and `Observation.code.coding` only ever gains a second entry when a reviewer supplies `ReviewDecision.secondary_coding` at approval time — never automatically.
 
 FHIR R4 Subscription filtering is search-based, not threshold-expression based. The supplied Subscription watches final Observations and sends an empty rest-hook notification; the bridge then queries HAPI for resources updated since its durable cursor and applies the versioned numerical policy. The approval pipeline also evaluates the same policy immediately to keep the demo deterministic.
 
@@ -331,6 +388,57 @@ in [coding-rules.yaml](config/coding-rules.yaml). Demonstration alert rules live
 in [thresholds.yaml](config/thresholds.yaml), which prevents a terminology edit — or a
 model — from silently changing safety policy.
 
+## The UMLS terminology crosswalk
+
+The OAH IG's environmental concepts live in a temporary project code system
+(`http://hl7.eu/fhir/ig/oah/CodeSystem/temporarySystem-oah-eu`) — reasonable for a
+continuous-build IG, but a downstream hospital or public-health system will not have that
+code system loaded. It will have LOINC and SNOMED CT. The UMLS crosswalk closes that gap by
+searching the NLM UMLS Metathesaurus for the curated code's own display text and offering the
+closest real-world match, for a reviewer to accept or ignore.
+
+### Authentication, done the way NLM actually documents it
+
+The current UMLS Terminology Services (UTS) REST API authenticates with a single `apiKey`
+query parameter issued from a UTS profile
+(<https://documentation.uts.nlm.nih.gov/rest/authentication.html>) — the older
+ticket-granting-ticket flow is deprecated, and there is **no OAuth2 client_id/client_secret
+grant** for this API as of 2026. [`umls.py`](src/aquafhir/umls.py) implements exactly that
+scheme. If you have a client_id/client_secret pair from somewhere else (an app registration
+made while requesting a license, for example), it will not authenticate against
+`uts-ws.nlm.nih.gov`; use the API key from your UTS profile instead once your license is
+approved.
+
+### The split, enforced in code
+
+| UMLS may suggest | Deterministic code / a human decides |
+|---|---|
+| Which real LOINC/SNOMED CT concepts sound like this OAH code's display text | Whether that suggestion is ever attached to a proposal (`ReviewDecision.secondary_coding`) |
+| A ranked list of candidates, scored only by name similarity | The published OAH coding, the quantity, and whether the alert fires — none of which the crosswalk can see or touch |
+
+Guardrails mirror `coding_llm.py`'s posture:
+
+1. **Vocabulary allowlist re-checked in code.** `UMLS_VOCABULARIES` (default `LNC,SNOMEDCT_US`)
+   is sent as the UTS `sabs` filter *and* re-checked against every result in
+   [`terminology.py`](src/aquafhir/terminology.py) — a request is not a proof.
+2. **Suggestion only, never selection.** `suggest_terminology()` is read-only. Nothing is
+   written to a proposal, let alone to FHIR, until a reviewer supplies a `Coding` explicitly.
+3. **Independent failure domain.** An unreachable, rate-limited, or keyless UMLS call raises
+   `AiUnavailableError`/`UMLSError`, handled the same way Gemini failures are — a `503` or
+   `502` with an explanation, never a silent fallback that pretends a code was found.
+
+### Two wired surfaces
+
+| Feature | Endpoint | What it returns |
+|---|---|---|
+| Terminology status | `GET /api/v1/terminology/status` | Whether the crosswalk is enabled and which vocabularies are searched |
+| Crosswalk suggestions | `GET /api/v1/proposals/{id}/terminology-suggestions` | Up to 5 candidate `TerminologyMatch` objects (`system`, `code`, `display`, `vocabulary`, `score`), ranked by name similarity to the curated code's display text |
+
+`ReviewDecision.secondary_coding` carries a chosen candidate into `POST
+.../proposals/{id}/approve`; `build_resources()` in [fhir.py](src/aquafhir/fhir.py) appends it
+as a second entry in `Observation.code.coding`, and the approval provenance entry records
+`reviewer_attached_secondary_coding: true`.
+
 ## Repository map
 
 ```text
@@ -346,13 +454,15 @@ model — from silently changing safety policy.
 │   ├── prompts.py            # versioned prompt templates and response schemas
 │   ├── intake.py             # free text -> literal readings -> pending proposals
 │   ├── briefing.py           # audience advisories and grounded situation reports
+│   ├── umls.py               # minimal UMLS UTS REST client (apiKey auth)
+│   ├── terminology.py        # ranks UMLS matches into suggested LOINC/SNOMED codings
 │   ├── fhir.py               # conformant resources, bundles, subscriptions
 │   ├── repository.py         # SQLite workflow state + hash chain
 │   ├── service.py            # review-gated orchestration
 │   ├── thresholds.py         # unit-aware versioned policy evaluation
 │   ├── main.py               # FastAPI surface
 │   └── static/               # dependency-free review dashboard
-├── tests/                    # coding, AI guardrail, transport, policy, audit tests
+├── tests/                    # coding, AI guardrail, terminology, transport, policy, audit tests
 ├── compose.yaml              # bridge + HAPI + PostgreSQL
 └── Dockerfile
 ```
@@ -362,7 +472,8 @@ model — from silently changing safety policy.
 | Capability | In this scaffold | Required before real deployment |
 |---|---|---|
 | Ingestion | Typed JSON API and transparent replay CSV | Authenticated connectors, source schemas, retries, dead-letter queue |
-| Coding | Curated proposals, unit conversion, and a grounded Gemini co-pilot | Terminology service, labelled model evaluation set, reviewer roles, dual control |
+| Coding | Curated proposals, unit conversion, and a grounded Gemini co-pilot | Labelled model evaluation set, reviewer roles, dual control |
+| Terminology crosswalk | UMLS UTS search suggesting real LOINC/SNOMED CT candidates, vocabulary allowlist re-check, reviewer-gated attachment, tested no-key fallback | UMLS license approved (requested; NLM review pending), full query/response provenance hashing to match Gemini's, coverage beyond `LNC`/`SNOMEDCT_US`, cached lookups |
 | AI governance | Prompt versioning, prompt/response hashing, capped confidence, catalog re-check, tested no-key fallback | Evaluation metrics published per release, over-trust sampling, prompt-injection tests, quota and circuit breaker, DPIA for the provider transfer |
 | FHIR | OAH R4 resources and transaction publication | CI validation with the exact frozen IG package, server capability checks |
 | Alerting | Unit-aware YAML policy and audience tags | Approved jurisdiction policy, suppression, escalation, delivery receipts |
@@ -395,6 +506,11 @@ The detailed hardening gates are in [production-checklist.md](docs/production-ch
 | `GEMINI_MAX_OUTPUT_TOKENS` | `2048` | Truncated responses are rejected, never half-parsed |
 | `GEMINI_MAX_RETRIES` | `2` | Retries only 408/429/5xx and network errors |
 | `GEMINI_THINKING_BUDGET` | `0` | `0` for latency; `-1` omits the field for models that reject it |
+| `UMLS_API_KEY` | *(empty)* | Enables the terminology crosswalk. Empty is a supported, tested mode. This is a UTS **apiKey**, not an OAuth2 client_id/client_secret |
+| `UMLS_API_BASE` | `https://uts-ws.nlm.nih.gov/rest` | UTS REST API base |
+| `UMLS_TIMEOUT_SECONDS` | `15` | Per-call timeout |
+| `UMLS_MAX_RETRIES` | `2` | Retries only 408/429/5xx and network errors |
+| `UMLS_VOCABULARIES` | `LNC,SNOMEDCT_US` | Comma-separated UMLS source-vocabulary abbreviations searched and allowlist-checked |
 
 ## Source standards
 
@@ -403,5 +519,8 @@ The detailed hardening gates are in [production-checklist.md](docs/production-ch
 - [OAH package download](https://build.fhir.org/ig/hl7-eu/oah/downloads.html)
 - [FHIR R4 Subscription](https://hl7.org/fhir/R4/subscription.html)
 - [HAPI FHIR JPA starter](https://github.com/hapifhir/hapi-fhir-jpaserver-starter)
+- [UMLS Terminology Services (UTS) REST API authentication](https://documentation.uts.nlm.nih.gov/rest/authentication.html)
+- [UMLS UTS Search API reference](https://documentation.uts.nlm.nih.gov/rest/search/)
+- [LOINC](https://loinc.org/) · [SNOMED CT (SNOMED International)](https://www.snomed.org/)
 
 The OAH guide is an unauthorised, changing continuous build. Freeze and archive the exact NPM package used by a release; never assume `0.1.0-ci-build` is immutable merely because the version string stays the same.

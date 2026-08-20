@@ -1,14 +1,16 @@
 """Test doubles that keep the whole suite offline.
 
-`FakeGemini` overrides only the HTTP hop, so every test still exercises the real
-schema construction, JSON parsing, hashing, and guardrail code in
-`gemini.py`, `coding_llm.py`, `intake.py`, and `briefing.py`.
+`FakeGemini` and `FakeUMLS` override only the HTTP hop, so every test still
+exercises the real schema construction, JSON parsing, hashing, and guardrail
+code in `gemini.py`, `coding_llm.py`, `intake.py`, `briefing.py`, `umls.py`,
+and `terminology.py`.
 """
 
 import json
 from typing import Any
 
 from aquafhir.gemini import GeminiClient, GeminiError
+from aquafhir.umls import UMLSClient, UMLSError
 
 
 class FakeGemini(GeminiClient):
@@ -43,3 +45,31 @@ class BrokenGemini(GeminiClient):
 
     def _post_with_retries(self, body: dict[str, Any]) -> str:
         raise GeminiError("simulated upstream outage")
+
+
+class FakeUMLS(UMLSClient):
+    def __init__(
+        self, responses: list[Any] | None = None, *, api_key: str = "test-key"
+    ) -> None:
+        super().__init__(api_key=api_key, max_retries=0)
+        self.responses = list(responses or [])
+        self.calls: list[dict[str, str]] = []
+
+    def _get_with_retries(self, path: str, params: dict[str, str]) -> dict[str, Any]:
+        self.calls.append(params)
+        if not self.responses:
+            raise UMLSError("FakeUMLS has no queued response")
+        item = self.responses.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+
+class BrokenUMLS(UMLSClient):
+    """Enabled by configuration but always failing upstream."""
+
+    def __init__(self) -> None:
+        super().__init__(api_key="test-key", max_retries=0)
+
+    def _get_with_retries(self, path: str, params: dict[str, str]) -> dict[str, Any]:
+        raise UMLSError("simulated upstream outage")
