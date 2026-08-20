@@ -8,11 +8,80 @@ AquaFHIR Bridge owns environmental ingestion, terminology review, OAH resource c
 |---|---|---|
 | FastAPI edge | Validate requests and expose review/webhook APIs | None |
 | Coding proposer | Suggest a curated OAH code and UCUM normalization | Versioned YAML |
+| Gemini co-pilot | Propose a catalog code for a label rules cannot match; extract readings from free text; draft advisories | Versioned prompt templates |
 | Review workflow | Enforce pending → approved/rejected state transition | SQLite |
 | FHIR builder/client | Build atomic R4 transactions and publish to HAPI | HAPI/PostgreSQL |
 | Policy engine | Compare like-for-like code, value, and unit | Versioned YAML |
 | Provenance ledger | Hash-chain material state changes | SQLite |
 | Dashboard | Give a reviewer a small, inspectable work surface | None |
+
+## Where the model sits
+
+The AI layer is deliberately bounded. It is wide enough to solve the real problem —
+source labels are multilingual, abbreviated, and often not tabular at all — and narrow
+enough that no model output can reach a published resource unreviewed.
+
+```mermaid
+flowchart TB
+    subgraph model["Gemini may decide"]
+        M1["Which catalog code a messy label denotes"]
+        M2["Which known unit string a source unit denotes"]
+        M3["Which measurements a free-text note literally contains"]
+        M4["How to phrase an advisory for one audience"]
+    end
+    subgraph deterministic["Deterministic code decides"]
+        D1["The code's display text — read from coding-rules.yaml"]
+        D2["The conversion factor and the published number"]
+        D3["Whether review is required — always yes"]
+        D4["Whether an alert fires, at what severity, to whom"]
+        D5["What is written to FHIR"]
+    end
+    model -->|proposal only| review["Human reviewer"]
+    review -->|approve| deterministic
+```
+
+Three guardrails enforce the split in code:
+
+1. **Closed vocabulary.** The catalog is injected into the prompt, the response schema
+   constrains `code` to an enum of exactly those codes plus `NO_MATCH`, and
+   `coding_llm.py` re-checks the returned code against the catalog anyway. A schema is a
+   request, not a proof.
+2. **No model arithmetic.** The model may say "this `uS/cm` string means the `uS/cm` unit".
+   The factor and the multiplication live in `ReviewedCodingAgent.normalize_unit`. The
+   prompt never contains the converted value, so the model cannot anchor on the answer.
+3. **Capped confidence.** Any AI-influenced proposal is capped at
+   `GEMINI_CONFIDENCE_CEILING` (0.95), and a disagreement with the curated match or a
+   model-raised expert-review flag caps it at 0.80. Nothing can present itself as safe to
+   publish unattended.
+
+Failure is a degradation, not an outage: an unreachable, misconfigured, rate-limited, or
+out-of-catalog response falls back to the curated proposal with a note in the rationale.
+The pipeline's tests cover that path.
+
+## Proposal sequence with the co-pilot
+
+```mermaid
+sequenceDiagram
+    actor Source
+    actor Reviewer
+    participant API
+    participant Rules as Curated catalog
+    participant Gemini
+    participant DB as Workflow DB
+
+    Source->>API: RawReading("Leitfähigkeit", 2350, "uS/cm")
+    API->>Rules: rank aliases
+    Rules-->>API: best score 0.31 — below the floor
+    API->>Gemini: catalog + label + unit, enum-constrained schema
+    Gemini-->>API: code=electrical-conductivity, unit=uS/cm, evidence
+    API->>Rules: re-check code is in catalog; convert 2350 uS/cm
+    Rules-->>API: 2.35 mS/cm using the reviewed factor
+    API->>DB: pending proposal + prompt/response hashes
+    API-->>Reviewer: candidate, evidence, model id, disagreement flag
+    Reviewer->>API: approve
+    Note over API,DB: publication path is unchanged from here on
+```
+
 
 ## Approval sequence
 
@@ -57,6 +126,9 @@ For the single-node demo, approval also calls the policy engine directly. In a d
 - Threshold unit mismatch: rule is not evaluated; no implicit conversion occurs in the policy engine.
 - Repeated decision: rejected with `409`.
 - Modified provenance row: chain verification reports the first invalid sequence.
+- Gemini unreachable, rate-limited, blocked, or truncated: the curated proposal is returned with an explanatory note; AI-only endpoints return `503` (no key) or `502` (upstream failure).
+- Gemini returns a code outside the catalog: the response is discarded and the curated proposal stands.
+- Gemini returns `NO_MATCH`: no code is proposed and the reviewer must supply one or reject.
 
 ## Scaling path
 
