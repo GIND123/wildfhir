@@ -18,7 +18,7 @@ This repository contains only the first concept from the source brief: **the One
 - HAPI FHIR R4 publication against the real `hl7.eu.fhir.oah` profiles, transaction bundles, Subscription install and rest-hook processing ([fhir.py](src/aquafhir/fhir.py))
 - Versioned, unit-aware threshold policy with audience routing ([thresholds.py](src/aquafhir/thresholds.py))
 - SQLite-backed, hash-chained provenance for every proposal, decision, alert, and model/terminology call
-- A dependency-free review dashboard, including a UMLS suggestion picker on each pending proposal
+- A dependency-free reviewer console — queue, ingest, alerts, and audit trail — including a UMLS suggestion picker on each pending proposal
 - Docker Compose stack: bridge + HAPI + PostgreSQL, pinned image versions
 
 **Pending — tracked honestly rather than hidden:**
@@ -43,7 +43,7 @@ Built for the **IEEE OneAquaHealth Global Hackathon 2026**, an EU Horizon Europe
 | **Impact & Alignment with the OneAquaHealth mission** | Every environmental reading is normalized into the *same* FHIR resource model the OneAquaHealth project already publishes, and a crossed threshold routes an alert to human-health, veterinary, *and* water-authority audiences in one step — the ecosystem→health link is the product, not a bolt-on chart. |
 | **Innovation & Creativity** | A working Gemini co-pilot that maps multilingual, abbreviated, and free-text source data onto OAH terminology under enum-constrained grounding, and drafts audience-specific advisories — with a hash-chained ledger recording the model id and the exact prompt hash behind every proposal (§ [The Gemini co-pilot](#the-gemini-co-pilot)). Layered on top, a **UMLS UTS crosswalk** suggests a real LOINC/SNOMED CT code for the same curated OAH concept, so a reviewer can publish both the project-specific code and a standard one a downstream EHR already understands (§ [The UMLS terminology crosswalk](#the-umls-terminology-crosswalk)). FHIR-for-environment bridges with reviewer gating are rare; ones that also close the "temporary code system → real terminology" gap are rarer still. |
 | **Architecture** | HAPI FHIR R4 loaded with the real `hl7.eu.fhir.oah` package, R4 rest-hook Subscriptions, a versioned/unit-aware alert policy, a swappable `CodingProposer` contract the model plugs into without touching the FHIR or alerting layers, an independent `TerminologyCrosswalk` service that degrades the same way, and documented sequence diagrams (see [architecture.md](docs/architecture.md)). 87 tests, all offline. |
-| **UX** | A dependency-free review dashboard shows the proposal queue with the model's quoted evidence, competing candidates, and a visible flag when the AI disagrees with the curated rules — then audience-tagged alert cards with one-click advisory drafting. The reviewer sees what the model saw. See the [demo script](docs/demo-script.md). |
+| **UX** | A dependency-free reviewer console, not a dashboard of charts. Each queue row reads *as received → OneAquaHealth FHIR*, with the model's quoted evidence, competing candidates, and a visible flag when the AI disagrees with the curated rules. Alerts carry one-click advisory drafting; the audit trail is a real table. The reviewer sees what the model saw. See the [demo script](docs/demo-script.md). |
 | **Scale** | Config-driven terminology ([coding-rules.yaml](config/coding-rules.yaml)) and policy ([thresholds.yaml](config/thresholds.yaml)) — adding an indicator is a YAML edit, and the model's vocabulary widens with it automatically. `auto` assist mode spends a model call only where rules are weak, so cost scales with novelty rather than volume. Gap analysis in § [Implemented versus production work](#implemented-versus-production-work). |
 
 ### Submission checklist
@@ -154,7 +154,7 @@ Open:
 
 HAPI can take a minute or two on its first start while PostgreSQL initializes and the `hl7.eu.fhir.oah#0.1.0-ci-build` package is installed. The Compose image is pinned to HAPI `v8.10.0-3`; pin it by digest as well before a controlled deployment.
 
-In the dashboard, choose **Replay Oder demo**, inspect each terminology proposal, and approve it (or use **Approve pending queue**). Three of the five readings cross the demonstration policy and create audience-specific alert cards; press **Draft veterinary** on one to see Gemini write the advisory. The header shows the FHIR write mode (`enabled` vs `dry-run`), the AI mode (`gemini-2.5-flash · auto` vs `AI off`), and the terminology-crosswalk mode (`UMLS LNC/SNOMEDCT_US` vs `UMLS off`).
+In the console's **Review queue**, choose **Load Oder replay**, inspect each terminology proposal, and approve it (or use **Approve all pending**). Three of the five readings cross the demonstration policy and create audience-specific alert cards; open **Alerts** and press **Draft for veterinary** on one to see Gemini write the advisory. The top bar shows the FHIR write mode (`enabled` vs `dry-run`), the AI mode (`gemini-2.5-flash · auto` vs `AI off`), and the terminology-crosswalk mode (`UMLS LNC/SNOMEDCT_US` vs `UMLS off`).
 
 With `UMLS_API_KEY` set, a pending proposal also shows **Suggest LOINC/SNOMED (UMLS)**. Click it, then click a candidate chip to mark it "will attach on approval" — the next **Approve** on that card publishes an Observation with two codings: the curated OAH one and the reviewer-picked LOINC/SNOMED CT one.
 
@@ -461,7 +461,7 @@ as a second entry in `Observation.code.coding`, and the approval provenance entr
 │   ├── service.py            # review-gated orchestration
 │   ├── thresholds.py         # unit-aware versioned policy evaluation
 │   ├── main.py               # FastAPI surface
-│   └── static/               # dependency-free review dashboard
+│   └── static/               # dependency-free reviewer console (no build step)
 ├── tests/                    # coding, AI guardrail, terminology, transport, policy, audit tests
 ├── compose.yaml              # bridge + HAPI + PostgreSQL
 └── Dockerfile

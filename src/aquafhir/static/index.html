@@ -3,140 +3,231 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="AquaFHIR Bridge review and alert dashboard" />
-    <title>AquaFHIR Bridge</title>
+    <meta name="description" content="AquaFHIR Bridge — terminology review and alert console" />
+    <title>AquaFHIR Bridge — Reviewer console</title>
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
   <body>
-    <header class="hero">
-      <nav>
-        <a class="brand" href="/">AquaFHIR <span>Bridge</span></a>
-        <div class="nav-actions">
-          <span id="ai-badge" class="badge badge-ai" title="AI co-pilot status">AI —</span>
-          <span id="umls-badge" class="badge badge-ai" title="UMLS terminology crosswalk status">UMLS —</span>
-          <span id="mode-badge" class="badge">Connecting</span>
-          <a href="/docs" target="_blank" rel="noreferrer">API docs ↗</a>
-        </div>
-      </nav>
-      <div class="hero-copy">
-        <p class="eyebrow">ONE HEALTH INTEROPERABILITY</p>
-        <h1>Turn water signals into reviewed, actionable health data.</h1>
-        <p>
-          Normalize agency, citizen, and satellite readings into the OneAquaHealth
-          FHIR profile. Gemini proposes the terminology and drafts the advisory;
-          a human approves everything; every step is hash-chained.
-        </p>
-        <div class="hero-actions">
-          <button id="replay-button" class="primary">Replay Oder demo</button>
-          <button id="approve-all-button" class="secondary">Approve pending queue</button>
-          <button id="situation-button" class="secondary">AI situation report</button>
-          <button id="refresh-button" class="secondary">Refresh</button>
-        </div>
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="mark" aria-hidden="true"></span>
+        <span class="wordmark">AquaFHIR Bridge</span>
+        <span class="topbar-sub">Reviewer console</span>
+      </div>
+      <div class="topbar-right">
+        <span id="chip-fhir" class="chip" title="FHIR write mode">FHIR &middot;&middot;&middot;</span>
+        <span id="chip-ai" class="chip" title="Gemini co-pilot">AI &middot;&middot;&middot;</span>
+        <span id="chip-umls" class="chip" title="UMLS terminology crosswalk">UMLS &middot;&middot;&middot;</span>
+        <a class="topbar-link" href="/docs" target="_blank" rel="noreferrer">API reference</a>
       </div>
     </header>
 
-    <main>
-      <section class="metrics" aria-label="Pipeline status">
-        <article><strong id="proposal-count">0</strong><span>Mapping proposals</span></article>
-        <article><strong id="pending-count">0</strong><span>Awaiting review</span></article>
-        <article><strong id="alert-count">0</strong><span>Policy alerts</span></article>
-        <article><strong id="briefing-count">0</strong><span>AI advisories</span></article>
-        <article><strong id="chain-status">—</strong><span>Audit chain</span></article>
-      </section>
+    <div class="shell">
+      <nav class="sidebar" aria-label="Sections">
+        <button class="nav-item is-active" data-view="review" type="button">
+          <span>Review queue</span><span class="nav-count" id="nav-pending">0</span>
+        </button>
+        <button class="nav-item" data-view="ingest" type="button">
+          <span>Ingest</span>
+        </button>
+        <button class="nav-item" data-view="alerts" type="button">
+          <span>Alerts</span><span class="nav-count" id="nav-alerts">0</span>
+        </button>
+        <button class="nav-item" data-view="audit" type="button">
+          <span>Audit trail</span>
+        </button>
 
-      <section class="workspace-grid">
-        <article class="panel ingest-panel">
-          <div class="panel-heading">
+        <div class="sidebar-block">
+          <h2>Pipeline</h2>
+          <dl class="kv">
+            <dt>Proposals</dt><dd id="stat-proposals">0</dd>
+            <dt>Awaiting review</dt><dd id="stat-pending">0</dd>
+            <dt>Alerts raised</dt><dd id="stat-alerts">0</dd>
+            <dt>Advisory drafts</dt><dd id="stat-briefings">0</dd>
+            <dt>Hash chain</dt><dd id="stat-chain">&mdash;</dd>
+          </dl>
+        </div>
+
+        <div class="sidebar-block">
+          <h2>Signed in as</h2>
+          <label class="field-inline" for="reviewer-name">
+            <span class="visually-hidden">Reviewer name</span>
+            <input id="reviewer-name" type="text" autocomplete="off" spellcheck="false"
+                   placeholder="you@authority.example" />
+          </label>
+          <p class="hint">Recorded on every approval and rejection in the audit chain.</p>
+        </div>
+      </nav>
+
+      <main class="content">
+        <!-- ── Review queue ───────────────────────────────────────────── -->
+        <section class="view is-active" data-view="review">
+          <div class="view-head">
             <div>
-              <p class="eyebrow">INGEST · STRUCTURED</p>
-              <h2>New environmental reading</h2>
+              <h1>Review queue</h1>
+              <p class="lede">
+                Nothing reaches the FHIR server until someone here approves it. Proposals from
+                the curated rules and from the Gemini co-pilot arrive in the same queue.
+              </p>
+            </div>
+            <div class="view-actions">
+              <button id="btn-replay" class="btn" type="button">Load Oder replay</button>
+              <button id="btn-approve-all" class="btn btn-primary" type="button">Approve all pending</button>
             </div>
           </div>
-          <form id="reading-form">
-            <label>Parameter<input name="parameter" value="Leitfähigkeit" required /></label>
-            <div class="form-row">
-              <label>Value<input name="value" type="number" step="any" value="2350" required /></label>
-              <label>Source unit<input name="unit" value="uS/cm" required /></label>
-            </div>
-            <label>Site name<input name="site_name" value="Oder at Kostrzyn" required /></label>
-            <div class="form-row">
-              <label>Latitude<input name="latitude" type="number" step="any" value="52.5887" required /></label>
-              <label>Longitude<input name="longitude" type="number" step="any" value="14.6495" required /></label>
-            </div>
-            <button class="primary" type="submit">Propose FHIR mapping</button>
-            <small>
-              The default is deliberately a German field label with a non-UCUM unit —
-              exactly what string matching alone cannot resolve.
-            </small>
-          </form>
-        </article>
 
-        <article class="panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">INGEST · UNSTRUCTURED</p>
-              <h2>Paste a bulletin or field note</h2>
-            </div>
-            <span id="intake-availability" class="muted"></span>
+          <div class="toolbar" role="group" aria-label="Filter proposals">
+            <button class="tab is-active" data-filter="pending" type="button">Pending</button>
+            <button class="tab" data-filter="approved" type="button">Approved</button>
+            <button class="tab" data-filter="rejected" type="button">Rejected</button>
+            <button class="tab" data-filter="all" type="button">All</button>
+            <span class="toolbar-spacer"></span>
+            <button id="btn-refresh" class="btn btn-quiet" type="button">Refresh</button>
           </div>
-          <form id="intake-form">
-            <label>
-              Free text
-              <textarea name="text" rows="8" required>WIOŚ Szczecin — Odra / Oder at Kostrzyn, 27.07.2022 08:00 UTC.
+
+          <div id="proposal-list" class="stack"></div>
+        </section>
+
+        <!-- ── Ingest ─────────────────────────────────────────────────── -->
+        <section class="view" data-view="ingest">
+          <div class="view-head">
+            <div>
+              <h1>Ingest</h1>
+              <p class="lede">
+                Two doors into the same review queue: a typed reading, or a bulletin someone
+                pasted out of an email.
+              </p>
+            </div>
+          </div>
+
+          <div class="columns">
+            <article class="card">
+              <header class="card-head">
+                <h2>Single reading</h2>
+                <p>Structured input from an agency feed, a citizen app, or a satellite index.</p>
+              </header>
+              <form id="reading-form" class="form">
+                <label class="field">
+                  <span>Parameter, as the source names it</span>
+                  <input name="parameter" value="Leitfähigkeit" required />
+                </label>
+                <div class="field-row">
+                  <label class="field">
+                    <span>Value</span>
+                    <input name="value" type="number" step="any" value="2350" required />
+                  </label>
+                  <label class="field">
+                    <span>Unit, as written</span>
+                    <input name="unit" value="uS/cm" required />
+                  </label>
+                </div>
+                <label class="field">
+                  <span>Site</span>
+                  <input name="site_name" value="Oder at Kostrzyn" required />
+                </label>
+                <div class="field-row">
+                  <label class="field">
+                    <span>Latitude</span>
+                    <input name="latitude" type="number" step="any" value="52.5887" required />
+                  </label>
+                  <label class="field">
+                    <span>Longitude</span>
+                    <input name="longitude" type="number" step="any" value="14.6495" required />
+                  </label>
+                </div>
+                <div class="form-foot">
+                  <button class="btn btn-primary" type="submit">Propose mapping</button>
+                  <p class="hint">
+                    The default is a German field label with a non-UCUM unit — the case
+                    alias matching alone cannot resolve.
+                  </p>
+                </div>
+              </form>
+            </article>
+
+            <article class="card">
+              <header class="card-head">
+                <h2>Unstructured note</h2>
+                <p id="intake-state">Free text is read by Gemini and extracted literally.</p>
+              </header>
+              <form id="intake-form" class="form">
+                <label class="field">
+                  <span>Bulletin, email, or field log</span>
+                  <textarea name="text" rows="9" required>WIOŚ Szczecin — Odra / Oder at Kostrzyn, 27.07.2022 08:00 UTC.
 Leitfähigkeit 2350 uS/cm (Vortag 1200 uS/cm). Gelöster Sauerstoff 3,6 mg/L.
 Sentinel-2 NDCI im Abschnitt bei 0,43.
 Angler melden tote Fische flussabwärts — keine Messung vorhanden.</textarea>
-            </label>
-            <div class="form-row">
-              <label>Site code<input name="default_site_code" value="oder-kostrzyn" required /></label>
-              <label>Source id<input name="source_id" value="wios-szczecin-bulletin" required /></label>
+                </label>
+                <div class="field-row">
+                  <label class="field">
+                    <span>Site code</span>
+                    <input name="default_site_code" value="oder-kostrzyn" required />
+                  </label>
+                  <label class="field">
+                    <span>Source identifier</span>
+                    <input name="source_id" value="wios-szczecin-bulletin" required />
+                  </label>
+                </div>
+                <div class="form-foot">
+                  <button class="btn btn-primary" id="intake-submit" type="submit">Extract readings</button>
+                  <p class="hint">
+                    Nothing is inferred. Measurements that are not written down become warnings.
+                  </p>
+                </div>
+              </form>
+              <div id="intake-warnings" class="notes"></div>
+            </article>
+          </div>
+        </section>
+
+        <!-- ── Alerts ─────────────────────────────────────────────────── -->
+        <section class="view" data-view="alerts">
+          <div class="view-head">
+            <div>
+              <h1>Alerts</h1>
+              <p class="lede">
+                Raised by the versioned threshold policy, not by a model. Advisories are drafts
+                for an accountable authority to review.
+              </p>
             </div>
-            <button class="primary" type="submit" id="intake-submit">Extract readings with Gemini</button>
-            <small>Extraction is literal. Nothing is inferred, and every result still needs review.</small>
-          </form>
-          <div id="intake-warnings" class="warn-list"></div>
-        </article>
-      </section>
+          </div>
+          <div id="alert-list" class="stack"></div>
+        </section>
 
-      <section class="panel wide-panel flow-panel">
-        <ol class="flow">
-          <li><span>01</span><div><strong>Ingest</strong><small>Source and evidence preserved</small></div></li>
-          <li><span>02</span><div><strong>Propose</strong><small>Gemini + curated catalog</small></div></li>
-          <li><span>03</span><div><strong>Review</strong><small>Human approval is mandatory</small></div></li>
-          <li><span>04</span><div><strong>Publish</strong><small>OAH R4 transaction bundle</small></div></li>
-          <li><span>05</span><div><strong>Alert</strong><small>Policy check, then advisory</small></div></li>
-        </ol>
-      </section>
+        <!-- ── Audit ──────────────────────────────────────────────────── -->
+        <section class="view" data-view="audit">
+          <div class="view-head">
+            <div>
+              <h1>Audit trail</h1>
+              <p class="lede">
+                Every proposal, decision, alert, and model call is hash-chained. Changing a
+                stored row breaks verification at that sequence.
+              </p>
+            </div>
+            <div class="view-actions">
+              <button id="btn-situation" class="btn" type="button">Draft situation report</button>
+            </div>
+          </div>
 
-      <section class="panel wide-panel">
-        <div class="panel-heading">
-          <div><p class="eyebrow">REVIEW QUEUE</p><h2>Terminology proposals</h2></div>
-          <span class="muted">Approval writes Location + Organization + Observation</span>
-        </div>
-        <div id="proposal-list" class="card-list"><p class="empty">No proposals yet.</p></div>
-      </section>
+          <div id="chain-banner" class="banner"></div>
+          <div id="situation-report"></div>
 
-      <section id="situation-panel" class="panel wide-panel hidden">
-        <div class="panel-heading">
-          <div><p class="eyebrow">AI SITUATION REPORT</p><h2 id="situation-headline">—</h2></div>
-          <span class="muted">Grounded only in this bridge's stored records</span>
-        </div>
-        <div id="situation-body"></div>
-      </section>
+          <article class="card">
+            <header class="card-head"><h2>Recent events</h2></header>
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr><th>#</th><th>Event</th><th>Entity</th><th>Hash</th><th>Recorded</th></tr>
+                </thead>
+                <tbody id="provenance-rows"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
 
-      <section class="lower-grid">
-        <article class="panel">
-          <div class="panel-heading"><div><p class="eyebrow">ALERTS</p><h2>One Health inbox</h2></div></div>
-          <div id="alert-list" class="card-list"><p class="empty">No thresholds crossed.</p></div>
-        </article>
-        <article class="panel">
-          <div class="panel-heading"><div><p class="eyebrow">PROVENANCE</p><h2>Tamper-evident trail</h2></div></div>
-          <div id="provenance-list" class="timeline"><p class="empty">No events recorded.</p></div>
-        </article>
-      </section>
-    </main>
-
-    <div id="toast" role="status" aria-live="polite"></div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
     <script src="/assets/app.js" defer></script>
   </body>
 </html>
