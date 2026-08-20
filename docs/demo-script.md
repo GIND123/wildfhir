@@ -14,7 +14,7 @@ data **and cannot publish anything**. Land that and the standards story lands wi
    the badge reads `UMLS off`, the "Suggest LOINC/SNOMED" beat below is skipped, and nothing
    else in the script changes.
 4. Run `docker compose up --build` and wait for all three services to become healthy.
-5. Open the dashboard and the HAPI UI in separate tabs.
+5. Open the console (<http://localhost:8000>) and the HAPI UI in separate tabs.
 6. Confirm the header shows `AI gemini-2.5-flash · always`, `FHIR enabled`, and an audit
    chain of `VALID` (plus `UMLS LNC/SNOMEDCT_US` if the key is set).
 
@@ -41,7 +41,7 @@ from a closed enum of catalog codes. Confidence is capped at 0.95 and the card i
 `pending`. There is no confidence value that publishes anything.
 
 **2:00–2:50 — Unstructured intake.** Paste the German bulletin in the right-hand panel and
-press **Extract readings with Gemini**. Readings appear in the same review queue, with the
+press **Extract readings**. Readings appear in the same review queue, with the
 original labels preserved and a warning that the anglers' dead-fish report carried no
 measurement and was not extracted. Two AI stages, both landing in the same place: a human's
 work queue.
@@ -55,14 +55,14 @@ Observation in HAPI: the OAH profile URL in `meta.profile`, a `Location` subject
 `Organization` performer, an effective time, a UCUM-coded quantity, and — if UMLS ran —
 two entries in `code.coding`. This is the interoperability claim, and it is checkable.
 
-**3:30–4:20 — Alert and advisory.** Press **Replay Oder demo**, then **Approve pending
-queue**. Three readings cross the demonstration policy. Note that the *policy engine*
+**3:30–4:20 — Alert and advisory.** In **Review queue**, press **Load Oder replay**, then
+**Approve all pending**. Three readings cross the demonstration policy. Note that the *policy engine*
 decided severity and audience — deterministic, versioned, in a separate file from the
 terminology. Now press **Draft veterinary** on the low-oxygen alert. Gemini writes the
 advisory the phone call would have carried, marked `draft`, with its uncertainty stated and
 a disclaimer that an accountable authority must review it.
 
-**4:20–5:00 — Trust.** Press **AI situation report** for a grounded cross-site summary, then
+**4:20–5:00 — Trust.** Open **Audit trail** and press **Draft situation report** for a grounded cross-site summary, then
 scroll the provenance timeline: `mapping-proposed`, `unstructured-intake`,
 `mapping-approved`, `alert-created`, `briefing-drafted`, `situation-report` — each carrying
 the model id and prompt hash, each hash-chained, verification `VALID`. Close on the
