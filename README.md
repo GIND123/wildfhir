@@ -6,6 +6,34 @@ This repository contains only the first concept from the source brief: **the One
 
 > Status: detailed prototype boilerplate. It is suitable for a hackathon demonstration and engineering handoff, not clinical, veterinary, public-warning, or regulatory production use.
 
+## Hackathon alignment
+
+Built for the **IEEE OneAquaHealth Global Hackathon 2026**, an EU Horizon Europe–funded event that connects urban aquatic ecosystem health to human, animal, and environmental well-being through the One Health approach.
+
+- **Track:** Track 7 — Digital Health Standards ("Enable interoperability across systems"; challenge: "Fragmented data and lack of standards"; expected tooling: "FHIR models, AI agents, and integration frameworks").
+- **Track statement:** AquaFHIR Bridge *is* the interoperability layer the track asks for — it takes fragmented agency, citizen-science, and Earth-observation readings and normalizes them into the project's own [OneAquaHealth FHIR IG](https://build.fhir.org/ig/hl7-eu/oah/), then routes standards-based alerts to human-health, veterinary, and water-authority consumers.
+- **Hackathon period:** September 16–30, 2026. **Judging:** October 1–15, 2026. **Winners announced:** October 24, 2026 at the IEEE iGET Conference. **Registration closes:** August 31, 2026. (Some third-party listings show slightly different dates — treat the official OneAquaHealth hackathon page as authoritative.)
+
+### Judging-criteria mapping
+
+| Criterion | How this repository addresses it |
+|---|---|
+| **Impact & Alignment with the OneAquaHealth mission** | Every environmental reading is normalized into the *same* FHIR resource model the OneAquaHealth project already publishes, and a crossed threshold routes an alert to human-health, veterinary, *and* water-authority audiences in one step — the ecosystem→health link is the product, not a bolt-on chart. |
+| **Innovation & Creativity** | Reviewed, human-in-the-loop AI coding of messy source data onto OAH terminology (§ [Human-in-the-loop coding agent](#human-in-the-loop-coding-agent)) plus a hash-chained provenance ledger — FHIR-for-environment bridges with reviewer gating are still rare in the published literature. |
+| **Architecture** | HAPI FHIR R4 loaded with the real `hl7.eu.fhir.oah` package, R4 rest-hook Subscriptions, a versioned/unit-aware alert policy, and a documented sequence diagram (see [architecture.md](docs/architecture.md)). |
+| **UX** | A dependency-free review dashboard shows the pending-proposal queue, the approved FHIR resource, and audience-tagged alert cards in one flow — see the [demo script](docs/demo-script.md). |
+| **Scale** | Config-driven terminology ([coding-rules.yaml](config/coding-rules.yaml)) and policy ([thresholds.yaml](config/thresholds.yaml)), a documented gap analysis to production (§ [Implemented versus production work](#implemented-versus-production-work)), and a swappable coding-agent contract that a second real connector or an LLM proposer can plug into without touching the FHIR or alerting layers. |
+
+### Submission checklist
+
+| Required item | Where it lives |
+|---|---|
+| Track alignment statement | This section |
+| Project description (problem, solution, users, impact) | This README's opening summary + [Real-world anchor](#real-world-anchor-the-2022-oder-river-disaster) |
+| 3–5 minute demo video | Script in [demo-script.md](docs/demo-script.md); record against the Docker stack |
+| Public code repository with documentation | This repository |
+| Working prototype / proof-of-concept | `docker compose up --build` (§ [Quick start with Docker](#quick-start-with-docker)) |
+
 ## What the system proves
 
 The end-to-end slice is intentionally narrow:
@@ -19,6 +47,12 @@ The end-to-end slice is intentionally narrow:
 7. Hash-chain every proposal, decision, and alert so later modification is detectable.
 
 The included Oder replay is synthetic demonstration data shaped around the 2022 incident narrative. It is not a scientifically reconstructed incident dataset, and the sample thresholds are not WFD/EQS limits.
+
+### Real-world anchor: the 2022 Oder River disaster
+
+In July–August 2022, a *Prymnesium parvum* ("golden algae") bloom — triggered by elevated salinity (linked to industrial discharges) combined with heat and low flow — killed fish and molluscs across the Poland–Germany border stretch of the Oder river. Reported figures vary by source and method: the Leibniz Institute of Freshwater Ecology and Inland Fisheries (IGB) put the toll at up to 1,000 tonnes of fish, mussels, and snails; a European Commission report cites roughly 360 tonnes as the figure scientifically confirmed; and Poland's own government reporting recorded 249 metric tonnes of dead fish physically collected within its territory between late July and 12 September 2022. IGB scientists measured algal concentrations reaching around 100,000 cells per millilitre in the river at the height of the bloom.
+
+The bloom's spread was already visible in Copernicus Sentinel-2 imagery, and salinity/conductivity readings were already measurably elevated — but that evidence sat in fragmented Polish and German agency systems and reached downstream communities and cross-border authorities too slowly to change the outcome. AquaFHIR Bridge's Oder replay demonstrates, with clearly labeled synthetic data, how normalizing that same class of signal (conductivity, an NDCI-style bloom index, dissolved oxygen) into shared FHIR resources with a threshold policy and cross-audience Subscription alerting could plausibly compress that delay. This is presented as a *plausible earlier-warning* case, not a claim that the tool would have prevented the fish kill — the underlying pollution and ecological trigger are a policy and enforcement problem the data layer alone does not solve.
 
 ## Architecture
 
