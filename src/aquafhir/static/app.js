@@ -1,7 +1,14 @@
 const api = "/api/v1";
 const $ = (selector) => document.querySelector(selector);
 
-const state = { ai: { enabled: false }, briefings: [] };
+const state = {
+  ai: { enabled: false },
+  umls: { enabled: false },
+  briefings: [],
+  proposals: [],
+  suggestions: {},
+  secondaryPicks: {},
+};
 
 async function request(path, options = {}) {
   const response = await fetch(`${api}${path}`, {
@@ -63,6 +70,36 @@ function candidatesMarkup(candidates) {
     .join("")}</div>`;
 }
 
+function terminologyMarkup(proposal) {
+  if (proposal.status !== "pending" || !proposal.coding) return "";
+  if (!state.umls.enabled) {
+    return `<p class="evidence">Set UMLS_API_KEY to suggest a real LOINC/SNOMED CT code.</p>`;
+  }
+  const picked = state.secondaryPicks[proposal.id];
+  if (picked) {
+    return `<div class="terminology">
+      <span class="chip-button picked">${escapeHtml(picked.system)} ${escapeHtml(picked.code)}
+        · ${escapeHtml(picked.display)} — will attach on approval</span>
+    </div>`;
+  }
+  const suggestions = state.suggestions[proposal.id];
+  const chips = suggestions && suggestions.length
+    ? `<div class="chip-row">${suggestions
+        .map((item) => `<button type="button" class="chip-button" data-pick="${proposal.id}"
+            data-system="${escapeHtml(item.system)}" data-code="${escapeHtml(item.code)}"
+            data-display="${escapeHtml(item.display)}">
+            ${escapeHtml(item.vocabulary)} ${escapeHtml(item.code)} · ${escapeHtml(item.display)}
+          </button>`)
+        .join("")}</div>`
+    : suggestions
+      ? `<p class="evidence">No UMLS candidates found for this code.</p>`
+      : "";
+  return `<div class="terminology">
+    <button type="button" class="secondary" data-suggest="${proposal.id}">Suggest LOINC/SNOMED (UMLS)</button>
+    ${chips}
+  </div>`;
+}
+
 function proposalMarkup(proposal) {
   const quantity = proposal.normalized_value === null
     ? "unit unresolved — reviewer must correct"
@@ -86,9 +123,15 @@ function proposalMarkup(proposal) {
       <p>${escapeHtml(proposal.rationale)}</p>
       ${candidatesMarkup(proposal.candidates)}
       ${aiMarkup(proposal.ai)}
+      ${terminologyMarkup(proposal)}
     </div>
     ${actions}
   </article>`;
+}
+
+function renderProposalList() {
+  $("#proposal-list").innerHTML = state.proposals.length
+    ? state.proposals.map(proposalMarkup).join("") : '<p class="empty">No proposals yet.</p>';
 }
 
 function briefingMarkup(briefing) {
@@ -154,12 +197,15 @@ function renderSituation(report) {
 
 async function refresh() {
   try {
-    const [health, ai, proposals, alerts, briefings, provenance, chain] = await Promise.all([
-      request("/health"), request("/ai/status"), request("/proposals"), request("/alerts"),
+    const [health, ai, umls, proposals, alerts, briefings, provenance, chain] = await Promise.all([
+      request("/health"), request("/ai/status"), request("/terminology/status"),
+      request("/proposals"), request("/alerts"),
       request("/briefings"), request("/provenance?limit=20"), request("/provenance/verify"),
     ]);
     state.ai = ai;
+    state.umls = umls;
     state.briefings = briefings;
+    state.proposals = proposals;
 
     $("#mode-badge").textContent = `FHIR ${health.fhir_write_mode}`;
     const aiBadge = $("#ai-badge");
@@ -169,6 +215,10 @@ async function refresh() {
     $("#intake-submit").disabled = !ai.enabled;
     $("#situation-button").disabled = !ai.enabled;
 
+    const umlsBadge = $("#umls-badge");
+    umlsBadge.textContent = umls.enabled ? `UMLS ${umls.vocabularies.join("/")}` : "UMLS off";
+    umlsBadge.classList.toggle("off", !umls.enabled);
+
     $("#proposal-count").textContent = proposals.length;
     $("#pending-count").textContent = proposals.filter((item) => item.status === "pending").length;
     $("#alert-count").textContent = alerts.length;
@@ -176,8 +226,7 @@ async function refresh() {
     $("#chain-status").textContent = chain.valid ? "VALID" : "BROKEN";
     $("#chain-status").className = chain.valid ? "" : "danger";
 
-    $("#proposal-list").innerHTML = proposals.length
-      ? proposals.map(proposalMarkup).join("") : '<p class="empty">No proposals yet.</p>';
+    renderProposalList();
     $("#alert-list").innerHTML = alerts.length
       ? alerts.map(alertMarkup).join("") : '<p class="empty">No thresholds crossed.</p>';
     $("#provenance-list").innerHTML = provenance.length
@@ -233,11 +282,38 @@ $("#proposal-list").addEventListener("click", async (event) => {
   if (!button) return;
   const approveId = button.dataset.approve;
   const rejectId = button.dataset.reject;
+  const suggestId = button.dataset.suggest;
+  const pickId = button.dataset.pick;
+
+  if (suggestId) {
+    await withBusy(button, async () => {
+      state.suggestions[suggestId] = await request(
+        `/proposals/${suggestId}/terminology-suggestions`,
+      );
+      renderProposalList();
+    });
+    return;
+  }
+  if (pickId) {
+    state.secondaryPicks[pickId] = {
+      system: button.dataset.system,
+      code: button.dataset.code,
+      display: button.dataset.display,
+    };
+    toast(`Attached ${button.dataset.code} — included when this proposal is approved.`);
+    renderProposalList();
+    return;
+  }
   if (!approveId && !rejectId) return;
   await withBusy(button, async () => {
     if (approveId) {
+      const secondaryCoding = state.secondaryPicks[approveId];
       await request(`/proposals/${approveId}/approve`, {
-        method: "POST", body: JSON.stringify({ reviewer: "demo-reviewer" }),
+        method: "POST",
+        body: JSON.stringify({
+          reviewer: "demo-reviewer",
+          ...(secondaryCoding ? { secondary_coding: secondaryCoding } : {}),
+        }),
       });
       toast("Approved. FHIR resources built and policy evaluated.");
     } else {

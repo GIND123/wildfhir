@@ -11,8 +11,10 @@ from aquafhir.gemini import GeminiClient
 from aquafhir.intake import UnstructuredIntake
 from aquafhir.repository import Repository
 from aquafhir.service import BridgeService
+from aquafhir.terminology import TerminologyCrosswalk
 from aquafhir.thresholds import ThresholdPolicy
-from tests.fakes import FakeGemini
+from aquafhir.umls import UMLSClient
+from tests.fakes import FakeGemini, FakeUMLS
 
 ROOT = Path(__file__).parents[1]
 RULES = ROOT / "config" / "coding-rules.yaml"
@@ -20,7 +22,12 @@ THRESHOLDS = ROOT / "config" / "thresholds.yaml"
 REPLAY = ROOT / "data" / "oder-replay.csv"
 
 
-def _build(tmp_path: Path, gemini: GeminiClient, coding_agent) -> BridgeService:
+def _build(
+    tmp_path: Path,
+    gemini: GeminiClient,
+    coding_agent,
+    umls: UMLSClient | None = None,
+) -> BridgeService:
     return BridgeService(
         repository=Repository(tmp_path / "test.db"),
         coding_agent=coding_agent,
@@ -28,6 +35,7 @@ def _build(tmp_path: Path, gemini: GeminiClient, coding_agent) -> BridgeService:
         fhir_client=FhirClient("http://unused.test/fhir", write_enabled=False, timeout=1),
         intake=UnstructuredIntake(gemini),
         briefing_writer=BriefingWriter(gemini),
+        terminology=TerminologyCrosswalk(umls or UMLSClient(api_key="")),
         replay_path=REPLAY,
     )
 
@@ -55,3 +63,18 @@ def ai_service(
     """Full pipeline with a stubbed Gemini transport."""
     agent = GeminiCodingAgent(curated_agent, fake_gemini, assist_mode=AssistMode.ALWAYS)
     return _build(tmp_path, fake_gemini, agent)
+
+
+@pytest.fixture
+def fake_umls() -> FakeUMLS:
+    return FakeUMLS()
+
+
+@pytest.fixture
+def umls_service(
+    tmp_path: Path, curated_agent: ReviewedCodingAgent, fake_umls: FakeUMLS
+) -> BridgeService:
+    """Deterministic coding pipeline with a stubbed UMLS transport."""
+    return _build(
+        tmp_path, GeminiClient(api_key="", model="gemini-test"), curated_agent, fake_umls
+    )

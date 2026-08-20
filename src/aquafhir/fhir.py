@@ -58,6 +58,9 @@ def build_resources(
         "active": True,
         "name": reading.source_id,
     }
+    codings = [proposal.coding.model_dump()]
+    if proposal.secondary_coding:
+        codings.append(proposal.secondary_coding.model_dump())
     observation: dict[str, Any] = {
         "resourceType": "Observation",
         "id": observation_id,
@@ -75,7 +78,7 @@ def build_resources(
         ],
         "status": "final",
         "code": {
-            "coding": [proposal.coding.model_dump()],
+            "coding": codings,
             "text": proposal.coding.display,
         },
         "subject": {"reference": f"Location/{location_id}", "display": reading.site_name},
@@ -92,6 +95,16 @@ def build_resources(
     if reading.evidence_url:
         observation["note"].append(
             {"text": f"Source evidence URI: {reading.evidence_url}"}
+        )
+    if proposal.secondary_coding:
+        observation["note"].append(
+            {
+                "text": (
+                    f"Second coding {proposal.secondary_coding.system}|"
+                    f"{proposal.secondary_coding.code} attached by reviewer "
+                    "after a UMLS terminology crosswalk suggestion."
+                )
+            }
         )
     return location, organization, observation
 

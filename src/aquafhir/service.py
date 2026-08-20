@@ -29,8 +29,10 @@ from aquafhir.models import (
     ReviewDecision,
     ReviewStatus,
     SituationReport,
+    TerminologyMatch,
 )
 from aquafhir.repository import Repository
+from aquafhir.terminology import TerminologyCrosswalk
 from aquafhir.thresholds import ThresholdPolicy
 
 logger = logging.getLogger(__name__)
@@ -61,6 +63,7 @@ class BridgeService:
         fhir_client: FhirClient,
         intake: UnstructuredIntake | None = None,
         briefing_writer: BriefingWriter | None = None,
+        terminology: TerminologyCrosswalk | None = None,
         replay_path: Path | None = None,
     ) -> None:
         self.repository = repository
@@ -69,6 +72,7 @@ class BridgeService:
         self.fhir_client = fhir_client
         self.intake = intake
         self.briefing_writer = briefing_writer
+        self.terminology = terminology
         self.replay_path = replay_path
 
     # -- ingestion ---------------------------------------------------------
@@ -128,6 +132,8 @@ class BridgeService:
         if decision.normalized_value is not None and decision.normalized_unit:
             proposal.normalized_value = decision.normalized_value
             proposal.normalized_unit = decision.normalized_unit
+        if decision.secondary_coding:
+            proposal.secondary_coding = decision.secondary_coding
         if not proposal.coding or proposal.normalized_value is None or not proposal.normalized_unit:
             raise InvalidReviewStateError(
                 "Proposal needs a coding, normalized value, and normalized UCUM unit"
@@ -159,6 +165,7 @@ class BridgeService:
                 "ai_prompt_hash": proposal.ai.prompt_hash if proposal.ai else None,
                 "reviewer_overrode_coding": decision.coding is not None,
                 "reviewer_overrode_quantity": decision.normalized_value is not None,
+                "reviewer_attached_secondary_coding": decision.secondary_coding is not None,
             },
         )
         alerts = self._evaluate_and_store(observation)
@@ -282,6 +289,26 @@ class BridgeService:
             },
         )
         return report
+
+    # -- terminology crosswalk ----------------------------------------------
+
+    def suggest_terminology(self, proposal_id: str) -> list[TerminologyMatch]:
+        """Suggest a real LOINC/SNOMED CT code for a proposal's OAH coding.
+
+        Read-only. Nothing here is attached to the proposal until a reviewer
+        supplies `ReviewDecision.secondary_coding` at approval time.
+        """
+        if self.terminology is None or not self.terminology.available:
+            raise AiUnavailableError(
+                "Terminology crosswalk needs UMLS_API_KEY; approve using the curated "
+                "OAH code alone instead"
+            )
+        proposal = self.repository.get_proposal(proposal_id)
+        if not proposal:
+            raise ProposalNotFoundError(proposal_id)
+        if not proposal.coding:
+            return []
+        return self.terminology.suggest(proposal.coding.display)
 
     # -- internals ---------------------------------------------------------
 

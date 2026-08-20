@@ -9,7 +9,8 @@ AquaFHIR Bridge owns environmental ingestion, terminology review, OAH resource c
 | FastAPI edge | Validate requests and expose review/webhook APIs | None |
 | Coding proposer | Suggest a curated OAH code and UCUM normalization | Versioned YAML |
 | Gemini co-pilot | Propose a catalog code for a label rules cannot match; extract readings from free text; draft advisories | Versioned prompt templates |
-| Review workflow | Enforce pending → approved/rejected state transition | SQLite |
+| UMLS terminology crosswalk | Suggest a real LOINC/SNOMED CT candidate for a curated OAH code's display text; never selects it | None (read-through UTS search) |
+| Review workflow | Enforce pending → approved/rejected state transition; a reviewer may also attach a suggested secondary coding | SQLite |
 | FHIR builder/client | Build atomic R4 transactions and publish to HAPI | HAPI/PostgreSQL |
 | Policy engine | Compare like-for-like code, value, and unit | Versioned YAML |
 | Provenance ledger | Hash-chain material state changes | SQLite |
@@ -57,6 +58,14 @@ Three guardrails enforce the split in code:
 Failure is a degradation, not an outage: an unreachable, misconfigured, rate-limited, or
 out-of-catalog response falls back to the curated proposal with a note in the rationale.
 The pipeline's tests cover that path.
+
+The UMLS terminology crosswalk is a separate, narrower assist and fails independently: it
+authenticates with the single `apiKey` query parameter the UTS REST API actually documents
+(https://documentation.uts.nlm.nih.gov/rest/authentication.html), it only ever returns
+*candidates* from `GET .../terminology-suggestions`, and nothing is written to a proposal —
+let alone to FHIR — until a reviewer supplies one explicitly as `secondary_coding` at
+approval. An unreachable or keyless UMLS call never blocks curated OAH coding, FHIR
+publication, or alerting.
 
 ## Proposal sequence with the co-pilot
 
@@ -129,6 +138,8 @@ For the single-node demo, approval also calls the policy engine directly. In a d
 - Gemini unreachable, rate-limited, blocked, or truncated: the curated proposal is returned with an explanatory note; AI-only endpoints return `503` (no key) or `502` (upstream failure).
 - Gemini returns a code outside the catalog: the response is discarded and the curated proposal stands.
 - Gemini returns `NO_MATCH`: no code is proposed and the reviewer must supply one or reject.
+- UMLS unreachable, rate-limited, or keyless: `terminology-suggestions` returns `502`/`503`; the OAH proposal, its approval, and FHIR publication are entirely unaffected.
+- UMLS returns a vocabulary outside `UMLS_VOCABULARIES`: the result is dropped before it reaches the reviewer, re-checked in `terminology.py` regardless of what the `sabs` search filter already requested.
 
 ## Scaling path
 
