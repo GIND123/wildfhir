@@ -1,24 +1,7 @@
 const api = "/api/v1";
 const $ = (selector) => document.querySelector(selector);
 
-const demoReadings = [
-  ["agency", "EC", 1.2, "mS/cm", "2022-07-24T08:00:00Z"],
-  ["satellite", "NDCI", 0.18, "1", "2022-07-25T10:15:00Z"],
-  ["agency", "electrical conductivity", 2.35, "mS/cm", "2022-07-27T08:00:00Z"],
-  ["satellite", "normalized difference chlorophyll index", 0.43, "1", "2022-07-28T10:15:00Z"],
-  ["agency", "dissolved O2", 3.6, "mg/L", "2022-07-29T07:30:00Z"],
-].map(([source_type, parameter, value, unit, observed_at], index) => ({
-  source_id: source_type === "satellite" ? "copernicus-s2" : `oder-agency-${index + 1}`,
-  source_type,
-  parameter,
-  value,
-  unit,
-  observed_at,
-  site_code: index === 4 ? "oder-frankfurt" : "oder-kostrzyn",
-  site_name: index === 4 ? "Oder at Frankfurt" : "Oder at Kostrzyn",
-  latitude: index === 4 ? 52.3471 : 52.5887,
-  longitude: index === 4 ? 14.5506 : 14.6495,
-}));
+const state = { ai: { enabled: false }, briefings: [] };
 
 async function request(path, options = {}) {
   const response = await fetch(`${api}${path}`, {
@@ -36,84 +19,279 @@ function toast(message, error = false) {
   const node = $("#toast");
   node.textContent = message;
   node.className = error ? "show error" : "show";
-  window.setTimeout(() => { node.className = ""; }, 2800);
+  window.setTimeout(() => { node.className = ""; }, 3600);
 }
 
 function escapeHtml(value) {
-  return String(value).replace(/[&<>'"]/g, (char) => ({
+  return String(value ?? "").replace(/[&<>'"]/g, (char) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
   }[char]));
 }
 
+async function withBusy(button, work) {
+  const label = button.textContent;
+  button.disabled = true;
+  button.textContent = "Working…";
+  try { await work(); } catch (error) { toast(error.message, true); }
+  finally { button.disabled = false; button.textContent = label; }
+}
+
+/* ---------- renderers ---------- */
+
+function aiMarkup(ai) {
+  if (!ai) return "";
+  const flags = [];
+  if (ai.disagreed_with_rules) flags.push('<span class="flag warn">AI disagrees with curated rules</span>');
+  if (ai.needs_expert_review) flags.push('<span class="flag warn">Model asked for expert review</span>');
+  const evidence = (ai.evidence || []).length
+    ? `<p class="evidence">Evidence: ${ai.evidence.map((item) => `“${escapeHtml(item)}”`).join(" · ")}</p>`
+    : "";
+  return `<div class="ai-strip">
+    <span class="flag ai">GEMINI ${escapeHtml(ai.model)}</span>
+    <span class="flag">${escapeHtml(ai.template_id)}</span>
+    <span class="flag mono" title="SHA-256 of the exact prompt">prompt ${escapeHtml(ai.prompt_hash.slice(0, 10))}…</span>
+    <span class="flag mono">${ai.latency_ms} ms</span>
+    ${flags.join("")}
+    ${evidence}
+  </div>`;
+}
+
+function candidatesMarkup(candidates) {
+  if (!candidates || candidates.length < 2) return "";
+  return `<div class="audiences">${candidates
+    .map((item) => `<span title="${escapeHtml(item.origin)}">${escapeHtml(item.code)} ${item.score.toFixed(2)}</span>`)
+    .join("")}</div>`;
+}
+
 function proposalMarkup(proposal) {
+  const quantity = proposal.normalized_value === null
+    ? "unit unresolved — reviewer must correct"
+    : `${proposal.normalized_value} ${escapeHtml(proposal.normalized_unit)}`;
   const coding = proposal.coding
-    ? `<code>${escapeHtml(proposal.coding.code)} · ${escapeHtml(proposal.normalized_unit || "unit unresolved")}</code>`
-    : `<code>No terminology candidate</code>`;
+    ? `<code>${escapeHtml(proposal.coding.code)} → ${quantity}</code>`
+    : `<code class="danger">No terminology candidate</code>`;
   const actions = proposal.status === "pending"
-    ? `<div class="card-actions"><button class="primary" data-approve="${proposal.id}">Approve</button><button class="secondary" data-reject="${proposal.id}">Reject</button></div>`
+    ? `<div class="card-actions">
+         <button class="primary" data-approve="${proposal.id}">Approve</button>
+         <button class="secondary" data-reject="${proposal.id}">Reject</button>
+       </div>`
     : `<span class="status ${proposal.status}">${proposal.status}</span>`;
-  return `<article class="data-card"><div><h3>${escapeHtml(proposal.reading.parameter)} · ${proposal.reading.value} ${escapeHtml(proposal.reading.unit)}</h3><p>${escapeHtml(proposal.reading.site_name)} · confidence ${Math.round(proposal.confidence * 100)}%</p>${coding}<p>${escapeHtml(proposal.rationale)}</p></div>${actions}</article>`;
+  return `<article class="data-card">
+    <div>
+      <h3>${escapeHtml(proposal.reading.parameter)} · ${proposal.reading.value} ${escapeHtml(proposal.reading.unit)}</h3>
+      <p>${escapeHtml(proposal.reading.site_name)} · ${escapeHtml(proposal.reading.source_type)} ·
+         confidence ${Math.round(proposal.confidence * 100)}% ·
+         <span class="mono">${escapeHtml(proposal.proposer)}</span></p>
+      ${coding}
+      <p>${escapeHtml(proposal.rationale)}</p>
+      ${candidatesMarkup(proposal.candidates)}
+      ${aiMarkup(proposal.ai)}
+    </div>
+    ${actions}
+  </article>`;
+}
+
+function briefingMarkup(briefing) {
+  return `<div class="briefing">
+    <strong>${escapeHtml(briefing.audience)} · ${escapeHtml(briefing.headline)}</strong>
+    <p>${escapeHtml(briefing.summary)}</p>
+    <ul>${briefing.recommended_actions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+    <p class="evidence">Uncertainty: ${escapeHtml(briefing.uncertainty)}</p>
+    <p class="evidence">Next question: ${escapeHtml(briefing.escalation_question)}</p>
+    <p class="disclaimer">${escapeHtml(briefing.disclaimer)}</p>
+    ${aiMarkup(briefing.ai)}
+  </div>`;
 }
 
 function alertMarkup(alert) {
-  return `<article class="data-card"><div><h3 class="severity-${escapeHtml(alert.severity)}">${escapeHtml(alert.severity.toUpperCase())} · ${escapeHtml(alert.rule_code)}</h3><p>${escapeHtml(alert.message)}</p><p>${alert.value} ${escapeHtml(alert.unit)} · ${escapeHtml(alert.site_code)}</p><div class="audiences">${alert.audiences.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div></div></article>`;
+  const drafted = state.briefings.filter((item) => item.alert_id === alert.id);
+  const draftedAudiences = new Set(drafted.map((item) => item.audience));
+  const buttons = state.ai.enabled
+    ? `<div class="card-actions wrap">${alert.audiences
+        .map((audience) => `<button class="secondary" data-brief="${alert.id}" data-audience="${escapeHtml(audience)}">
+            ${draftedAudiences.has(audience) ? "Redraft" : "Draft"} ${escapeHtml(audience)}
+          </button>`)
+        .join("")}</div>`
+    : `<p class="evidence">Set GEMINI_API_KEY to draft audience advisories.</p>`;
+  return `<article class="data-card stacked">
+    <div>
+      <h3 class="severity-${escapeHtml(alert.severity)}">${escapeHtml(alert.severity.toUpperCase())} · ${escapeHtml(alert.rule_code)}</h3>
+      <p>${escapeHtml(alert.message)}</p>
+      <p>${alert.value} ${escapeHtml(alert.unit)} · ${escapeHtml(alert.site_code)} · policy ${escapeHtml(alert.policy_id)}</p>
+      <div class="audiences">${alert.audiences.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>
+      ${buttons}
+      ${drafted.map(briefingMarkup).join("")}
+    </div>
+  </article>`;
 }
 
 function provenanceMarkup(entry) {
-  return `<div class="timeline-item"><strong>${escapeHtml(entry.event_type)}</strong><p>#${entry.sequence} · ${escapeHtml(entry.entity_id)}</p><p>${entry.hash.slice(0, 18)}…</p></div>`;
+  return `<div class="timeline-item">
+    <strong>${escapeHtml(entry.event_type)}</strong>
+    <p>#${entry.sequence} · ${escapeHtml(entry.entity_id)}</p>
+    <p>${escapeHtml(entry.hash.slice(0, 18))}…</p>
+  </div>`;
 }
+
+function renderSituation(report) {
+  $("#situation-panel").classList.remove("hidden");
+  $("#situation-headline").textContent = report.headline || "Situation report";
+  $("#situation-body").innerHTML = `
+    <p>${escapeHtml(report.situation)}</p>
+    ${report.by_site.map((item) => `<p><strong>${escapeHtml(item.site_code)}</strong> — ${escapeHtml(item.assessment)}</p>`).join("")}
+    <div class="split">
+      <div><h4>Data gaps</h4><ul>${report.data_gaps.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>
+      <div><h4>Next steps</h4><ul>${report.next_steps.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>
+    </div>
+    <p class="evidence">Considered ${report.observations_considered} observations, ${report.alerts_considered} alerts,
+       ${report.pending_reviews} mappings still awaiting review.</p>
+    <p class="disclaimer">${escapeHtml(report.disclaimer)}</p>
+    ${aiMarkup(report.ai)}`;
+  $("#situation-panel").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+/* ---------- data flow ---------- */
 
 async function refresh() {
   try {
-    const [health, proposals, alerts, provenance, chain] = await Promise.all([
-      request("/health"), request("/proposals"), request("/alerts"),
-      request("/provenance?limit=20"), request("/provenance/verify"),
+    const [health, ai, proposals, alerts, briefings, provenance, chain] = await Promise.all([
+      request("/health"), request("/ai/status"), request("/proposals"), request("/alerts"),
+      request("/briefings"), request("/provenance?limit=20"), request("/provenance/verify"),
     ]);
-    $("#mode-badge").textContent = health.fhir_write_mode;
+    state.ai = ai;
+    state.briefings = briefings;
+
+    $("#mode-badge").textContent = `FHIR ${health.fhir_write_mode}`;
+    const aiBadge = $("#ai-badge");
+    aiBadge.textContent = ai.enabled ? `AI ${ai.model} · ${ai.assist_mode}` : "AI off";
+    aiBadge.classList.toggle("off", !ai.enabled);
+    $("#intake-availability").textContent = ai.enabled ? "" : "needs GEMINI_API_KEY";
+    $("#intake-submit").disabled = !ai.enabled;
+    $("#situation-button").disabled = !ai.enabled;
+
     $("#proposal-count").textContent = proposals.length;
     $("#pending-count").textContent = proposals.filter((item) => item.status === "pending").length;
     $("#alert-count").textContent = alerts.length;
+    $("#briefing-count").textContent = briefings.length;
     $("#chain-status").textContent = chain.valid ? "VALID" : "BROKEN";
-    $("#proposal-list").innerHTML = proposals.length ? proposals.map(proposalMarkup).join("") : '<p class="empty">No proposals yet.</p>';
-    $("#alert-list").innerHTML = alerts.length ? alerts.map(alertMarkup).join("") : '<p class="empty">No thresholds crossed.</p>';
-    $("#provenance-list").innerHTML = provenance.length ? provenance.map(provenanceMarkup).join("") : '<p class="empty">No events recorded.</p>';
+    $("#chain-status").className = chain.valid ? "" : "danger";
+
+    $("#proposal-list").innerHTML = proposals.length
+      ? proposals.map(proposalMarkup).join("") : '<p class="empty">No proposals yet.</p>';
+    $("#alert-list").innerHTML = alerts.length
+      ? alerts.map(alertMarkup).join("") : '<p class="empty">No thresholds crossed.</p>';
+    $("#provenance-list").innerHTML = provenance.length
+      ? provenance.map(provenanceMarkup).join("") : '<p class="empty">No events recorded.</p>';
   } catch (error) { toast(error.message, true); }
 }
 
 $("#reading-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const data = new FormData(event.currentTarget);
+  const form = event.currentTarget;
+  const data = new FormData(form);
   const payload = {
-    source_id: "manual-dashboard", source_type: "agency",
-    parameter: data.get("parameter"), value: Number(data.get("value")), unit: data.get("unit"),
-    observed_at: new Date().toISOString(), site_code: "oder-kostrzyn",
-    site_name: data.get("site_name"), latitude: Number(data.get("latitude")), longitude: Number(data.get("longitude")),
+    source_id: "manual-dashboard",
+    source_type: "agency",
+    parameter: data.get("parameter"),
+    value: Number(data.get("value")),
+    unit: data.get("unit"),
+    observed_at: new Date().toISOString(),
+    site_code: "oder-kostrzyn",
+    site_name: data.get("site_name"),
+    latitude: Number(data.get("latitude")),
+    longitude: Number(data.get("longitude")),
   };
-  try {
+  await withBusy(form.querySelector("button"), async () => {
     await request("/proposals", { method: "POST", body: JSON.stringify(payload) });
-    toast("Mapping proposal created for review."); await refresh();
-  } catch (error) { toast(error.message, true); }
+    toast("Mapping proposal created for review.");
+    await refresh();
+  });
+});
+
+$("#intake-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  const payload = {
+    text: data.get("text"),
+    source_id: data.get("source_id"),
+    source_type: "agency",
+    default_site_code: data.get("default_site_code"),
+    default_site_name: "Oder at Kostrzyn",
+  };
+  await withBusy($("#intake-submit"), async () => {
+    const result = await request("/intake", { method: "POST", body: JSON.stringify(payload) });
+    $("#intake-warnings").innerHTML = result.warnings
+      .map((item) => `<p class="warn">⚠ ${escapeHtml(item)}</p>`).join("");
+    toast(`Extracted ${result.extracted_count} reading(s) into the review queue.`);
+    await refresh();
+  });
 });
 
 $("#proposal-list").addEventListener("click", async (event) => {
-  const approveId = event.target.dataset.approve;
-  const rejectId = event.target.dataset.reject;
-  try {
-    if (approveId) await request(`/proposals/${approveId}/approve`, { method: "POST", body: JSON.stringify({ reviewer: "demo-reviewer" }) });
-    if (rejectId) await request(`/proposals/${rejectId}/reject`, { method: "POST", body: JSON.stringify({ reviewer: "demo-reviewer", reason: "Rejected during demo review" }) });
-    if (approveId || rejectId) { toast(approveId ? "FHIR mapping approved and published." : "Proposal rejected."); await refresh(); }
-  } catch (error) { toast(error.message, true); }
+  const button = event.target.closest("button");
+  if (!button) return;
+  const approveId = button.dataset.approve;
+  const rejectId = button.dataset.reject;
+  if (!approveId && !rejectId) return;
+  await withBusy(button, async () => {
+    if (approveId) {
+      await request(`/proposals/${approveId}/approve`, {
+        method: "POST", body: JSON.stringify({ reviewer: "demo-reviewer" }),
+      });
+      toast("Approved. FHIR resources built and policy evaluated.");
+    } else {
+      await request(`/proposals/${rejectId}/reject`, {
+        method: "POST",
+        body: JSON.stringify({ reviewer: "demo-reviewer", reason: "Rejected during demo review" }),
+      });
+      toast("Proposal rejected and recorded.");
+    }
+    await refresh();
+  });
+});
+
+$("#alert-list").addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-brief]");
+  if (!button) return;
+  await withBusy(button, async () => {
+    await request(
+      `/alerts/${button.dataset.brief}/briefings?audience=${encodeURIComponent(button.dataset.audience)}`,
+      { method: "POST" },
+    );
+    toast(`Draft advisory ready for ${button.dataset.audience}.`);
+    await refresh();
+  });
 });
 
 $("#replay-button").addEventListener("click", async (event) => {
-  event.currentTarget.disabled = true;
-  try {
-    for (const reading of demoReadings) await request("/proposals", { method: "POST", body: JSON.stringify(reading) });
-    toast("Oder timeline loaded. Review the five proposals below."); await refresh();
-  } catch (error) { toast(error.message, true); }
-  finally { event.currentTarget.disabled = false; }
+  await withBusy(event.currentTarget, async () => {
+    const proposals = await request("/replay", { method: "POST" });
+    toast(`Oder timeline loaded — ${proposals.length} proposals awaiting review.`);
+    await refresh();
+  });
+});
+
+$("#approve-all-button").addEventListener("click", async (event) => {
+  await withBusy(event.currentTarget, async () => {
+    const proposals = await request("/proposals");
+    const ids = proposals.filter((item) => item.status === "pending").map((item) => item.id);
+    if (!ids.length) { toast("Nothing pending."); return; }
+    const result = await request("/proposals/approve-batch", {
+      method: "POST",
+      body: JSON.stringify({ reviewer: "demo-reviewer", proposal_ids: ids }),
+    });
+    const failed = result.failures.length;
+    toast(`Approved ${result.approved.length}${failed ? `, ${failed} need reviewer correction` : ""}.`);
+    await refresh();
+  });
+});
+
+$("#situation-button").addEventListener("click", async (event) => {
+  await withBusy(event.currentTarget, async () => {
+    renderSituation(await request("/ai/situation-report", { method: "POST" }));
+  });
 });
 
 $("#refresh-button").addEventListener("click", refresh);
 refresh();
-

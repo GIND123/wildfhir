@@ -18,5 +18,9 @@ jobs:
           cache: pip
       - run: pip install -e ".[dev]"
       - run: ruff check .
+      # The suite must never need a key or the network. Pinning it empty here
+      # keeps the no-key fallback path continuously verified.
       - run: pytest --cov=aquafhir --cov-report=term-missing
+        env:
+          GEMINI_API_KEY: ""
 

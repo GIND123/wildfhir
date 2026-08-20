@@ -8,6 +8,10 @@ services:
       FHIR_BASE_URL: http://hapi:8080/fhir
       FHIR_WRITE_ENABLED: "true"
       WEBHOOK_SHARED_SECRET: ${WEBHOOK_SHARED_SECRET:-local-demo-secret}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GEMINI_ASSIST_MODE: ${GEMINI_ASSIST_MODE:-auto}
+      GEMINI_THINKING_BUDGET: ${GEMINI_THINKING_BUDGET:-0}
     ports:
       - "8000:8000"
     volumes:
