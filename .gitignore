@@ -7,6 +7,8 @@ __pycache__/
 .coverage
 htmlcov/
 aquafhir.db
+aquafhir.db-shm
+aquafhir.db-wal
 *.sqlite3
 .idea/
 .vscode/
