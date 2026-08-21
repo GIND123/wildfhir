@@ -8,11 +8,11 @@ Interactive documentation is available at `/docs`; the OpenAPI document is `/ope
 |---|---|---|---|---|
 | `GET` | `/api/v1/health` | Process, policy, FHIR write mode, AI mode, and terminology-crosswalk mode | no | no |
 | `GET` | `/api/v1/ai/status` | Which AI features are wired and what bounds them | no | no |
-| `GET` | `/api/v1/terminology/status` | Whether the UMLS crosswalk is enabled and which vocabularies it searches | no | no |
+| `GET` | `/api/v1/terminology/status` | Which crosswalk sources are live (`loinc-table`, `umls`) and which vocabularies they search | no | no |
 | `POST` | `/api/v1/proposals` | Validate a raw reading and create a pending mapping | optional | no |
 | `GET` | `/api/v1/proposals` | List recent proposals | no | no |
 | `GET` | `/api/v1/proposals/{id}` | Read one proposal | no | no |
-| `GET` | `/api/v1/proposals/{id}/terminology-suggestions` | Suggest real LOINC/SNOMED CT candidates for the proposal's OAH code | no | **yes** |
+| `GET` | `/api/v1/proposals/{id}/terminology-suggestions` | Suggest real LOINC/SNOMED CT candidates for the proposal's OAH code | no | optional |
 | `POST` | `/api/v1/replay` | Load `data/oder-replay.csv` as pending proposals | optional | no |
 | `POST` | `/api/v1/intake` | Extract readings from an unstructured note | **yes** | no |
 | `POST` | `/api/v1/proposals/{id}/approve` | Publish reviewed resources and evaluate policy; accepts an optional `secondary_coding` | no | no |
@@ -29,9 +29,9 @@ Interactive documentation is available at `/docs`; the OpenAPI document is `/ope
 | `POST` | `/api/v1/webhooks/fhir` | Receive an R4 rest-hook notification and evaluate updates | no | no |
 
 "Optional" means the endpoint works without a key and simply produces a curated-rules
-proposal instead of a Gemini-assisted one. The same idea applies to the "Needs UMLS" column:
-without `UMLS_API_KEY`, `/api/v1/terminology/*` returns `503` and every other endpoint is
-unaffected.
+proposal instead of a Gemini-assisted one. For the "Needs UMLS" column, "optional" means the
+endpoint answers from the local LOINC table without a key and only loses SNOMED CT breadth;
+it returns `503` only when the LOINC table is *also* missing.
 
 ## Review rules
 
@@ -39,7 +39,7 @@ unaffected.
 - Approval needs a non-empty reviewer, coding, numeric normalized value, and UCUM unit.
 - A reviewer can replace the proposed `Coding`. Quantity corrections require both
   `normalized_value` and `normalized_unit`, so a unit cannot be changed without an explicit value.
-- A reviewer may also supply `secondary_coding` (typically a UMLS-suggested LOINC/SNOMED CT
+- A reviewer may also supply `secondary_coding` (typically a crosswalk-suggested LOINC/SNOMED CT
   candidate from `GET .../terminology-suggestions`), which becomes a second entry in
   `Observation.code.coding`. It is never inferred or attached automatically.
 - Approved and rejected decisions are immutable through the API.
@@ -90,18 +90,24 @@ objects, ranked by name similarity to the proposal's curated OAH display text:
 [
   {
     "system": "http://loinc.org",
-    "code": "11556-8",
-    "display": "Dissolved oxygen",
+    "code": "9481-3",
+    "display": "pH of Water",
     "vocabulary": "LNC",
     "score": 1.0
   }
 ]
 ```
 
-`system` is the canonical FHIR coding system URI for the UMLS root source (`LNC` →
-`http://loinc.org`, `SNOMEDCT_US` → `http://snomed.info/sct`); `code` is the source
-vocabulary's own code, not a UMLS CUI. Pass any one candidate back verbatim as
+`system` is the canonical FHIR coding system URI (`LNC` → `http://loinc.org`,
+`SNOMEDCT_US` → `http://snomed.info/sct`); `code` is the source vocabulary's own code, not a
+UMLS CUI. Environmental LOINC matches from the local table rank first, then UMLS results.
+Every LOINC candidate is checked against the published term table, so LOINC Parts (`LP...`)
+and Metathesaurus ids (`MTHU...`) never appear. Pass any one candidate back verbatim as
 `secondary_coding` on approval to publish it as a second `Coding`.
+
+An empty list means no publishable candidate matched — environmental LOINC genuinely has no
+term for dissolved oxygen or water temperature in water. That is a real answer, not a
+failure; a lookup that actually broke returns `502`.
 
 ## Error contract
 
@@ -112,7 +118,7 @@ vocabulary's own code, not a UMLS CUI. Pass any one candidate back verbatim as
 | `409` | Proposal state or mapping is incompatible with the requested decision |
 | `422` | Request body failed validation (for example a half-specified quantity override) |
 | `502` | Gemini or UMLS was reachable but returned an error, a block, or unparseable content |
-| `503` | An AI-only or UMLS-only endpoint was called without `GEMINI_API_KEY` / `UMLS_API_KEY` configured |
+| `503` | An AI-only endpoint was called without `GEMINI_API_KEY`, or the crosswalk has no source at all (no LOINC table *and* no `UMLS_API_KEY`) |
 
 FHIR upstream errors currently propagate as `500`; map them to a stable `502` problem
 document before production.

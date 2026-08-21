@@ -48,15 +48,19 @@ The model layer is a proposer only. These gates keep it that way.
   sending any real monitoring data, and record the legal basis for the transfer.
 
 
-## Terminology crosswalk (UMLS)
+## Terminology crosswalk (local LOINC + UMLS)
 
 The crosswalk is a suggester only, same posture as the Gemini co-pilot. These gates keep it
 that way.
 
-- Complete the UMLS Terminology Services (UTS) license before any real query — a
-  request was submitted 2026-08-19 and is pending NLM's review. Confirm the license terms
-  cover the intended redistribution of any LOINC/SNOMED CT display text surfaced to
-  reviewers before going beyond a demo.
+- The UMLS Terminology Services (UTS) license was approved 2026-08-20. Confirm the license
+  terms cover the intended redistribution of any LOINC/SNOMED CT display text surfaced to
+  reviewers, and keep the committed LOINC artifact unaltered as its license requires.
+- Submit the environmental gaps to LOINC. Dissolved oxygen and water temperature in water,
+  and satellite-derived indices such as NDCI, have no LOINC term today; a crosswalk cannot
+  invent one, and the OAH temporary code system is the correct interim answer.
+- Re-validate the LOINC table on every LOINC release. Codes are added and deprecated; a
+  pinned artifact silently ages.
 - Never attach a `secondary_coding` automatically. `ReviewDecision.secondary_coding` must
   stay an explicit, reviewer-supplied field, never a default or a score threshold.
 - Hash-chain the full UMLS query and response the same way `AiAttribution` already does for
@@ -65,10 +69,16 @@ that way.
 - Re-check the returned vocabulary against `UMLS_VOCABULARIES` in code, not only via the
   `sabs` search parameter — `terminology.py` already does this; keep it that way if the
   vocabulary list grows.
+- Keep validating every LOINC candidate against the published term table. UMLS returns LOINC
+  Parts (`LP...`) and Metathesaurus ids (`MTHU...`) that are not publishable LOINC codes, and
+  a reviewer cannot be expected to spot the difference.
+- Validate SNOMED CT candidates too. They are passed through unchecked today because this
+  repository does not vendor the SNOMED release; a deployment should check them against a
+  terminology server.
 - Set a per-tenant quota, cache repeat lookups for the same display text, and add a circuit
   breaker; UTS is a shared, rate-limited public service.
-- Confirm the pipeline still functions with `UMLS_API_KEY` removed — that path is tested,
-  keep it tested.
+- Confirm the pipeline still functions with `UMLS_API_KEY` removed *and* with the LOINC table
+  absent — both paths are tested, keep them tested.
 
 ## Security
 

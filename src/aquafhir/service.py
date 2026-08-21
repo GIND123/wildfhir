@@ -300,8 +300,8 @@ class BridgeService:
         """
         if self.terminology is None or not self.terminology.available:
             raise AiUnavailableError(
-                "Terminology crosswalk needs UMLS_API_KEY; approve using the curated "
-                "OAH code alone instead"
+                "Terminology crosswalk has no source: the LOINC table is missing and "
+                "UMLS_API_KEY is unset. Approve using the curated OAH code alone instead"
             )
         proposal = self.repository.get_proposal(proposal_id)
         if not proposal:
