@@ -33,12 +33,14 @@ def _clear_overrides():
     main.app.dependency_overrides.clear()
 
 
-def test_terminology_status_is_off_without_a_key(service, settings_without_umls_key):
+def test_terminology_status_is_off_with_no_source(service, settings_without_umls_key):
+    """No UMLS key and no LOINC table means the crosswalk has nothing to answer with."""
     body = client_for(service).get("/api/v1/terminology/status").json()
 
     assert body["enabled"] is False
+    assert body["sources"] == []
     assert body["vocabularies"] == []
-    assert "not set" in body["detail"]
+    assert "No terminology source" in body["detail"]
 
 
 def test_terminology_status_lists_vocabularies_with_a_key(umls_service, settings_with_umls_key):
@@ -46,13 +48,33 @@ def test_terminology_status_lists_vocabularies_with_a_key(umls_service, settings
 
     assert body["enabled"] is True
     assert body["provider"] == "nlm-umls-uts"
+    assert body["sources"] == ["umls"]
     assert set(body["vocabularies"]) == {"LNC", "SNOMEDCT_US"}
+
+
+def test_terminology_status_reports_the_local_table_without_a_key(
+    local_loinc_service, settings_without_umls_key
+):
+    """The crosswalk stays usable offline: local LOINC needs no UMLS key."""
+    body = client_for(local_loinc_service).get("/api/v1/terminology/status").json()
+
+    assert body["enabled"] is True
+    assert body["sources"] == ["loinc-table"]
+    assert "offline" in body["detail"]
 
 
 def test_health_names_the_terminology_crosswalk_mode(umls_service, settings_with_umls_key):
     body = client_for(umls_service).get("/api/v1/health").json()
 
     assert body["terminology_crosswalk"] == "umls"
+
+
+def test_health_names_both_sources_when_both_are_configured(
+    hybrid_service, settings_with_umls_key
+):
+    body = client_for(hybrid_service).get("/api/v1/health").json()
+
+    assert body["terminology_crosswalk"] == "loinc-table+umls"
 
 
 def test_suggestions_without_a_key_return_503_not_500(service, settings_without_umls_key):

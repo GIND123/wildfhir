@@ -63,6 +63,10 @@ class Settings(BaseSettings):
     umls_timeout_seconds: float = 15.0
     umls_max_retries: int = 2
     umls_vocabularies: str = "LNC,SNOMEDCT_US"
+    # Published LOINC term table used to reject UMLS results that are LOINC
+    # Parts or Metathesaurus-internal ids rather than real LOINC codes. A
+    # missing file disables the check with a warning; it never blocks startup.
+    loinc_table_path: Path = Path("loinc/LoincTableCore/LoincTableCore.csv")
 
     @property
     def umls_enabled(self) -> bool:

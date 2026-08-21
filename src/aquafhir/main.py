@@ -15,6 +15,7 @@ from aquafhir.config import Settings, get_settings
 from aquafhir.fhir import FhirClient
 from aquafhir.gemini import GeminiClient, GeminiError
 from aquafhir.intake import UnstructuredIntake
+from aquafhir.loinc_table import LoincTable
 from aquafhir.models import (
     AiStatus,
     Alert,
@@ -110,7 +111,9 @@ def build_service(settings: Settings) -> BridgeService:
         intake=UnstructuredIntake(gemini),
         briefing_writer=BriefingWriter(gemini),
         terminology=TerminologyCrosswalk(
-            umls, vocabularies=tuple(settings.umls_vocabulary_list)
+            umls,
+            vocabularies=tuple(settings.umls_vocabulary_list),
+            loinc_table=LoincTable(settings.loinc_table_path),
         ),
         replay_path=settings.replay_data_path,
     )
@@ -175,7 +178,9 @@ def health(service: Service) -> dict[str, Any]:
         "threshold_policy_status": service.thresholds.status,
         "ai_mode": "gemini" if settings.gemini_enabled else "deterministic-only",
         "ai_model": settings.gemini_model if settings.gemini_enabled else None,
-        "terminology_crosswalk": "umls" if settings.umls_enabled else "off",
+        "terminology_crosswalk": "+".join(service.terminology.sources())
+        if service.terminology and service.terminology.available
+        else "off",
     }
 
 
@@ -211,19 +216,35 @@ def ai_status(service: Service) -> AiStatus:
 @app.get("/api/v1/terminology/status", response_model=UmlsStatus)
 def terminology_status(service: Service) -> UmlsStatus:
     settings = get_settings()
-    enabled = settings.umls_enabled
+    crosswalk = service.terminology
+    sources = crosswalk.sources() if crosswalk else []
+    enabled = bool(crosswalk and crosswalk.available)
+    if "loinc-table" in sources and "umls" in sources:
+        detail = (
+            "Environmental LOINC terms are matched locally against the published "
+            "LOINC table; UMLS UTS tops up the rest, including SNOMED CT. Both only "
+            "ever suggest a second coding for a reviewer to attach at approval time."
+        )
+    elif "loinc-table" in sources:
+        detail = (
+            "Local LOINC table only (UMLS_API_KEY unset). Environmental LOINC "
+            "suggestions work offline; SNOMED CT candidates are unavailable."
+        )
+    elif "umls" in sources:
+        detail = (
+            "UMLS UTS only (the LOINC table is missing). LOINC hits cannot be "
+            "validated against the published term list."
+        )
+    else:
+        detail = (
+            "No terminology source configured. The OAH coding and FHIR pipeline is "
+            "unaffected; approved Observations simply carry one coding."
+        )
     return UmlsStatus(
         enabled=enabled,
+        sources=sources,
         vocabularies=settings.umls_vocabulary_list if enabled else [],
-        detail=(
-            "UMLS UTS search suggests a second LOINC/SNOMED CT coding for a reviewer "
-            "to attach at approval time. It never selects the published OAH code and "
-            "never changes an alert decision."
-            if enabled
-            else "UMLS_API_KEY is not set (license pending or not configured). The OAH "
-            "coding and FHIR pipeline is unaffected; approved Observations simply "
-            "carry one coding."
-        ),
+        detail=detail,
     )
 
 

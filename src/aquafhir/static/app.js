@@ -124,7 +124,7 @@ function terminologyDetail(proposal) {
   if (!state.umls.enabled) {
     return `<div class="detail-row">
       <span class="detail-label">LOINC / SNOMED</span>
-      <span class="quote">Set UMLS_API_KEY to suggest a second coding.</span>
+      <span class="quote">No terminology source configured.</span>
     </div>`;
   }
   const picked = state.secondaryPicks[proposal.id];
@@ -147,7 +147,7 @@ function terminologyDetail(proposal) {
           title="${esc(item.display)} (score ${item.score})">${esc(item.vocabulary)} ${esc(item.code)}</button>`)
       .join("");
   } else {
-    body = '<span class="quote">No UMLS candidate matched this term.</span>';
+    body = '<span class="quote">No publishable code for this concept — see the README on LOINC gaps.</span>';
   }
   return `<div class="detail-row"><span class="detail-label">LOINC / SNOMED</span>${body}</div>`;
 }

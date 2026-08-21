@@ -249,5 +249,6 @@ class AiStatus(BaseModel):
 class UmlsStatus(BaseModel):
     enabled: bool
     provider: str = "nlm-umls-uts"
+    sources: list[str] = Field(default_factory=list)
     vocabularies: list[str] = Field(default_factory=list)
     detail: str

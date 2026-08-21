@@ -1,8 +1,8 @@
 # AquaFHIR Bridge
 
-AquaFHIR Bridge is a FHIR-native One Health data bus with a **reviewed Gemini co-pilot** and a **UMLS-suggested LOINC/SNOMED CT crosswalk**. It converts heterogeneous water and Earth-observation readings — including free-text agency bulletins — into reviewed [OneAquaHealth FHIR R4](https://build.fhir.org/ig/hl7-eu/oah/) resources, publishes them to a HAPI FHIR server, evaluates an explicit alert policy, drafts audience-specific advisories, and records each transformation in a tamper-evident audit chain.
+AquaFHIR Bridge is a FHIR-native One Health data bus with a **reviewed Gemini co-pilot** and a **LOINC/SNOMED CT terminology crosswalk**. It converts heterogeneous water and Earth-observation readings — including free-text agency bulletins — into reviewed [OneAquaHealth FHIR R4](https://build.fhir.org/ig/hl7-eu/oah/) resources, publishes them to a HAPI FHIR server, evaluates an explicit alert policy, drafts audience-specific advisories, and records each transformation in a tamper-evident audit chain.
 
-The AI is deliberately bounded, and so is the terminology assist built on top of it. Gemini decides *which curated code a messy label means*, *which measurements a note literally contains*, and *how to phrase an advisory*. The UMLS UTS Metathesaurus decides only *which real LOINC/SNOMED CT concepts sound like this curated code's name* — a reviewer must explicitly pick one before it is attached. Deterministic code decides *the published number*, *whether review is required* (always), *whether an alert fires*, and *what is written to FHIR*. Remove either API key and the whole pipeline still runs — both paths are tested.
+The AI is deliberately bounded, and so is the terminology assist built on top of it. Gemini decides *which curated code a messy label means*, *which measurements a note literally contains*, and *how to phrase an advisory*. The crosswalk decides only *which real LOINC/SNOMED CT concepts match this curated code's name* — validated against the published LOINC term list, and a reviewer must explicitly pick one before it is attached. Deterministic code decides *the published number*, *whether review is required* (always), *whether an alert fires*, and *what is written to FHIR*. Remove either API key and the whole pipeline still runs — both paths are tested.
 
 This repository contains only the first concept from the source brief: **the One Health data bus and reviewed coding agent**. It does not include the separate BloomGuard prediction product or StreamSentinel symptom-surveillance concept.
 
@@ -10,11 +10,12 @@ This repository contains only the first concept from the source brief: **the One
 
 ## Current status: done vs. pending
 
-**Done and tested (87 offline tests, no live Gemini or UMLS call ever runs in CI):**
+**Done and tested (118 offline tests, no live Gemini or UMLS call ever runs in CI):**
 
 - Curated OAH terminology coding and reviewed unit conversion ([coding.py](src/aquafhir/coding.py))
 - Gemini coding co-pilot, unstructured-bulletin intake, audience advisory drafting, grounded situation reports — all human-reviewed, all degrade cleanly with no key ([coding_llm.py](src/aquafhir/coding_llm.py), [intake.py](src/aquafhir/intake.py), [briefing.py](src/aquafhir/briefing.py))
-- **UMLS terminology crosswalk** — suggests real LOINC/SNOMED CT codes for a curated OAH code; a reviewer explicitly attaches one at approval, and it is published as a second `Coding` on the FHIR Observation ([umls.py](src/aquafhir/umls.py), [terminology.py](src/aquafhir/terminology.py); see [§ The UMLS terminology crosswalk](#the-umls-terminology-crosswalk))
+- **Terminology crosswalk** — suggests real LOINC/SNOMED CT codes for a curated OAH code, searching the committed LOINC table locally first (finds `9481-3` pH of Water, `12530-2` Chloride in Water) and topping up from UMLS UTS; invalid UMLS results are rejected against the published term list. A reviewer explicitly attaches one at approval, and it is published as a second `Coding` on the FHIR Observation ([loinc_table.py](src/aquafhir/loinc_table.py), [terminology.py](src/aquafhir/terminology.py), [umls.py](src/aquafhir/umls.py); see [§ The terminology crosswalk](#the-terminology-crosswalk))
+- **UMLS license approved** (2026-08-20) and the live UTS API verified end to end against the 2026AA release
 - HAPI FHIR R4 publication against the real `hl7.eu.fhir.oah` profiles, transaction bundles, Subscription install and rest-hook processing ([fhir.py](src/aquafhir/fhir.py))
 - Versioned, unit-aware threshold policy with audience routing ([thresholds.py](src/aquafhir/thresholds.py))
 - SQLite-backed, hash-chained provenance for every proposal, decision, alert, and model/terminology call
@@ -23,8 +24,9 @@ This repository contains only the first concept from the source brief: **the One
 
 **Pending — tracked honestly rather than hidden:**
 
-- **UMLS license approval.** Requested from NLM on 2026-08-19; NLM's stated review window is 3 business days. `UMLS_API_KEY` is empty until then, so `/api/v1/terminology/*` returns `503` with an explanation and the rest of the pipeline is unaffected — exactly the same degradation contract `GEMINI_API_KEY` already has. Once approved, copy the API key from your [UTS profile](https://uts.nlm.nih.gov/uts/profile) into `.env`; no code change is needed.
-- **UMLS call provenance detail.** Approval today hash-chains only a boolean (`reviewer_attached_secondary_coding`). A production version should hash-chain the exact UMLS query/response the same way Gemini calls already are (prompt hash, response hash, latency) — tracked in [production-checklist.md](docs/production-checklist.md).
+- **Environmental LOINC coverage is genuinely incomplete.** LOINC has exact terms for pH, chloride, and conductivity in water, but *none* for dissolved oxygen or water temperature in an environmental specimen, and nothing for a satellite-derived index like NDCI. The crosswalk returns nothing for those rather than offering a plausible-looking wrong code, which is why the OAH IG's temporary code system exists at all. Submitting the gaps to LOINC is the real fix.
+- **Crosswalk provenance detail.** Approval today hash-chains only a boolean (`reviewer_attached_secondary_coding`). A production version should hash-chain the exact query/response the same way Gemini calls already are (prompt hash, response hash, latency) — tracked in [production-checklist.md](docs/production-checklist.md).
+- **SNOMED CT candidates are unvalidated.** LOINC results are checked against the published term table; SNOMED concept ids are passed through, because this repository deliberately does not vendor the SNOMED release.
 - **Live Earth-observation and agency connectors.** Still replaying the transparent synthetic Oder CSV; a real Copernicus Sentinel-2 or national river-monitoring feed is the next highest-value addition (see [§ Judging-criteria mapping](#judging-criteria-mapping), Scale row).
 - Everything else listed in [§ Implemented versus production work](#implemented-versus-production-work).
 
@@ -41,8 +43,8 @@ Built for the **IEEE OneAquaHealth Global Hackathon 2026**, an EU Horizon Europe
 | Criterion | How this repository addresses it |
 |---|---|
 | **Impact & Alignment with the OneAquaHealth mission** | Every environmental reading is normalized into the *same* FHIR resource model the OneAquaHealth project already publishes, and a crossed threshold routes an alert to human-health, veterinary, *and* water-authority audiences in one step — the ecosystem→health link is the product, not a bolt-on chart. |
-| **Innovation & Creativity** | A working Gemini co-pilot that maps multilingual, abbreviated, and free-text source data onto OAH terminology under enum-constrained grounding, and drafts audience-specific advisories — with a hash-chained ledger recording the model id and the exact prompt hash behind every proposal (§ [The Gemini co-pilot](#the-gemini-co-pilot)). Layered on top, a **UMLS UTS crosswalk** suggests a real LOINC/SNOMED CT code for the same curated OAH concept, so a reviewer can publish both the project-specific code and a standard one a downstream EHR already understands (§ [The UMLS terminology crosswalk](#the-umls-terminology-crosswalk)). FHIR-for-environment bridges with reviewer gating are rare; ones that also close the "temporary code system → real terminology" gap are rarer still. |
-| **Architecture** | HAPI FHIR R4 loaded with the real `hl7.eu.fhir.oah` package, R4 rest-hook Subscriptions, a versioned/unit-aware alert policy, a swappable `CodingProposer` contract the model plugs into without touching the FHIR or alerting layers, an independent `TerminologyCrosswalk` service that degrades the same way, and documented sequence diagrams (see [architecture.md](docs/architecture.md)). 87 tests, all offline. |
+| **Innovation & Creativity** | A working Gemini co-pilot that maps multilingual, abbreviated, and free-text source data onto OAH terminology under enum-constrained grounding, and drafts audience-specific advisories — with a hash-chained ledger recording the model id and the exact prompt hash behind every proposal (§ [The Gemini co-pilot](#the-gemini-co-pilot)). Layered on top, a **terminology crosswalk** finds the real LOINC code for the same curated OAH concept — searching the published LOINC table scoped to environmental specimens, which surfaces `9481-3` pH of Water where a generic clinical UMLS search returns *Peliosis hepatis* — so a reviewer can publish both the project-specific code and a standard one a downstream EHR already understands (§ [The terminology crosswalk](#the-terminology-crosswalk)). FHIR-for-environment bridges with reviewer gating are rare; ones that also close the "temporary code system → real terminology" gap are rarer still. |
+| **Architecture** | HAPI FHIR R4 loaded with the real `hl7.eu.fhir.oah` package, R4 rest-hook Subscriptions, a versioned/unit-aware alert policy, a swappable `CodingProposer` contract the model plugs into without touching the FHIR or alerting layers, a two-source `TerminologyCrosswalk` that validates every LOINC candidate against the published term table and degrades source-by-source, and documented sequence diagrams (see [architecture.md](docs/architecture.md)). 118 tests, all offline. |
 | **UX** | A dependency-free reviewer console, not a dashboard of charts. Each queue row reads *as received → OneAquaHealth FHIR*, with the model's quoted evidence, competing candidates, and a visible flag when the AI disagrees with the curated rules. Alerts carry one-click advisory drafting; the audit trail is a real table. The reviewer sees what the model saw. See the [demo script](docs/demo-script.md). |
 | **Scale** | Config-driven terminology ([coding-rules.yaml](config/coding-rules.yaml)) and policy ([thresholds.yaml](config/thresholds.yaml)) — adding an indicator is a YAML edit, and the model's vocabulary widens with it automatically. `auto` assist mode spends a model call only where rules are weak, so cost scales with novelty rather than volume. Gap analysis in § [Implemented versus production work](#implemented-versus-production-work). |
 
@@ -189,7 +191,7 @@ Then start and test:
 
 ```bash
 uvicorn aquafhir.main:app --reload
-pytest          # 87 tests, fully offline — no keys needed, no network touched
+pytest          # 118 tests, fully offline — no keys needed, no network touched
 ruff check .
 ```
 
@@ -321,7 +323,7 @@ http://hl7.eu/fhir/ig/oah/StructureDefinition/observation-indicators-oah
 
 The OAH IG currently carries environmental concepts such as `electrical-conductivity`, `dissolved-oxygen`, `waterTemperature`, and `ndci` in its temporary project code system. The scaffold uses those codes rather than inventing unsupported LOINC mappings.
 
-A second coding is now supported, but only after terminology review by a person: the UMLS crosswalk (§ [The UMLS terminology crosswalk](#the-umls-terminology-crosswalk)) suggests a real LOINC/SNOMED CT candidate for the curated code's display text, and `Observation.code.coding` only ever gains a second entry when a reviewer supplies `ReviewDecision.secondary_coding` at approval time — never automatically.
+A second coding is now supported, but only after terminology review by a person: the crosswalk (§ [The terminology crosswalk](#the-terminology-crosswalk)) suggests a real LOINC/SNOMED CT candidate for the curated code's display text, and `Observation.code.coding` only ever gains a second entry when a reviewer supplies `ReviewDecision.secondary_coding` at approval time — never automatically.
 
 FHIR R4 Subscription filtering is search-based, not threshold-expression based. The supplied Subscription watches final Observations and sends an empty rest-hook notification; the bridge then queries HAPI for resources updated since its durable cursor and applies the versioned numerical policy. The approval pipeline also evaluates the same policy immediately to keep the demo deterministic.
 
@@ -388,51 +390,93 @@ in [coding-rules.yaml](config/coding-rules.yaml). Demonstration alert rules live
 in [thresholds.yaml](config/thresholds.yaml), which prevents a terminology edit — or a
 model — from silently changing safety policy.
 
-## The UMLS terminology crosswalk
+## The terminology crosswalk
 
 The OAH IG's environmental concepts live in a temporary project code system
 (`http://hl7.eu/fhir/ig/oah/CodeSystem/temporarySystem-oah-eu`) — reasonable for a
 continuous-build IG, but a downstream hospital or public-health system will not have that
-code system loaded. It will have LOINC and SNOMED CT. The UMLS crosswalk closes that gap by
-searching the NLM UMLS Metathesaurus for the curated code's own display text and offering the
-closest real-world match, for a reviewer to accept or ignore.
+code system loaded. It will have LOINC and SNOMED CT. The crosswalk closes that gap by
+offering the real-world code for a curated OAH concept, for a reviewer to accept or ignore.
+
+### Why a plain UMLS search is not enough
+
+The obvious implementation — ask the UMLS Metathesaurus for the curated code's display text —
+does not work, and it fails in two distinct ways that are worth stating because both are
+easy to ship without noticing.
+
+**It returns codes that are not LOINC codes.** A `sabs=LNC` search also returns LOINC *Parts*
+(`LP14752-7`) and Metathesaurus-internal identifiers (`MTHU001949`) minted where a concept has
+no source-asserted code. Neither exists in the published LOINC table, so publishing one under
+`system = http://loinc.org` asserts a code that is not real. A reviewer cannot be expected to
+know that by sight, so [`loinc_table.py`](src/aquafhir/loinc_table.py) checks every LOINC
+candidate against the published term list and drops the rest.
+
+**It ranks clinically.** UMLS has no idea the subject is a river. Asking it for `pH` returns
+*pH measurement* and *Peliosis hepatis* well above anything about water; `Water temperature`
+returns *Checking bath water temperature*; `Electrical conductivity` returns *Skin electrical
+conductivity meter*. Every one of those would be wrong to publish.
+
+Meanwhile LOINC itself already carries the right answers. Scoping the search to environmental
+specimens finds them immediately:
+
+| OAH concept | LOINC code found locally | What plain UMLS search ranked first |
+|---|---|---|
+| `ph` | **9481-3** — pH of Water | *Peliosis hepatis* |
+| `chloride` | **12530-2** — Chloride [Moles/volume] in Water | *Sodium chloride* |
+| `electrical-conductivity` | **87444-6** — Electron [Electrical Conductivity] of Water | *Skin electrical conductivity meter* |
+| `dissolved-oxygen` | *(none — genuine gap)* | *Dissolved oxygen meter, battery-powered* |
+| `waterTemperature` | *(none — genuine gap)* | *Checking bath water temperature* |
+
+So the crosswalk searches the committed LOINC table first and uses UMLS to top up the
+remainder — chiefly SNOMED CT, which this repository does not vendor. The local path needs no
+key and no network.
+
+The two blank rows are not a bug to paper over. Environmental LOINC genuinely has no term for
+dissolved oxygen or water temperature in water, and none for a satellite index like NDCI. The
+crosswalk returns nothing rather than a plausible-looking wrong code — which is precisely why
+the OAH IG needs a temporary code system in the first place.
 
 ### Authentication, done the way NLM actually documents it
 
-The current UMLS Terminology Services (UTS) REST API authenticates with a single `apiKey`
-query parameter issued from a UTS profile
+The UMLS Terminology Services (UTS) REST API authenticates with a single `apiKey` query
+parameter issued from a UTS profile
 (<https://documentation.uts.nlm.nih.gov/rest/authentication.html>) — the older
 ticket-granting-ticket flow is deprecated, and there is **no OAuth2 client_id/client_secret
 grant** for this API as of 2026. [`umls.py`](src/aquafhir/umls.py) implements exactly that
-scheme. If you have a client_id/client_secret pair from somewhere else (an app registration
-made while requesting a license, for example), it will not authenticate against
-`uts-ws.nlm.nih.gov`; use the API key from your UTS profile instead once your license is
-approved.
+scheme. A client_id/client_secret pair from an app registration made while *requesting* the
+license will not authenticate against `uts-ws.nlm.nih.gov`; use the API key from your UTS
+profile.
 
 ### The split, enforced in code
 
-| UMLS may suggest | Deterministic code / a human decides |
+| The crosswalk may suggest | Deterministic code / a human decides |
 |---|---|
-| Which real LOINC/SNOMED CT concepts sound like this OAH code's display text | Whether that suggestion is ever attached to a proposal (`ReviewDecision.secondary_coding`) |
+| Which real LOINC/SNOMED CT concepts match this OAH code's display text | Whether that suggestion is ever attached to a proposal (`ReviewDecision.secondary_coding`) |
 | A ranked list of candidates, scored only by name similarity | The published OAH coding, the quantity, and whether the alert fires — none of which the crosswalk can see or touch |
 
 Guardrails mirror `coding_llm.py`'s posture:
 
-1. **Vocabulary allowlist re-checked in code.** `UMLS_VOCABULARIES` (default `LNC,SNOMEDCT_US`)
-   is sent as the UTS `sabs` filter *and* re-checked against every result in
-   [`terminology.py`](src/aquafhir/terminology.py) — a request is not a proof.
-2. **Suggestion only, never selection.** `suggest_terminology()` is read-only. Nothing is
+1. **Codes are validated, not trusted.** Every LOINC candidate must appear in the published
+   term table. `UMLS_VOCABULARIES` (default `LNC,SNOMEDCT_US`) is sent as the UTS `sabs`
+   filter *and* re-checked against every result — a request is not a proof. Only `ACTIVE`
+   terms are suggested, though a deprecated code still validates, because it was legitimately
+   published.
+2. **Specimen scope is an allowlist.** Local search covers exactly `Water`, `Air`, `Envir`,
+   and `Environmental specimen`. Not a substring test — LOINC's `Airway adaptor` and
+   `Airway.proximal` are respiratory-device systems, not air quality.
+3. **Suggestion only, never selection.** `suggest_terminology()` is read-only. Nothing is
    written to a proposal, let alone to FHIR, until a reviewer supplies a `Coding` explicitly.
-3. **Independent failure domain.** An unreachable, rate-limited, or keyless UMLS call raises
-   `AiUnavailableError`/`UMLSError`, handled the same way Gemini failures are — a `503` or
-   `502` with an explanation, never a silent fallback that pretends a code was found.
+4. **Independent failure domains.** A UMLS outage degrades to the local LOINC results. A
+   UMLS failure with *no* local results is surfaced as a `502` rather than an empty list, so a
+   reviewer is never told "no match" when the truth is "the lookup broke". A missing LOINC
+   table disables local search and validation with a warning, and never blocks startup.
 
 ### Two wired surfaces
 
 | Feature | Endpoint | What it returns |
 |---|---|---|
-| Terminology status | `GET /api/v1/terminology/status` | Whether the crosswalk is enabled and which vocabularies are searched |
-| Crosswalk suggestions | `GET /api/v1/proposals/{id}/terminology-suggestions` | Up to 5 candidate `TerminologyMatch` objects (`system`, `code`, `display`, `vocabulary`, `score`), ranked by name similarity to the curated code's display text |
+| Terminology status | `GET /api/v1/terminology/status` | Which sources are live (`loinc-table`, `umls`) and which vocabularies are searched |
+| Crosswalk suggestions | `GET /api/v1/proposals/{id}/terminology-suggestions` | Up to 5 candidate `TerminologyMatch` objects (`system`, `code`, `display`, `vocabulary`, `score`), local environmental LOINC first |
 
 `ReviewDecision.secondary_coding` carries a chosen candidate into `POST
 .../proposals/{id}/approve`; `build_resources()` in [fhir.py](src/aquafhir/fhir.py) appends it
@@ -454,8 +498,9 @@ as a second entry in `Observation.code.coding`, and the approval provenance entr
 │   ├── prompts.py            # versioned prompt templates and response schemas
 │   ├── intake.py             # free text -> literal readings -> pending proposals
 │   ├── briefing.py           # audience advisories and grounded situation reports
+│   ├── loinc_table.py        # published LOINC terms: validation + environmental search
 │   ├── umls.py               # minimal UMLS UTS REST client (apiKey auth)
-│   ├── terminology.py        # ranks UMLS matches into suggested LOINC/SNOMED codings
+│   ├── terminology.py        # local LOINC first, UMLS top-up, into suggested codings
 │   ├── fhir.py               # conformant resources, bundles, subscriptions
 │   ├── repository.py         # SQLite workflow state + hash chain
 │   ├── service.py            # review-gated orchestration
@@ -506,7 +551,8 @@ The detailed hardening gates are in [production-checklist.md](docs/production-ch
 | `GEMINI_MAX_OUTPUT_TOKENS` | `2048` | Truncated responses are rejected, never half-parsed |
 | `GEMINI_MAX_RETRIES` | `2` | Retries only 408/429/5xx and network errors |
 | `GEMINI_THINKING_BUDGET` | `0` | `0` for latency; `-1` omits the field for models that reject it |
-| `UMLS_API_KEY` | *(empty)* | Enables the terminology crosswalk. Empty is a supported, tested mode. This is a UTS **apiKey**, not an OAuth2 client_id/client_secret |
+| `LOINC_TABLE_PATH` | `loinc/LoincTableCore/LoincTableCore.csv` | Published LOINC terms: local environmental search, and validation of UMLS LOINC hits. Missing file disables both with a warning |
+| `UMLS_API_KEY` | *(empty)* | Adds UMLS top-up (notably SNOMED CT). Empty is a supported, tested mode — local LOINC search still works. This is a UTS **apiKey**, not an OAuth2 client_id/client_secret |
 | `UMLS_API_BASE` | `https://uts-ws.nlm.nih.gov/rest` | UTS REST API base |
 | `UMLS_TIMEOUT_SECONDS` | `15` | Per-call timeout |
 | `UMLS_MAX_RETRIES` | `2` | Retries only 408/429/5xx and network errors |

@@ -102,7 +102,7 @@ def build_resources(
                 "text": (
                     f"Second coding {proposal.secondary_coding.system}|"
                     f"{proposal.secondary_coding.code} attached by reviewer "
-                    "after a UMLS terminology crosswalk suggestion."
+                    "from a terminology crosswalk suggestion."
                 )
             }
         )

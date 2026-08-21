@@ -9,7 +9,7 @@ AquaFHIR Bridge owns environmental ingestion, terminology review, OAH resource c
 | FastAPI edge | Validate requests and expose review/webhook APIs | None |
 | Coding proposer | Suggest a curated OAH code and UCUM normalization | Versioned YAML |
 | Gemini co-pilot | Propose a catalog code for a label rules cannot match; extract readings from free text; draft advisories | Versioned prompt templates |
-| UMLS terminology crosswalk | Suggest a real LOINC/SNOMED CT candidate for a curated OAH code's display text; never selects it | None (read-through UTS search) |
+| Terminology crosswalk | Suggest a real LOINC/SNOMED CT candidate for a curated OAH code's display text; never selects it | Published LOINC table (read-only) |
 | Review workflow | Enforce pending → approved/rejected state transition; a reviewer may also attach a suggested secondary coding | SQLite |
 | FHIR builder/client | Build atomic R4 transactions and publish to HAPI | HAPI/PostgreSQL |
 | Policy engine | Compare like-for-like code, value, and unit | Versioned YAML |
@@ -59,13 +59,17 @@ Failure is a degradation, not an outage: an unreachable, misconfigured, rate-lim
 out-of-catalog response falls back to the curated proposal with a note in the rationale.
 The pipeline's tests cover that path.
 
-The UMLS terminology crosswalk is a separate, narrower assist and fails independently: it
-authenticates with the single `apiKey` query parameter the UTS REST API actually documents
-(https://documentation.uts.nlm.nih.gov/rest/authentication.html), it only ever returns
-*candidates* from `GET .../terminology-suggestions`, and nothing is written to a proposal —
-let alone to FHIR — until a reviewer supplies one explicitly as `secondary_coding` at
-approval. An unreachable or keyless UMLS call never blocks curated OAH coding, FHIR
-publication, or alerting.
+The terminology crosswalk is a separate, narrower assist with its own failure domains. It
+searches the published LOINC table locally first — scoped to environmental specimens, which
+is what actually finds `9481-3` pH of Water where a generic clinical UMLS query returns
+*Peliosis hepatis* — then tops up from UMLS, which authenticates with the single `apiKey`
+query parameter the UTS REST API documents
+(https://documentation.uts.nlm.nih.gov/rest/authentication.html). Every LOINC candidate is
+validated against the published term table, because UMLS also returns LOINC Parts and
+Metathesaurus ids that are not publishable LOINC codes. It only ever returns *candidates*,
+and nothing is written to a proposal — let alone to FHIR — until a reviewer supplies one
+explicitly as `secondary_coding` at approval. Neither a missing LOINC table nor an
+unreachable UMLS ever blocks curated OAH coding, FHIR publication, or alerting.
 
 ## Proposal sequence with the co-pilot
 
@@ -138,7 +142,10 @@ For the single-node demo, approval also calls the policy engine directly. In a d
 - Gemini unreachable, rate-limited, blocked, or truncated: the curated proposal is returned with an explanatory note; AI-only endpoints return `503` (no key) or `502` (upstream failure).
 - Gemini returns a code outside the catalog: the response is discarded and the curated proposal stands.
 - Gemini returns `NO_MATCH`: no code is proposed and the reviewer must supply one or reject.
-- UMLS unreachable, rate-limited, or keyless: `terminology-suggestions` returns `502`/`503`; the OAH proposal, its approval, and FHIR publication are entirely unaffected.
+- UMLS unreachable or rate-limited: local LOINC results are returned alone; only if there are none does the failure surface as `502`, so a reviewer is never shown "no match" when the lookup actually broke.
+- UMLS keyless: local environmental LOINC search still answers; SNOMED CT candidates are simply unavailable. `503` only when the LOINC table is missing too.
+- LOINC table missing or unreadable: local search and LOINC validation are disabled with a warning; startup is never blocked.
+- UMLS returns a LOINC Part (`LP...`) or Metathesaurus id (`MTHU...`): dropped, because it is not a publishable LOINC code.
 - UMLS returns a vocabulary outside `UMLS_VOCABULARIES`: the result is dropped before it reaches the reviewer, re-checked in `terminology.py` regardless of what the `sabs` search filter already requested.
 
 ## Scaling path

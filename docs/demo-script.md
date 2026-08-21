@@ -9,14 +9,13 @@ data **and cannot publish anything**. Land that and the standards story lands wi
    <https://aistudio.google.com/apikey>).
 2. Set `GEMINI_ASSIST_MODE=always` for the recording so every card shows its AI
    attribution. `auto` is the sensible default outside a demo.
-3. If the UMLS license has been approved by NLM by demo day, put the key from
-   <https://uts.nlm.nih.gov/uts/profile> in `.env` as `UMLS_API_KEY=...`. If not, skip this —
-   the badge reads `UMLS off`, the "Suggest LOINC/SNOMED" beat below is skipped, and nothing
-   else in the script changes.
+3. Put your UTS key from <https://uts.nlm.nih.gov/uts/profile> in `.env` as
+   `UMLS_API_KEY=...`. Optional: the local LOINC table answers the water-quality codes on its
+   own, and the key only adds SNOMED CT breadth.
 4. Run `docker compose up --build` and wait for all three services to become healthy.
 5. Open the console (<http://localhost:8000>) and the HAPI UI in separate tabs.
-6. Confirm the header shows `AI gemini-2.5-flash · always`, `FHIR enabled`, and an audit
-   chain of `VALID` (plus `UMLS LNC/SNOMEDCT_US` if the key is set).
+6. Confirm the header shows `AI gemini-2.5-flash · always`, `FHIR enabled`, an audit chain of
+   `VALID`, and the crosswalk sources.
 
 Rehearse once, then **stop rebuilding**. Repeated `docker compose up --build` re-pulls
 `hapiproject/hapi` and `postgres` and can hit Docker Hub's anonymous pull limit on shared
@@ -46,14 +45,16 @@ original labels preserved and a warning that the anglers' dead-fish report carri
 measurement and was not extracted. Two AI stages, both landing in the same place: a human's
 work queue.
 
-**2:50–3:30 — Standards, not a chart.** If `UMLS_API_KEY` is set, click **Suggest
-LOINC/SNOMED (UMLS)** on the pending card first and pick the top candidate — say plainly
-that this closes the exact gap the OAH IG's own conformance notes flag: the temporary
-project code system is what OAH uses today, LOINC/SNOMED CT is what a hospital already has
-loaded, and a reviewer decides whether to publish both. Approve the proposal. Show the
+**2:50–3:30 — Standards, not a chart.** Click **Suggest a code** on a pending card and pick
+the top candidate — for pH that is `9481-3` *pH of Water*. Say plainly what this closes: the
+OAH temporary project code system is what the IG uses today, LOINC is what a hospital already
+has loaded, and a reviewer decides whether to publish both. Approve the proposal. Show the
 Observation in HAPI: the OAH profile URL in `meta.profile`, a `Location` subject, an
-`Organization` performer, an effective time, a UCUM-coded quantity, and — if UMLS ran —
-two entries in `code.coding`. This is the interoperability claim, and it is checkable.
+`Organization` performer, an effective time, a UCUM-coded quantity, and two entries in
+`code.coding`. This is the interoperability claim, and it is checkable.
+
+If you have 20 spare seconds, this is the strongest technical beat in the demo — see the
+question below.
 
 **3:30–4:20 — Alert and advisory.** In **Review queue**, press **Load Oder replay**, then
 **Approve all pending**. Three readings cross the demonstration policy. Note that the *policy engine*
@@ -82,8 +83,18 @@ authorities review and communicate the warning.
 - Model down or key missing → delete `GEMINI_API_KEY` and restart. Everything still works;
   the badge reads `AI off` and the AI-only endpoints return `503` with an explanation.
 - *"Why isn't the LOINC/SNOMED coding automatic?"* Because a wrong crosswalk is worse than
-  none — UMLS ranks candidates by name similarity only, and a reviewer decides. The same
-  answer as the coding co-pilot: suggest, never select.
+  none. The same answer as the coding co-pilot: suggest, never select.
+- *"Why not just query UMLS?"* Because a generic Metathesaurus search is a clinical search.
+  Ask it for `pH` and it ranks *Peliosis hepatis* above anything about water; ask for
+  `Water temperature` and it offers *Checking bath water temperature*. It also returns LOINC
+  Parts (`LP...`) and Metathesaurus ids (`MTHU...`) that are not publishable LOINC codes at
+  all. So the bridge searches the published LOINC table scoped to environmental specimens
+  first — which finds `9481-3` pH of Water and `12530-2` Chloride in Water exactly — and
+  validates every candidate against that table before a reviewer ever sees it.
+- *"What about dissolved oxygen?"* Environmental LOINC has no term for it, nor for water
+  temperature in water, nor for a satellite index like NDCI. The crosswalk returns nothing
+  rather than a plausible-looking wrong code. That gap is exactly why the OAH IG needs a
+  temporary code system, and saying so is more convincing than pretending full coverage.
 
 ## Evidence to capture
 
@@ -93,4 +104,4 @@ authorities review and communicate the warning.
 - Reviewer override rate, and the `NO_MATCH` refusal rate.
 - Validator output against the frozen OAH package.
 - Exact demo policy id, model id, prompt-template ids, and source-data checksum.
-- Whether the UMLS crosswalk ran, which vocabularies it searched, and the code picked.
+- Which crosswalk sources answered, and the code picked (or the honest gap).
