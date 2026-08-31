@@ -1,32 +1,43 @@
 /* AquaFHIR Bridge — reviewer console.
    Vanilla ES2020, no build step. Rendering is a pure function of `state`;
-   every mutation ends in render() so the sidebar counts can never drift from
-   the list a reviewer is looking at. */
+   every mutation ends in render() so the sidebar counts, KPIs, timeline, map,
+   and hash-chain visualization can never drift from each other. */
 
-const API = "/api/v1";
-const $ = (selector) => document.querySelector(selector);
-const $$ = (selector) => Array.from(document.querySelectorAll(selector));
+'use strict';
+
+const API = '/api/v1';
+const THEME_KEY   = 'aquafhir.theme';
+const REVIEWER_KEY = 'aquafhir.reviewer';
+
+const $  = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+/* ── State ──────────────────────────────────────────────────────────────── */
 
 const state = {
+  view: 'overview',
   health: {},
-  ai: { enabled: false },
-  umls: { enabled: false },
-  proposals: [],
-  alerts: [],
-  briefings: [],
+  ai:    { enabled: false },
+  umls:  { enabled: false },
+  proposals:  [],
+  alerts:     [],
+  briefings:  [],
   provenance: [],
-  chain: null,
-  suggestions: {},      // proposal id -> UMLS candidates
-  secondaryPicks: {},   // proposal id -> Coding the reviewer chose
-  filter: "pending",
-  situation: null,
+  chain:      null,
+  situation:  null,
+  suggestions:    {},   // proposal id -> UMLS TerminologyMatch[]
+  secondaryPicks: {},   // proposal id -> Coding
+  filter: 'pending',
+  focusIndex: 0,        // review-queue keyboard cursor
+  palette: { open: false, query: '', cursor: 0 },
+  loading: true,
 };
 
-/* ── plumbing ───────────────────────────────────────────────────────────── */
+/* ── Utilities ──────────────────────────────────────────────────────────── */
 
 async function request(path, options = {}) {
   const response = await fetch(`${API}${path}`, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     ...options,
   });
   if (!response.ok) {
@@ -38,66 +49,297 @@ async function request(path, options = {}) {
 
 let toastTimer;
 function toast(message, isError = false) {
-  const node = $("#toast");
+  const node = $('#toast');
   node.textContent = message;
-  node.className = isError ? "toast show error" : "toast show";
-  window.clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => { node.className = "toast"; }, 4000);
+  node.className = isError ? 'toast show error' : 'toast show';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { node.className = 'toast'; }, 4000);
 }
 
 async function withBusy(button, work) {
-  const original = button.textContent;
+  if (!button) { await work(); return; }
+  const original = button.innerHTML;
   button.disabled = true;
-  button.textContent = "Working…";
-  try {
-    await work();
-  } catch (error) {
-    toast(error.message, true);
-  } finally {
-    button.disabled = false;
-    button.textContent = original;
-  }
+  button.innerHTML = '<span class="spinner"></span>Working…';
+  try { await work(); }
+  catch (error) { toast(error.message, true); }
+  finally { button.disabled = false; button.innerHTML = original; }
 }
 
 function esc(value) {
-  return String(value ?? "").replace(/[&<>'"]/g, (char) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
-  }[char]));
+  return String(value ?? '').replace(/[&<>'"]/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;',
+  }[c]));
 }
 
 function reviewer() {
-  return $("#reviewer-name").value.trim() || "demo-reviewer";
+  return $('#reviewer-name').value.trim() || 'demo-reviewer';
 }
 
 function ago(iso) {
-  const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-  if (seconds < 45) return "just now";
-  if (seconds < 5400) return `${Math.round(seconds / 60)} min ago`;
-  if (seconds < 172800) return `${Math.round(seconds / 3600)} h ago`;
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 45) return 'just now';
+  if (s < 5400) return `${Math.round(s / 60)} min ago`;
+  if (s < 172800) return `${Math.round(s / 3600)} h ago`;
   return new Date(iso).toISOString().slice(0, 10);
 }
 
 function shortDate(iso) {
-  return iso ? String(iso).replace("T", " ").replace(/(\+00:00|Z)$/, "").slice(0, 16) : "—";
+  return iso ? String(iso).replace('T', ' ').replace(/(\+00:00|Z)$/, '').slice(0, 16) : '—';
 }
 
-/* ── proposal rendering ─────────────────────────────────────────────────── */
+function classifySeverity(alert) {
+  return alert?.severity === 'critical' ? 'bad'
+       : alert?.severity === 'high'     ? 'warn'
+       : 'ok';
+}
+
+/* Debounce for palette input. */
+function debounce(fn, ms) {
+  let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+/* ── Icons (inline SVG, 2px stroke, line style) ─────────────────────────── */
+
+const I = {
+  clock:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  users:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20a6 6 0 0 1 12 0"/><circle cx="17" cy="9" r="2.6"/><path d="M15 20c0-2.5 2.4-4 4-4s2 1 2 4"/></svg>',
+  bell:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-6 6c0 5-3 6-3 6h18s-3-1-3-6a6 6 0 0 0-6-6z"/><path d="M10 21h4"/></svg>',
+  link:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 11a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
+  droplet:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s-6 6.5-6 11a6 6 0 0 0 12 0c0-4.5-6-11-6-11z"/></svg>',
+  eye:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+  arrow:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>',
+  check:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg>',
+  x:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  play:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>',
+  moon:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
+  sun:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+  file:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>',
+  refresh:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-8-8"/><path d="M20 4v6h-6"/></svg>',
+  brain:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3a3 3 0 0 0-3 3v1a3 3 0 0 0-2 5 3 3 0 0 0 2 5v1a3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3z"/><path d="M15 3a3 3 0 0 1 3 3v1a3 3 0 0 1 2 5 3 3 0 0 1-2 5v1a3 3 0 0 1-3 3 3 3 0 0 1-3-3V6a3 3 0 0 1 3-3z"/></svg>',
+  shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z"/></svg>',
+};
+
+/* ── Chip / status rendering ────────────────────────────────────────────── */
+
+function setChip(id, label, kind /* on|off|warn|bad */) {
+  const node = $(id);
+  node.className = `chip ${kind}`;
+  node.innerHTML = `<span class="dot"></span><span>${esc(label)}</span>`;
+}
+
+/* ── KPI tiles (Overview) ───────────────────────────────────────────────── */
+
+function renderKpis() {
+  const pending  = state.proposals.filter((p) => p.status === 'pending').length;
+  const approved = state.proposals.filter((p) => p.status === 'approved').length;
+  const critical = state.alerts.filter((a) => a.severity === 'critical').length;
+  const highs    = state.alerts.filter((a) => a.severity === 'high').length;
+  const alertCls = critical ? 'bad' : highs ? 'warn' : 'ok';
+  const chainCls = state.chain
+    ? (state.chain.valid ? 'ok' : 'bad')
+    : '';
+
+  const tiles = [
+    {
+      label: 'Awaiting review', icon: I.eye,
+      value: pending,
+      sub: pending ? 'Human decision required' : 'Queue clear',
+      cls: pending ? 'warn' : 'ok',
+    },
+    {
+      label: 'Approved & published', icon: I.check,
+      value: approved,
+      sub: state.health.fhir_write_mode === 'enabled'
+        ? 'FHIR write: enabled'
+        : 'FHIR write: dry-run',
+      cls: '',
+    },
+    {
+      label: 'Active alerts', icon: I.bell,
+      value: state.alerts.length,
+      sub: critical
+        ? `${critical} critical · ${highs} high`
+        : (highs ? `${highs} high, none critical` : 'no thresholds crossed'),
+      cls: alertCls,
+    },
+    {
+      label: 'Chain integrity', icon: I.shield,
+      value: state.chain ? (state.chain.valid ? '✓' : '✗') : '—',
+      sub: state.chain
+        ? `${state.chain.entries_checked} entries verified`
+        : 'chain not yet loaded',
+      cls: chainCls,
+    },
+  ];
+
+  $('#kpi-grid').innerHTML = tiles.map((t) => `
+    <div class="kpi ${t.cls}">
+      <div class="kpi-label">${t.icon}<span>${esc(t.label)}</span></div>
+      <div class="kpi-value">${esc(String(t.value))}</div>
+      <div class="kpi-sub">${esc(t.sub)}</div>
+    </div>
+  `).join('');
+}
+
+/* ── Pipeline SVG (Overview) ────────────────────────────────────────────── */
+
+function renderPipeline() {
+  const proposed  = state.proposals.length;
+  const inReview  = state.proposals.filter((p) => p.status === 'pending').length;
+  const approved  = state.proposals.filter((p) => p.status === 'approved').length;
+  const alerts    = state.alerts.length;
+  const briefings = state.briefings.length;
+
+  const nodes = [
+    { x:  55, label: 'Ingest',    sub: `${state.proposals.length} in`, kind: 'in' },
+    { x: 205, label: 'Propose',   sub: `${proposed} mappings`,          kind: 'in' },
+    { x: 365, label: 'Review',    sub: `${inReview} pending`,           kind: 'human' },
+    { x: 525, label: 'Publish',   sub: `${approved} to FHIR`,           kind: 'pub' },
+    { x: 685, label: 'Threshold', sub: `${alerts} alerts`,              kind: 'alert' },
+    { x: 845, label: 'Advisory',  sub: `${briefings} drafts`,           kind: 'alert' },
+  ];
+  const fillFor = (kind) => ({
+    in:    'var(--brand)',
+    human: 'var(--info)',
+    pub:   'var(--ok)',
+    alert: 'var(--warn)',
+  }[kind]);
+  const softFor = (kind) => ({
+    in:    'var(--brand-soft)',
+    human: 'var(--info-soft)',
+    pub:   'var(--ok-soft)',
+    alert: 'var(--warn-soft)',
+  }[kind]);
+
+  const groups = nodes.map((n) => `
+    <g transform="translate(${n.x}, 60)">
+      <rect x="-58" y="-28" width="116" height="56" rx="10"
+            fill="${softFor(n.kind)}" stroke="${fillFor(n.kind)}" stroke-width="1.5" />
+      <text x="0" y="-4" text-anchor="middle"
+            font-family="var(--font-sans)" font-size="13" font-weight="600"
+            fill="${fillFor(n.kind)}">${esc(n.label)}</text>
+      <text x="0" y="15" text-anchor="middle"
+            font-family="var(--font-mono)" font-size="11"
+            fill="var(--ink-3)">${esc(n.sub)}</text>
+    </g>
+  `).join('');
+
+  const arrows = nodes.slice(0, -1).map((n, i) => {
+    const next = nodes[i + 1];
+    const x1 = n.x + 60, x2 = next.x - 60;
+    return `
+      <g>
+        <line x1="${x1}" y1="60" x2="${x2}" y2="60"
+              stroke="var(--line)" stroke-width="1.5" />
+        <polygon points="${x2},60 ${x2 - 6},57 ${x2 - 6},63"
+                 fill="var(--ink-4)" />
+      </g>`;
+  }).join('');
+
+  // Gate emphasis at Review
+  const gate = `
+    <g transform="translate(365, 60)">
+      <rect x="-64" y="-34" width="128" height="68" rx="12"
+            fill="none" stroke="var(--info)" stroke-width="1.5"
+            stroke-dasharray="4 3" opacity="0.6" />
+      <text x="0" y="52" text-anchor="middle"
+            font-family="var(--font-sans)" font-size="10.5" font-weight="600"
+            fill="var(--info)" letter-spacing="0.5">HUMAN GATE</text>
+    </g>`;
+
+  const svg = `
+    <svg class="pipeline-svg" viewBox="0 0 900 140"
+         preserveAspectRatio="xMidYMid meet" role="img" aria-label="Pipeline flow">
+      ${arrows}
+      ${gate}
+      ${groups}
+    </svg>`;
+  $('#pipeline-svg-slot').innerHTML = svg;
+}
+
+/* ── Activity list (Overview) ───────────────────────────────────────────── */
+
+const EVENT_META = {
+  proposal_created:       { dot: 'propose', verb: 'Proposal created' },
+  proposal_approved:      { dot: 'approve', verb: 'Proposal approved' },
+  proposal_rejected:      { dot: 'reject',  verb: 'Proposal rejected' },
+  alert_raised:           { dot: 'alert',   verb: 'Alert raised' },
+  fhir_publication:       { dot: 'approve', verb: 'Published to FHIR' },
+  ai_call:                { dot: 'ai',      verb: 'Gemini call' },
+  intake_extraction:      { dot: 'ai',      verb: 'Bulletin extracted' },
+  briefing_generated:     { dot: 'ai',      verb: 'Advisory drafted' },
+  situation_report:       { dot: 'ai',      verb: 'Situation report' },
+  crosswalk_attached:     { dot: 'approve', verb: 'Secondary coding attached' },
+  subscription_installed: { dot: 'propose', verb: 'Subscription installed' },
+};
+
+function renderActivity() {
+  const rows = state.provenance.slice(0, 8);
+  const list = $('#activity-list');
+  if (!rows.length) {
+    list.innerHTML = '<li><span class="dot"></span><span class="muted">No events yet — load the Oder replay from the header.</span><time></time></li>';
+    return;
+  }
+  list.innerHTML = rows.map((r) => {
+    const meta = EVENT_META[r.event_type] || { dot: '', verb: r.event_type };
+    const eid  = r.entity_id ? esc(r.entity_id.slice(0, 18)) : '';
+    return `<li>
+      <span class="dot ${meta.dot}"></span>
+      <span><b class="strong">${esc(meta.verb)}</b>${eid ? ` <span class="muted mono">· ${eid}</span>` : ''}</span>
+      <time datetime="${esc(r.created_at)}">${esc(ago(r.created_at))}</time>
+    </li>`;
+  }).join('');
+}
+
+/* ── Review queue rendering ─────────────────────────────────────────────── */
+
+function siteSparkline(proposal) {
+  // Build a mini series from approved proposals of the same site+code.
+  const key = proposal.coding?.code;
+  if (!key) return '';
+  const series = state.proposals
+    .filter((p) => p.coding?.code === key && p.reading.site_code === proposal.reading.site_code
+               && p.normalized_value !== null && p.normalized_value !== undefined)
+    .sort((a, b) => new Date(a.reading.observed_at) - new Date(b.reading.observed_at))
+    .slice(-12)
+    .map((p) => p.normalized_value);
+  if (series.length < 2) return '';
+
+  const w = 96, h = 24, pad = 2;
+  const min = Math.min(...series), max = Math.max(...series);
+  const span = max - min || 1;
+  const step = (w - pad * 2) / (series.length - 1);
+  const points = series.map((v, i) => {
+    const x = pad + i * step;
+    const y = h - pad - ((v - min) / span) * (h - pad * 2);
+    return [x.toFixed(1), y.toFixed(1)];
+  });
+  const d = 'M' + points.map((p) => p.join(',')).join(' L ');
+  const [lx, ly] = points[points.length - 1];
+
+  // Colour by "does this parameter have a live alert?"
+  const alertCls = state.alerts.some((a) =>
+    a.rule_code === key && a.site_code === proposal.reading.site_code)
+    ? (state.alerts.find((a) => a.rule_code === key && a.site_code === proposal.reading.site_code)?.severity === 'critical'
+       ? 'bad' : 'warn')
+    : '';
+  return `<svg class="spark ${alertCls}" viewBox="0 0 ${w} ${h}" aria-hidden="true">
+    <path d="${d}" />
+    <circle class="last" cx="${lx}" cy="${ly}" r="2.2" />
+  </svg>`;
+}
 
 function aiDetail(ai) {
-  if (!ai) return "";
+  if (!ai) return '';
   const flags = [];
-  if (ai.disagreed_with_rules) {
-    flags.push('<span class="tag warn">disagrees with curated rules</span>');
-  }
-  if (ai.needs_expert_review) {
-    flags.push('<span class="tag warn">model flagged for expert review</span>');
-  }
+  if (ai.disagreed_with_rules) flags.push('<span class="tag warn">disagrees with curated rules</span>');
+  if (ai.needs_expert_review)  flags.push('<span class="tag warn">flagged for expert review</span>');
   const evidence = (ai.evidence || []).length
     ? `<div class="detail-row">
          <span class="detail-label">Quoted</span>
-         <span class="quote">${ai.evidence.map((item) => `“${esc(item)}”`).join(" · ")}</span>
-       </div>`
-    : "";
+         <span class="quote">${ai.evidence.map((s) => `“${esc(s)}”`).join(' · ')}</span>
+       </div>` : '';
   return `
     <div class="detail-row">
       <span class="detail-label">Co-pilot</span>
@@ -105,26 +347,25 @@ function aiDetail(ai) {
       <span class="tag mono">${esc(ai.template_id)}</span>
       <span class="tag mono" title="SHA-256 of the exact rendered prompt">prompt ${esc(ai.prompt_hash.slice(0, 12))}</span>
       <span class="tag mono">${ai.latency_ms} ms</span>
-      ${flags.join("")}
+      ${flags.join('')}
     </div>
     ${evidence}`;
 }
 
 function candidatesDetail(candidates) {
-  if (!candidates || candidates.length < 2) return "";
-  return `
-    <div class="detail-row">
-      <span class="detail-label">Also considered</span>
-      ${candidates.map((item) => `<span class="tag mono" title="${esc(item.origin)}">${esc(item.code)} ${item.score.toFixed(2)}</span>`).join("")}
-    </div>`;
+  if (!candidates || candidates.length < 2) return '';
+  return `<div class="detail-row">
+    <span class="detail-label">Also considered</span>
+    ${candidates.map((c) => `<span class="tag mono" title="${esc(c.origin)}">${esc(c.code)} ${c.score.toFixed(2)}</span>`).join('')}
+  </div>`;
 }
 
 function terminologyDetail(proposal) {
-  if (proposal.status !== "pending" || !proposal.coding) return "";
+  if (proposal.status !== 'pending' || !proposal.coding) return '';
   if (!state.umls.enabled) {
     return `<div class="detail-row">
       <span class="detail-label">LOINC / SNOMED</span>
-      <span class="quote">No terminology source configured.</span>
+      <span class="quote">No terminology source configured — approval will carry one coding.</span>
     </div>`;
   }
   const picked = state.secondaryPicks[proposal.id];
@@ -138,43 +379,52 @@ function terminologyDetail(proposal) {
   const found = state.suggestions[proposal.id];
   let body;
   if (!found) {
-    body = `<button type="button" class="btn btn-sm" data-suggest="${proposal.id}">Suggest a code</button>`;
+    body = `<button type="button" class="btn btn-xs" data-suggest="${proposal.id}">Suggest LOINC / SNOMED</button>`;
   } else if (found.length) {
-    body = found
-      .map((item) => `<button type="button" class="chip-btn" data-pick="${proposal.id}"
-          data-system="${esc(item.system)}" data-code="${esc(item.code)}"
-          data-display="${esc(item.display)}"
-          title="${esc(item.display)} (score ${item.score})">${esc(item.vocabulary)} ${esc(item.code)}</button>`)
-      .join("");
+    body = found.map((m) => `<button type="button" class="chip-btn" data-pick="${proposal.id}"
+        data-system="${esc(m.system)}" data-code="${esc(m.code)}"
+        data-display="${esc(m.display)}"
+        title="${esc(m.display)} (score ${m.score})">${esc(m.vocabulary)} ${esc(m.code)}</button>`).join('');
   } else {
     body = '<span class="quote">No publishable code for this concept — see the README on LOINC gaps.</span>';
   }
   return `<div class="detail-row"><span class="detail-label">LOINC / SNOMED</span>${body}</div>`;
 }
 
-function proposalMarkup(proposal) {
+function proposalMarkup(proposal, focused) {
   const { reading } = proposal;
   const resolved = proposal.normalized_value !== null && proposal.normalized_unit;
+  const spark = siteSparkline(proposal);
+
   const out = resolved
     ? `<div class="value">${proposal.normalized_value} ${esc(proposal.normalized_unit)}</div>
-       <div class="term">${esc(proposal.coding ? proposal.coding.code : "")}</div>`
+       <div class="term">${esc(proposal.coding ? proposal.coding.code : '')}</div>`
     : `<div class="value">unit unresolved</div>
        <div class="term">a reviewer must correct this before approval</div>`;
 
-  const actions = proposal.status === "pending"
+  const actions = proposal.status === 'pending'
     ? `<div class="proposal-actions">
-         <button class="btn btn-sm btn-primary" data-approve="${proposal.id}">Approve</button>
-         <button class="btn btn-sm btn-danger" data-reject="${proposal.id}">Reject</button>
+         <button class="btn btn-sm btn-primary" data-approve="${proposal.id}">
+           ${I.check}Approve
+         </button>
+         <button class="btn btn-sm btn-danger" data-reject="${proposal.id}">
+           ${I.x}Reject
+         </button>
        </div>`
     : `<div class="proposal-actions"><span class="tag ${proposal.status}">${esc(proposal.status)}</span></div>`;
+
+  const proposerTag = proposal.proposer === 'gemini-assisted'
+    ? '<span class="tag ai">Gemini-assisted</span>'
+    : '<span class="tag">Curated rules</span>';
 
   const details = [
     candidatesDetail(proposal.candidates),
     aiDetail(proposal.ai),
     terminologyDetail(proposal),
-  ].filter(Boolean).join("");
+  ].filter(Boolean).join('');
 
-  return `<article class="proposal">
+  return `<article class="proposal ${focused ? 'is-focused' : ''}"
+             data-proposal-id="${proposal.id}">
     <div class="proposal-main">
       <div>
         <div class="mapping">
@@ -183,334 +433,855 @@ function proposalMarkup(proposal) {
             <div class="value">${reading.value} ${esc(reading.unit)}</div>
             <div class="term">${esc(reading.parameter)}</div>
           </div>
-          <div class="arrow" aria-hidden="true">→</div>
-          <div class="side out ${resolved ? "" : "unresolved"}">
+          <div class="arrow" aria-hidden="true">${I.arrow}</div>
+          <div class="side out ${resolved ? '' : 'unresolved'}">
             <div class="side-label">OneAquaHealth FHIR</div>
             ${out}
           </div>
+          ${spark ? `<div style="margin-left:auto">${spark}</div>` : ''}
         </div>
         <div class="meta">
           <span><b>${esc(reading.site_name)}</b></span>
           <span>${esc(reading.source_type)} · ${esc(reading.source_id)}</span>
           <span>observed ${shortDate(reading.observed_at)}</span>
           <span>confidence <b>${Math.round(proposal.confidence * 100)}%</b></span>
-          <span>${esc(proposal.proposer)}</span>
-          ${proposal.reviewer ? `<span>reviewed by <b>${esc(proposal.reviewer)}</b></span>` : ""}
+          ${proposerTag}
+          ${proposal.reviewer ? `<span>reviewed by <b>${esc(proposal.reviewer)}</b></span>` : ''}
         </div>
         <p class="rationale">${esc(proposal.rationale)}</p>
       </div>
       ${actions}
     </div>
-    ${details ? `<div class="detail">${details}</div>` : ""}
+    ${details ? `<div class="detail">${details}</div>` : ''}
   </article>`;
 }
 
-/* ── alert rendering ────────────────────────────────────────────────────── */
+function renderReview() {
+  const all = state.proposals;
+  const counts = {
+    pending:  all.filter((p) => p.status === 'pending').length,
+    approved: all.filter((p) => p.status === 'approved').length,
+    rejected: all.filter((p) => p.status === 'rejected').length,
+    all:      all.length,
+  };
+  $('#count-pending').textContent  = counts.pending;
+  $('#count-approved').textContent = counts.approved;
+  $('#count-rejected').textContent = counts.rejected;
+  $('#count-all').textContent      = counts.all;
 
-function briefingMarkup(briefing) {
+  const shown = state.filter === 'all' ? all : all.filter((p) => p.status === state.filter);
+  const focusIdx = Math.max(0, Math.min(state.focusIndex, shown.length - 1));
+  state.focusIndex = focusIdx;
+
+  $('#proposal-list').innerHTML = shown.length
+    ? shown.map((p, i) => proposalMarkup(p, i === focusIdx && state.filter === 'pending')).join('')
+    : `<div class="empty"><b>Nothing ${state.filter === 'all' ? 'here' : state.filter}.</b>
+        ${all.length ? 'Try another filter.' : 'Load the Oder replay from Overview or use Ingest.'}</div>`;
+}
+
+/* ── Alerts + timeline ──────────────────────────────────────────────────── */
+
+function briefingMarkup(b) {
   return `<div class="briefing">
-    <h4>${esc(briefing.audience)} — ${esc(briefing.headline)}</h4>
-    <p>${esc(briefing.summary)}</p>
-    <ul>${briefing.recommended_actions.map((item) => `<li>${esc(item)}</li>`).join("")}</ul>
-    <p><b>Uncertainty.</b> ${esc(briefing.uncertainty)}</p>
-    <p><b>Next question.</b> ${esc(briefing.escalation_question)}</p>
-    <p class="disclaimer">${esc(briefing.disclaimer)}</p>
+    <h4>${esc(b.audience)} — ${esc(b.headline)}</h4>
+    <p>${esc(b.summary)}</p>
+    <ul>${b.recommended_actions.map((a) => `<li>${esc(a)}</li>`).join('')}</ul>
+    <p><b>Uncertainty.</b> ${esc(b.uncertainty)}</p>
+    <p><b>Next question.</b> ${esc(b.escalation_question)}</p>
+    <p class="disclaimer">${esc(b.disclaimer)}</p>
   </div>`;
 }
 
 function alertMarkup(alert) {
-  const drafted = state.briefings.filter((item) => item.alert_id === alert.id);
-  const done = new Set(drafted.map((item) => item.audience));
+  const drafted = state.briefings.filter((b) => b.alert_id === alert.id);
+  const done = new Set(drafted.map((b) => b.audience));
   const buttons = state.ai.enabled
-    ? alert.audiences.map((audience) => `<button type="button" class="btn btn-sm"
-          data-brief="${alert.id}" data-audience="${esc(audience)}">
-          ${done.has(audience) ? "Redraft for" : "Draft for"} ${esc(audience)}</button>`).join("")
+    ? alert.audiences.map((aud) => `<button type="button" class="btn btn-sm"
+          data-brief="${alert.id}" data-audience="${esc(aud)}">
+          ${done.has(aud) ? 'Redraft for' : 'Draft for'} ${esc(aud)}</button>`).join('')
     : '<span class="quote">Set GEMINI_API_KEY to draft advisories.</span>';
 
-  return `<article class="card alert sev-${esc(alert.severity)}">
+  return `<article class="card alert-card sev-${esc(alert.severity)}">
     <div class="proposal-main">
       <div>
         <div class="alert-head">
           <h3>${esc(alert.rule_code)}</h3>
           <span class="alert-value">${alert.value} ${esc(alert.unit)}</span>
-          <span class="tag ${alert.severity === "critical" ? "rejected" : "pending"}">${esc(alert.severity)}</span>
+          <span class="tag ${alert.severity === 'critical' ? 'rejected' : 'pending'}">${esc(alert.severity)}</span>
         </div>
         <p class="rationale">${esc(alert.message)}</p>
         <div class="meta">
           <span><b>${esc(alert.site_code)}</b></span>
           <span>observed ${shortDate(alert.observed_at)}</span>
           <span>policy ${esc(alert.policy_id)}</span>
-          <span>routed to ${alert.audiences.map(esc).join(", ")}</span>
+          <span>routed to ${alert.audiences.map(esc).join(', ')}</span>
         </div>
       </div>
     </div>
     <div class="detail"><div class="detail-row">${buttons}</div></div>
-    ${drafted.map(briefingMarkup).join("")}
+    ${drafted.map(briefingMarkup).join('')}
   </article>`;
 }
 
-/* ── situation report ───────────────────────────────────────────────────── */
+function renderAlerts() {
+  $('#alert-list').innerHTML = state.alerts.length
+    ? state.alerts.map(alertMarkup).join('')
+    : `<div class="empty"><b>No thresholds crossed.</b>
+        Alerts appear here when an approved observation crosses the policy.</div>`;
+  renderAlertTimeline();
+}
 
-function situationMarkup(report) {
-  if (!report) return "";
-  return `<article class="card" style="margin-bottom:14px">
+function renderAlertTimeline() {
+  const slot = $('#timeline-svg-slot');
+  if (!state.alerts.length) {
+    slot.innerHTML = `<div class="empty" style="margin:${'16px'}">
+      <b>No alerts yet.</b>Timeline populates as thresholds trigger.</div>`;
+    return;
+  }
+  const w = 900, h = 130, padL = 40, padR = 24, padT = 20, padB = 30;
+  const times = state.alerts
+    .map((a) => new Date(a.observed_at).getTime())
+    .filter((n) => !Number.isNaN(n));
+  const tMin = Math.min(...times);
+  const tMax = Math.max(...times);
+  const span = Math.max(1, tMax - tMin);
+
+  const yFor = (sev) => (sev === 'critical' ? padT + 12
+                       : sev === 'high'     ? padT + 44
+                       : padT + 76);
+  const colFor = (sev) => (sev === 'critical' ? 'var(--bad)'
+                         : sev === 'high'     ? 'var(--warn)'
+                         : 'var(--brand)');
+
+  const xFor = (t) => padL + ((t - tMin) / span) * (w - padL - padR);
+  const dotEls = state.alerts.map((a) => {
+    const t = new Date(a.observed_at).getTime();
+    if (Number.isNaN(t)) return '';
+    const x = xFor(t), y = yFor(a.severity);
+    const c = colFor(a.severity);
+    return `
+      <g>
+        <line x1="${x}" y1="${y}" x2="${x}" y2="${h - padB}"
+              stroke="${c}" stroke-width="1" stroke-dasharray="2 3" opacity="0.5" />
+        <circle cx="${x}" cy="${y}" r="5" fill="${c}">
+          <title>${esc(a.rule_code)} · ${esc(a.severity)} · ${esc(shortDate(a.observed_at))}</title>
+        </circle>
+      </g>`;
+  }).join('');
+
+  // Sev rows + labels
+  const rows = ['critical', 'high', 'info'].map((sev) => {
+    const y = yFor(sev);
+    return `
+      <line x1="${padL}" x2="${w - padR}" y1="${y}" y2="${y}"
+            stroke="var(--line-2)" stroke-width="1" />
+      <text x="${padL - 8}" y="${y + 4}" text-anchor="end"
+            font-family="var(--font-mono)" font-size="10"
+            fill="var(--ink-3)">${esc(sev)}</text>`;
+  }).join('');
+
+  // X-axis: min / mid / max
+  const ticks = [tMin, (tMin + tMax) / 2, tMax].map((t, i) => `
+    <text x="${xFor(t)}" y="${h - 8}"
+          text-anchor="${i === 0 ? 'start' : i === 2 ? 'end' : 'middle'}"
+          font-family="var(--font-mono)" font-size="10"
+          fill="var(--ink-3)">${esc(shortDate(new Date(t).toISOString()))}</text>
+  `).join('');
+
+  slot.innerHTML = `<svg class="timeline-svg" viewBox="0 0 ${w} ${h}"
+      preserveAspectRatio="xMidYMid meet" role="img" aria-label="Alert timeline">
+    ${rows}
+    ${ticks}
+    ${dotEls}
+  </svg>`;
+}
+
+/* ── Sites map + per-site cards ─────────────────────────────────────────── */
+
+function collectSites() {
+  const bySite = new Map();
+  for (const p of state.proposals) {
+    if (!p.reading?.site_code) continue;
+    const key = p.reading.site_code;
+    if (!bySite.has(key)) {
+      bySite.set(key, {
+        site_code: key,
+        site_name: p.reading.site_name,
+        latitude:  p.reading.latitude,
+        longitude: p.reading.longitude,
+        params:    new Map(),
+      });
+    }
+    const site = bySite.get(key);
+    if (!p.coding || p.normalized_value == null) continue;
+    const arr = site.params.get(p.coding.code) || [];
+    arr.push({
+      value: p.normalized_value,
+      unit:  p.normalized_unit,
+      at:    p.reading.observed_at,
+    });
+    site.params.set(p.coding.code, arr);
+  }
+  for (const site of bySite.values()) {
+    for (const [k, arr] of site.params) {
+      arr.sort((a, b) => new Date(a.at) - new Date(b.at));
+      site.params.set(k, arr);
+    }
+    site.severity = state.alerts
+      .filter((a) => a.site_code === site.site_code)
+      .reduce((worst, a) => (a.severity === 'critical' ? 'critical'
+                            : (worst === 'critical' ? 'critical' : a.severity)), 'ok');
+  }
+  return Array.from(bySite.values());
+}
+
+function renderSitesMap(sites) {
+  const slot = $('#map-svg-slot');
+  if (!sites.length) {
+    slot.innerHTML = `<div class="empty" style="margin:16px">
+      <b>No sites yet.</b>Load the Oder replay or ingest a reading.</div>`;
+    return;
+  }
+  const w = 640, h = 380, pad = 40;
+
+  const lats  = sites.map((s) => s.latitude);
+  const lons  = sites.map((s) => s.longitude);
+  const latMin = Math.min(...lats) - 0.15, latMax = Math.max(...lats) + 0.15;
+  const lonMin = Math.min(...lons) - 0.25, lonMax = Math.max(...lons) + 0.25;
+  const proj = (lat, lon) => {
+    const x = pad + ((lon - lonMin) / (lonMax - lonMin || 1)) * (w - pad * 2);
+    const y = pad + (1 - (lat - latMin) / (latMax - latMin || 1)) * (h - pad * 2);
+    return [x, y];
+  };
+
+  // Grid
+  const grid = [];
+  for (let i = 0; i <= 4; i++) {
+    const x = pad + (i / 4) * (w - pad * 2);
+    const y = pad + (i / 4) * (h - pad * 2);
+    grid.push(`<line class="grid" x1="${x}" y1="${pad}" x2="${x}" y2="${h - pad}"/>`);
+    grid.push(`<line class="grid" x1="${pad}" y1="${y}" x2="${w - pad}" y2="${y}"/>`);
+  }
+
+  // Rough Oder trace through the sites, top-to-bottom, with a gentle curve.
+  const sorted = sites.slice().sort((a, b) => b.latitude - a.latitude);
+  const river = sorted.map((s) => proj(s.latitude, s.longitude));
+  let riverPath = '';
+  if (river.length >= 2) {
+    const [x0, y0] = river[0];
+    riverPath = `M ${x0} ${y0 - 20} `
+      + river.map(([x, y]) => `L ${x} ${y}`).join(' ')
+      + ` L ${river[river.length - 1][0]} ${river[river.length - 1][1] + 30}`;
+  }
+
+  // Border line between (rough) DE and PL — vertical through mean longitude.
+  const meanLon = (lonMin + lonMax) / 2;
+  const [bx1] = proj(latMin, meanLon);
+  const [bx2] = proj(latMax, meanLon);
+
+  // Site markers
+  const dots = sites.map((s) => {
+    const [x, y] = proj(s.latitude, s.longitude);
+    const cls = s.severity === 'critical' ? 'bad'
+              : s.severity === 'high'     ? 'warn'
+              : s.severity === 'ok'       ? 'ok'
+              : '';
+    const halo = cls === 'bad' || cls === 'warn'
+      ? `<circle class="halo ${cls}" cx="${x}" cy="${y}" r="16"/>`
+      : '';
+    return `
+      ${halo}
+      <circle class="site ${cls}" cx="${x}" cy="${y}" r="6">
+        <title>${esc(s.site_name)} — ${esc(s.severity)}</title>
+      </circle>
+      <text class="label" x="${x + 10}" y="${y + 3}">${esc(s.site_name)}</text>
+      <text class="label label-2" x="${x + 10}" y="${y + 16}">${s.latitude.toFixed(3)}, ${s.longitude.toFixed(3)}</text>`;
+  }).join('');
+
+  slot.innerHTML = `
+    <svg class="map-svg" viewBox="0 0 ${w} ${h}"
+         preserveAspectRatio="xMidYMid meet" role="img" aria-label="Sites map">
+      <rect class="land" x="${pad}" y="${pad}" width="${w - pad * 2}" height="${h - pad * 2}" rx="4"/>
+      ${grid.join('')}
+      <line class="border" x1="${bx1}" y1="${pad}" x2="${bx2}" y2="${h - pad}"/>
+      <text x="${bx1 + 6}" y="${pad + 14}" fill="var(--ink-4)"
+            font-family="var(--font-mono)" font-size="9">DE ⟷ PL (approx.)</text>
+      ${riverPath ? `<path class="river" d="${riverPath}"/>` : ''}
+      ${dots}
+    </svg>`;
+}
+
+function renderSiteCards(sites) {
+  const list = $('#site-list');
+  if (!sites.length) { list.innerHTML = ''; return; }
+  list.innerHTML = sites.map((s) => {
+    const rows = Array.from(s.params.entries()).map(([code, series]) => {
+      const last = series[series.length - 1];
+      const bandClass = state.alerts.find((a) =>
+        a.rule_code === code && a.site_code === s.site_code);
+      const cls = bandClass?.severity === 'critical' ? 'bad'
+                : bandClass?.severity === 'high'     ? 'warn'
+                : '';
+      const w = 100, h = 22, pad = 2;
+      const min = Math.min(...series.map((r) => r.value));
+      const max = Math.max(...series.map((r) => r.value));
+      const span = max - min || 1;
+      const step = series.length > 1 ? (w - pad * 2) / (series.length - 1) : 0;
+      const pts = series.map((r, i) => {
+        const x = pad + i * step;
+        const y = h - pad - ((r.value - min) / span) * (h - pad * 2);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      });
+      const d = 'M' + pts.join(' L ');
+      const [lx, ly] = pts[pts.length - 1].split(',');
+      const spark = series.length >= 2
+        ? `<svg class="spark ${cls}" viewBox="0 0 ${w} ${h}" aria-hidden="true">
+             <path d="${d}" />
+             <circle class="last" cx="${lx}" cy="${ly}" r="2.2"/>
+           </svg>`
+        : `<span class="muted mono">n=${series.length}</span>`;
+      return `<div class="param-row">
+        <span class="name mono">${esc(code)}</span>
+        <span class="val ${cls}">${last.value} ${esc(last.unit)}</span>
+        ${spark}
+      </div>`;
+    }).join('');
+    return `<article class="card site-card">
+      <header>
+        <div>
+          <h3>${esc(s.site_name)}</h3>
+          <span class="muted mono" style="font-size:11px">${esc(s.site_code)}</span>
+        </div>
+        <span class="coords">${s.latitude.toFixed(4)}, ${s.longitude.toFixed(4)}</span>
+      </header>
+      ${rows || '<div class="empty" style="margin:12px">No approved readings for this site yet.</div>'}
+    </article>`;
+  }).join('');
+}
+
+/* ── Audit chain visualization ──────────────────────────────────────────── */
+
+function chainNodeMarkup(e) {
+  const cls = {
+    proposal_approved:   'approve',
+    proposal_rejected:   'reject',
+    proposal_created:    'propose',
+    alert_raised:        'alert',
+    ai_call:             'model',
+    intake_extraction:   'model',
+    briefing_generated:  'model',
+    situation_report:    'model',
+    crosswalk_attached:  'approve',
+    fhir_publication:    'approve',
+  }[e.event_type] || '';
+  const glyph = {
+    proposal_approved:   '✓',
+    proposal_rejected:   '✗',
+    proposal_created:    '+',
+    alert_raised:        '!',
+    ai_call:             'AI',
+    intake_extraction:   'AI',
+    briefing_generated:  'AI',
+    situation_report:    'AI',
+    crosswalk_attached:  '⚭',
+    fhir_publication:    '⇧',
+  }[e.event_type] || '·';
+  return `<div class="chain-node ${cls}"
+    title="#${e.sequence} · ${esc(e.event_type)} · ${esc(e.hash.slice(0, 16))}…">
+    ${esc(glyph)}
+  </div>`;
+}
+
+function renderChainStrip() {
+  const strip = $('#chain-strip');
+  const rows = state.provenance.slice().reverse().slice(-40);
+  if (!rows.length) {
+    strip.innerHTML = '<span class="muted">Chain is empty — nothing has been recorded yet.</span>';
+    return;
+  }
+  strip.innerHTML = rows.flatMap((e, i) => {
+    const link = i > 0 ? '<div class="chain-link" aria-hidden="true"></div>' : '';
+    return [link, chainNodeMarkup(e)];
+  }).filter(Boolean).join('');
+}
+
+function renderProvenanceRows() {
+  $('#provenance-rows').innerHTML = state.provenance.length
+    ? state.provenance.map((e) => `<tr>
+        <td class="num">${e.sequence}</td>
+        <td><b>${esc(e.event_type)}</b></td>
+        <td class="mono">${esc(e.entity_id.slice(0, 22))}</td>
+        <td class="mono" title="${esc(e.previous_hash)}">${esc(e.previous_hash.slice(0, 12))}…</td>
+        <td class="mono" title="${esc(e.hash)}">${esc(e.hash.slice(0, 12))}…</td>
+        <td>${esc(ago(e.created_at))}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="6"><span class="muted">No events recorded yet.</span></td></tr>';
+}
+
+function renderChainBanner() {
+  const banner = $('#chain-banner');
+  if (!state.chain) { banner.className = 'banner'; banner.textContent = 'Verifying chain…'; return; }
+  banner.className = `banner ${state.chain.valid ? 'ok' : 'bad'}`;
+  banner.innerHTML = state.chain.valid
+    ? `${I.shield}<span>Hash chain verified across ${state.chain.entries_checked} entries.</span>`
+    : `${I.x}<span>Chain broken at sequence ${state.chain.first_invalid_sequence}.</span>`;
+}
+
+function situationMarkup(r) {
+  if (!r) return '';
+  return `<article class="card">
     <header class="card-head">
-      <h2>${esc(report.headline)}</h2>
-      <p>Considered ${report.observations_considered} observations, ${report.alerts_considered} alerts,
-         ${report.pending_reviews} mappings still awaiting review.</p>
+      <h2>${esc(r.headline)}</h2>
+      <p>Considered ${r.observations_considered} observations, ${r.alerts_considered} alerts,
+        ${r.pending_reviews} mappings still awaiting review.</p>
     </header>
     <div class="briefing" style="border-top:0">
-      <p>${esc(report.situation)}</p>
-      ${report.by_site.map((item) => `<p><b>${esc(item.site_code)}</b> — ${esc(item.assessment)}</p>`).join("")}
+      <p>${esc(r.situation)}</p>
+      ${r.by_site.map((s) => `<p><b>${esc(s.site_code)}</b> — ${esc(s.assessment)}</p>`).join('')}
       <div class="split">
-        <div><h4>Data gaps</h4><ul>${report.data_gaps.map((item) => `<li>${esc(item)}</li>`).join("")}</ul></div>
-        <div><h4>Next steps</h4><ul>${report.next_steps.map((item) => `<li>${esc(item)}</li>`).join("")}</ul></div>
+        <div><h4>Data gaps</h4><ul>${r.data_gaps.map((g) => `<li>${esc(g)}</li>`).join('')}</ul></div>
+        <div><h4>Next steps</h4><ul>${r.next_steps.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>
       </div>
-      <p class="disclaimer">${esc(report.disclaimer)}</p>
+      <p class="disclaimer">${esc(r.disclaimer)}</p>
     </div>
   </article>`;
 }
 
-/* ── render ─────────────────────────────────────────────────────────────── */
+/* ── Top-level render ───────────────────────────────────────────────────── */
 
-function setChip(id, label, on) {
-  const node = $(id);
-  node.textContent = label;
-  node.className = `chip ${on ? "on" : "off"}`;
+function renderChips() {
+  setChip('#chip-fhir',
+    state.health.fhir_write_mode === 'enabled' ? 'FHIR live' : 'FHIR dry-run',
+    state.health.fhir_write_mode === 'enabled' ? 'on' : 'off');
+  setChip('#chip-ai',
+    state.ai.enabled ? `AI ${state.ai.model}` : 'AI off',
+    state.ai.enabled ? 'on' : 'off');
+  setChip('#chip-umls',
+    state.umls.enabled ? `UMLS ${(state.umls.vocabularies || []).join(' · ')}` : 'UMLS off',
+    state.umls.enabled ? 'on' : 'off');
+}
+
+function renderSidebarStats() {
+  const pending = state.proposals.filter((p) => p.status === 'pending').length;
+  const sites = new Set(state.proposals.map((p) => p.reading?.site_code).filter(Boolean));
+  $('#nav-pending').textContent = pending;
+  $('#nav-alerts').textContent  = state.alerts.length;
+  $('#nav-sites').textContent   = sites.size;
+  $('#stat-proposals').textContent = state.proposals.length;
+  $('#stat-pending').textContent   = pending;
+  $('#stat-alerts').textContent    = state.alerts.length;
+  $('#stat-briefings').textContent = state.briefings.length;
+  $('#stat-policy').textContent    = state.health.threshold_policy || 'demo';
+
+  const chain = $('#stat-chain');
+  if (state.chain) {
+    chain.textContent = state.chain.valid ? 'verified' : 'broken';
+    chain.className   = state.chain.valid ? 'ok' : 'bad';
+  } else {
+    chain.textContent = '—'; chain.className = '';
+  }
+}
+
+function renderIngestGating() {
+  $('#intake-submit').disabled  = !state.ai.enabled;
+  $('#btn-situation').disabled  = !state.ai.enabled;
+  $('#intake-state').textContent = state.ai.enabled
+    ? 'Free text is read by Gemini and extracted literally — nothing is inferred.'
+    : 'Needs GEMINI_API_KEY. The single-reading form works meanwhile.';
 }
 
 function render() {
-  const pending = state.proposals.filter((item) => item.status === "pending");
-
-  setChip("#chip-fhir", `FHIR ${state.health.fhir_write_mode || "—"}`,
-    state.health.fhir_write_mode === "enabled");
-  setChip("#chip-ai", state.ai.enabled ? `AI ${state.ai.model}` : "AI off", state.ai.enabled);
-  setChip("#chip-umls",
-    state.umls.enabled ? `UMLS ${(state.umls.vocabularies || []).join(" · ")}` : "UMLS off",
-    state.umls.enabled);
-
-  $("#nav-pending").textContent = pending.length;
-  $("#nav-alerts").textContent = state.alerts.length;
-  $("#stat-proposals").textContent = state.proposals.length;
-  $("#stat-pending").textContent = pending.length;
-  $("#stat-alerts").textContent = state.alerts.length;
-  $("#stat-briefings").textContent = state.briefings.length;
-
-  const chainCell = $("#stat-chain");
-  if (state.chain) {
-    chainCell.textContent = state.chain.valid ? "verified" : "broken";
-    chainCell.className = state.chain.valid ? "ok" : "bad";
-  }
-
-  $("#intake-submit").disabled = !state.ai.enabled;
-  $("#btn-situation").disabled = !state.ai.enabled;
-  $("#intake-state").textContent = state.ai.enabled
-    ? "Free text is read by Gemini and extracted literally."
-    : "Needs GEMINI_API_KEY. Use the single-reading form meanwhile.";
-
-  // Review queue
-  const shown = state.filter === "all"
-    ? state.proposals
-    : state.proposals.filter((item) => item.status === state.filter);
-  $("#proposal-list").innerHTML = shown.length
-    ? shown.map(proposalMarkup).join("")
-    : `<div class="empty"><b>Nothing ${state.filter === "all" ? "here" : state.filter}</b>
-         ${state.proposals.length ? "Try another filter." : "Load the Oder replay or submit a reading from Ingest."}</div>`;
-
-  // Alerts
-  $("#alert-list").innerHTML = state.alerts.length
-    ? state.alerts.map(alertMarkup).join("")
-    : `<div class="empty"><b>No thresholds crossed</b>
-         Alerts appear here once an approved observation crosses the policy.</div>`;
-
-  // Audit
-  const banner = $("#chain-banner");
-  if (state.chain) {
-    banner.className = `banner ${state.chain.valid ? "ok" : "bad"}`;
-    banner.textContent = state.chain.valid
-      ? `Hash chain verified across ${state.chain.entries_checked} entries.`
-      : `Chain broken at sequence ${state.chain.first_invalid_sequence}.`;
-  }
-  $("#situation-report").innerHTML = situationMarkup(state.situation);
-  $("#provenance-rows").innerHTML = state.provenance.length
-    ? state.provenance.map((entry) => `<tr>
-        <td class="num">${entry.sequence}</td>
-        <td><b>${esc(entry.event_type)}</b></td>
-        <td class="mono">${esc(entry.entity_id.slice(0, 20))}</td>
-        <td class="mono" title="${esc(entry.hash)}">${esc(entry.hash.slice(0, 16))}</td>
-        <td>${ago(entry.created_at)}</td>
-      </tr>`).join("")
-    : '<tr><td colspan="5">No events recorded yet.</td></tr>';
+  renderChips();
+  renderSidebarStats();
+  renderIngestGating();
+  renderKpis();
+  renderPipeline();
+  renderActivity();
+  renderReview();
+  renderAlerts();
+  const sites = collectSites();
+  renderSitesMap(sites);
+  renderSiteCards(sites);
+  renderChainBanner();
+  renderChainStrip();
+  renderProvenanceRows();
+  $('#situation-report').innerHTML = situationMarkup(state.situation);
 }
+
+/* ── Refresh ────────────────────────────────────────────────────────────── */
 
 async function refresh() {
   try {
     const [health, ai, umls, proposals, alerts, briefings, provenance, chain] = await Promise.all([
-      request("/health"), request("/ai/status"), request("/terminology/status"),
-      request("/proposals"), request("/alerts"), request("/briefings"),
-      request("/provenance?limit=25"), request("/provenance/verify"),
+      request('/health'), request('/ai/status'), request('/terminology/status'),
+      request('/proposals'), request('/alerts'), request('/briefings'),
+      request('/provenance?limit=200'), request('/provenance/verify'),
     ]);
-    Object.assign(state, { health, ai, umls, proposals, alerts, briefings, provenance, chain });
+    Object.assign(state, { health, ai, umls, proposals, alerts, briefings, provenance, chain, loading: false });
     render();
   } catch (error) {
     toast(error.message, true);
   }
 }
 
-/* ── interactions ───────────────────────────────────────────────────────── */
+/* ── View switching ─────────────────────────────────────────────────────── */
 
-$$(".nav-item").forEach((button) => {
-  button.addEventListener("click", () => {
-    $$(".nav-item").forEach((item) => item.classList.toggle("is-active", item === button));
-    $$(".view").forEach((view) => {
-      view.classList.toggle("is-active", view.dataset.view === button.dataset.view);
-    });
-  });
-});
+function switchView(name) {
+  state.view = name;
+  $$('.nav-item').forEach((n) => n.classList.toggle('is-active', n.dataset.view === name));
+  $$('.view').forEach((v) => v.classList.toggle('is-active', v.dataset.view === name));
+  // Focus first heading for accessibility
+  const heading = $(`.view[data-view="${name}"] h1`);
+  if (heading) heading.setAttribute('tabindex', '-1');
+}
 
-$$(".tab").forEach((tab) => {
-  tab.addEventListener("click", () => {
-    state.filter = tab.dataset.filter;
-    $$(".tab").forEach((item) => item.classList.toggle("is-active", item === tab));
-    render();
-  });
-});
+/* ── Command palette ────────────────────────────────────────────────────── */
 
-$("#reviewer-name").addEventListener("change", (event) => {
-  window.localStorage.setItem("aquafhir.reviewer", event.target.value.trim());
-});
+const COMMANDS = () => ([
+  { id: 'go-overview', label: 'Go to Overview',        hint: 'g o', icon: I.eye,     run: () => switchView('overview') },
+  { id: 'go-review',   label: 'Go to Review queue',    hint: 'g r', icon: I.check,   run: () => switchView('review') },
+  { id: 'go-ingest',   label: 'Go to Ingest',          hint: 'g i', icon: I.file,    run: () => switchView('ingest') },
+  { id: 'go-sites',    label: 'Go to Sites',           hint: 'g s', icon: I.droplet, run: () => switchView('sites') },
+  { id: 'go-alerts',   label: 'Go to Alerts',          hint: 'g a', icon: I.bell,    run: () => switchView('alerts') },
+  { id: 'go-audit',    label: 'Go to Audit chain',     hint: 'g u', icon: I.link,    run: () => switchView('audit') },
+  { id: 'replay',      label: 'Load Oder replay',      hint: '',    icon: I.play,    run: () => triggerReplay() },
+  { id: 'approve-all', label: 'Approve all pending',   hint: '',    icon: I.check,   run: () => triggerApproveAll() },
+  { id: 'situation',   label: 'Draft situation report',hint: '',    icon: I.brain,   run: () => triggerSituation(), needsAi: true },
+  { id: 'refresh',     label: 'Refresh from server',   hint: '⌘R',  icon: I.refresh, run: () => refresh() },
+  { id: 'theme',       label: 'Toggle theme',          hint: 'T',   icon: I.moon,    run: () => toggleTheme() },
+  { id: 'print',       label: 'Print audit chain',     hint: '',    icon: I.file,    run: () => { switchView('audit'); setTimeout(() => window.print(), 200); } },
+]);
 
-$("#reading-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const data = new FormData(event.currentTarget);
-  const payload = {
-    source_id: "manual-console",
-    source_type: "agency",
-    parameter: data.get("parameter"),
-    value: Number(data.get("value")),
-    unit: data.get("unit"),
-    observed_at: new Date().toISOString(),
-    site_code: "oder-kostrzyn",
-    site_name: data.get("site_name"),
-    latitude: Number(data.get("latitude")),
-    longitude: Number(data.get("longitude")),
-  };
-  await withBusy(event.currentTarget.querySelector("button[type=submit]"), async () => {
-    await request("/proposals", { method: "POST", body: JSON.stringify(payload) });
-    toast("Proposal created. It is pending in the review queue.");
-    await refresh();
-  });
-});
+function paletteMatches() {
+  const q = state.palette.query.trim().toLowerCase();
+  return COMMANDS().filter((c) => !c.needsAi || state.ai.enabled)
+    .filter((c) => !q || c.label.toLowerCase().includes(q));
+}
 
-$("#intake-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const data = new FormData(event.currentTarget);
-  await withBusy($("#intake-submit"), async () => {
-    const result = await request("/intake", {
-      method: "POST",
-      body: JSON.stringify({
-        text: data.get("text"),
-        source_id: data.get("source_id"),
-        source_type: "agency",
-        default_site_code: data.get("default_site_code"),
-        default_site_name: "Oder at Kostrzyn",
-      }),
-    });
-    $("#intake-warnings").innerHTML = result.warnings
-      .map((item) => `<p class="note">${esc(item)}</p>`).join("");
-    toast(`Extracted ${result.extracted_count} reading(s) into the review queue.`);
-    await refresh();
-  });
-});
+function renderPalette() {
+  const items = paletteMatches();
+  state.palette.cursor = Math.max(0, Math.min(state.palette.cursor, items.length - 1));
+  $('#palette-list').innerHTML = items.length
+    ? items.map((c, i) => `<button class="palette-item ${i === state.palette.cursor ? 'is-active' : ''}"
+        data-cmd="${esc(c.id)}" type="button">
+        ${c.icon}<span>${esc(c.label)}</span>
+        ${c.hint ? `<span class="meta"><kbd>${esc(c.hint)}</kbd></span>` : ''}
+      </button>`).join('')
+    : '<div class="empty" style="margin:12px">No matches.</div>';
+}
 
-$("#proposal-list").addEventListener("click", async (event) => {
-  const button = event.target.closest("button");
-  if (!button) return;
-  const { approve, reject, suggest, pick } = button.dataset;
+function openPalette() {
+  state.palette.open = true; state.palette.query = ''; state.palette.cursor = 0;
+  $('#overlay-palette').classList.add('show');
+  const input = $('#palette-input');
+  input.value = '';
+  renderPalette();
+  setTimeout(() => input.focus(), 10);
+}
+function closePalette() {
+  state.palette.open = false;
+  $('#overlay-palette').classList.remove('show');
+}
+function runPaletteCommand(id) {
+  const cmd = COMMANDS().find((c) => c.id === id);
+  closePalette();
+  if (cmd) cmd.run();
+}
 
-  if (suggest) {
-    await withBusy(button, async () => {
-      state.suggestions[suggest] = await request(`/proposals/${suggest}/terminology-suggestions`);
-      render();
-    });
-    return;
-  }
-  if (pick) {
-    state.secondaryPicks[pick] = {
-      system: button.dataset.system,
-      code: button.dataset.code,
-      display: button.dataset.display,
-    };
-    toast(`${button.dataset.code} will be attached when this proposal is approved.`);
-    render();
-    return;
-  }
-  if (!approve && !reject) return;
+/* ── Actions used by both palette and buttons ───────────────────────────── */
 
-  await withBusy(button, async () => {
-    if (approve) {
-      const secondary = state.secondaryPicks[approve];
-      await request(`/proposals/${approve}/approve`, {
-        method: "POST",
-        body: JSON.stringify({
-          reviewer: reviewer(),
-          ...(secondary ? { secondary_coding: secondary } : {}),
-        }),
-      });
-      toast("Approved. FHIR resources built and the policy evaluated.");
-    } else {
-      await request(`/proposals/${reject}/reject`, {
-        method: "POST",
-        body: JSON.stringify({ reviewer: reviewer(), reason: "Rejected during review" }),
-      });
-      toast("Rejected. The decision is recorded and immutable.");
-    }
-    await refresh();
-  });
-});
-
-$("#alert-list").addEventListener("click", async (event) => {
-  const button = event.target.closest("button[data-brief]");
-  if (!button) return;
-  await withBusy(button, async () => {
-    const audience = button.dataset.audience;
-    await request(`/alerts/${button.dataset.brief}/briefings?audience=${encodeURIComponent(audience)}`,
-      { method: "POST" });
-    toast(`Draft advisory ready for ${audience}.`);
-    await refresh();
-  });
-});
-
-$("#btn-replay").addEventListener("click", async (event) => {
-  await withBusy(event.currentTarget, async () => {
-    const proposals = await request("/replay", { method: "POST" });
+async function triggerReplay() {
+  await withBusy($('#btn-replay'), async () => {
+    const proposals = await request('/replay', { method: 'POST' });
     toast(`Loaded ${proposals.length} readings from the synthetic Oder timeline.`);
     await refresh();
   });
-});
+}
 
-$("#btn-approve-all").addEventListener("click", async (event) => {
-  await withBusy(event.currentTarget, async () => {
-    const ids = state.proposals.filter((item) => item.status === "pending").map((item) => item.id);
-    if (!ids.length) { toast("Nothing is pending."); return; }
-    const result = await request("/proposals/approve-batch", {
-      method: "POST",
+async function triggerApproveAll() {
+  await withBusy($('#btn-approve-all'), async () => {
+    const ids = state.proposals.filter((p) => p.status === 'pending').map((p) => p.id);
+    if (!ids.length) { toast('Nothing is pending.'); return; }
+    const result = await request('/proposals/approve-batch', {
+      method: 'POST',
       body: JSON.stringify({ reviewer: reviewer(), proposal_ids: ids }),
     });
     const failed = result.failures.length;
-    toast(`Approved ${result.approved.length}${failed ? `; ${failed} need a reviewer correction` : ""}.`);
+    toast(`Approved ${result.approved.length}${failed ? `; ${failed} need a reviewer correction` : ''}.`);
     await refresh();
   });
-});
+}
 
-$("#btn-situation").addEventListener("click", async (event) => {
-  await withBusy(event.currentTarget, async () => {
-    state.situation = await request("/ai/situation-report", { method: "POST" });
+async function triggerSituation() {
+  await withBusy($('#btn-situation'), async () => {
+    state.situation = await request('/ai/situation-report', { method: 'POST' });
+    switchView('audit');
     render();
   });
-});
+}
 
-$("#btn-refresh").addEventListener("click", refresh);
+async function approveProposal(id) {
+  const secondary = state.secondaryPicks[id];
+  await request(`/proposals/${id}/approve`, {
+    method: 'POST',
+    body: JSON.stringify({
+      reviewer: reviewer(),
+      ...(secondary ? { secondary_coding: secondary } : {}),
+    }),
+  });
+  toast('Approved. FHIR resources built and the policy evaluated.');
+  await refresh();
+}
 
-$("#reviewer-name").value = window.localStorage.getItem("aquafhir.reviewer") || "";
+async function rejectProposal(id) {
+  await request(`/proposals/${id}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reviewer: reviewer(), reason: 'Rejected during review' }),
+  });
+  toast('Rejected. The decision is recorded and immutable.');
+  await refresh();
+}
+
+async function suggestTerminology(id) {
+  state.suggestions[id] = await request(`/proposals/${id}/terminology-suggestions`);
+  render();
+}
+
+/* ── Theme ──────────────────────────────────────────────────────────────── */
+
+function currentTheme() {
+  const saved = localStorage.getItem(THEME_KEY);
+  if (saved === 'light' || saved === 'dark') return saved;
+  return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  $('#icon-theme').outerHTML =
+    (theme === 'dark' ? I.sun : I.moon).replace('<svg', '<svg id="icon-theme"');
+}
+function toggleTheme() {
+  const next = currentTheme() === 'dark' ? 'light' : 'dark';
+  localStorage.setItem(THEME_KEY, next);
+  applyTheme(next);
+}
+
+/* ── Keyboard ───────────────────────────────────────────────────────────── */
+
+let gPending = false; let gTimer;
+
+function isTyping(e) {
+  const t = e.target;
+  return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+}
+
+function handleKeydown(e) {
+  // Palette
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault(); openPalette(); return;
+  }
+  if (state.palette.open) {
+    if (e.key === 'Escape') { closePalette(); return; }
+    if (e.key === 'ArrowDown') { e.preventDefault(); state.palette.cursor++; renderPalette(); return; }
+    if (e.key === 'ArrowUp')   { e.preventDefault(); state.palette.cursor--; renderPalette(); return; }
+    if (e.key === 'Enter') {
+      const items = paletteMatches();
+      if (items[state.palette.cursor]) runPaletteCommand(items[state.palette.cursor].id);
+      return;
+    }
+    return;
+  }
+
+  if (e.key === 'Escape') {
+    $('#overlay-help').classList.remove('show');
+    return;
+  }
+
+  if (isTyping(e)) return;
+
+  // Help
+  if (e.key === '?') { e.preventDefault(); $('#overlay-help').classList.add('show'); return; }
+
+  // Theme
+  if (e.key === 't' || e.key === 'T') { toggleTheme(); return; }
+
+  // g→x navigation
+  if (e.key === 'g') {
+    gPending = true;
+    clearTimeout(gTimer);
+    gTimer = setTimeout(() => { gPending = false; }, 1200);
+    return;
+  }
+  if (gPending) {
+    const map = { o: 'overview', r: 'review', i: 'ingest', s: 'sites', a: 'alerts', u: 'audit' };
+    const target = map[e.key.toLowerCase()];
+    gPending = false;
+    if (target) { switchView(target); return; }
+  }
+
+  // Review-queue nav
+  if (state.view === 'review') {
+    const pending = state.proposals.filter((p) => state.filter === 'all' || p.status === state.filter);
+    if (!pending.length) return;
+    if (e.key === 'j' || e.key === 'J') {
+      state.focusIndex = Math.min(pending.length - 1, state.focusIndex + 1);
+      renderReview(); scrollFocusedIntoView(); return;
+    }
+    if (e.key === 'k' || e.key === 'K') {
+      state.focusIndex = Math.max(0, state.focusIndex - 1);
+      renderReview(); scrollFocusedIntoView(); return;
+    }
+    const target = pending[state.focusIndex];
+    if (!target) return;
+    if ((e.key === 'a' || e.key === 'A') && target.status === 'pending') {
+      approveProposal(target.id).catch((err) => toast(err.message, true));
+      return;
+    }
+    if ((e.key === 'r' || e.key === 'R') && target.status === 'pending') {
+      rejectProposal(target.id).catch((err) => toast(err.message, true));
+      return;
+    }
+    if ((e.key === 't' || e.key === 'T') && target.status === 'pending') {
+      suggestTerminology(target.id).catch((err) => toast(err.message, true));
+      return;
+    }
+  }
+}
+
+function scrollFocusedIntoView() {
+  const node = $('.proposal.is-focused');
+  if (node) node.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+/* ── Bootstrap event wiring ─────────────────────────────────────────────── */
+
+function wire() {
+  $$('.nav-item').forEach((n) => n.addEventListener('click', () => switchView(n.dataset.view)));
+  $$('.tab').forEach((tab) => tab.addEventListener('click', () => {
+    state.filter = tab.dataset.filter;
+    $$('.tab').forEach((t) => t.classList.toggle('is-active', t === tab));
+    state.focusIndex = 0;
+    renderReview();
+  }));
+
+  $('#reviewer-name').value = localStorage.getItem(REVIEWER_KEY) || '';
+  $('#reviewer-name').addEventListener('change', (e) => {
+    localStorage.setItem(REVIEWER_KEY, e.target.value.trim());
+  });
+
+  $('#reading-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const data = new FormData(e.currentTarget);
+    const payload = {
+      source_id: 'manual-console',
+      source_type: 'agency',
+      parameter: data.get('parameter'),
+      value: Number(data.get('value')),
+      unit: data.get('unit'),
+      observed_at: new Date().toISOString(),
+      site_code: 'oder-kostrzyn',
+      site_name: data.get('site_name'),
+      latitude: Number(data.get('latitude')),
+      longitude: Number(data.get('longitude')),
+    };
+    await withBusy(e.currentTarget.querySelector('button[type=submit]'), async () => {
+      await request('/proposals', { method: 'POST', body: JSON.stringify(payload) });
+      toast('Proposal created. It is pending in the review queue.');
+      switchView('review');
+      await refresh();
+    });
+  });
+
+  $('#intake-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const data = new FormData(e.currentTarget);
+    await withBusy($('#intake-submit'), async () => {
+      const result = await request('/intake', {
+        method: 'POST',
+        body: JSON.stringify({
+          text: data.get('text'),
+          source_id: data.get('source_id'),
+          source_type: 'agency',
+          default_site_code: data.get('default_site_code'),
+          default_site_name: 'Oder at Kostrzyn',
+        }),
+      });
+      $('#intake-warnings').innerHTML = result.warnings
+        .map((w) => `<p class="note">${esc(w)}</p>`).join('');
+      toast(`Extracted ${result.extracted_count} reading(s) into the review queue.`);
+      switchView('review');
+      await refresh();
+    });
+  });
+
+  $('#proposal-list').addEventListener('click', async (e) => {
+    const button = e.target.closest('button');
+    if (!button) return;
+    const { approve, reject, suggest, pick } = button.dataset;
+
+    if (suggest) {
+      await withBusy(button, async () => { await suggestTerminology(suggest); });
+      return;
+    }
+    if (pick) {
+      state.secondaryPicks[pick] = {
+        system:  button.dataset.system,
+        code:    button.dataset.code,
+        display: button.dataset.display,
+      };
+      toast(`${button.dataset.code} will attach when this proposal is approved.`);
+      render();
+      return;
+    }
+    if (!approve && !reject) return;
+    await withBusy(button, async () => {
+      approve ? await approveProposal(approve) : await rejectProposal(reject);
+    });
+  });
+
+  $('#alert-list').addEventListener('click', async (e) => {
+    const button = e.target.closest('button[data-brief]');
+    if (!button) return;
+    await withBusy(button, async () => {
+      const audience = button.dataset.audience;
+      await request(`/alerts/${button.dataset.brief}/briefings?audience=${encodeURIComponent(audience)}`,
+        { method: 'POST' });
+      toast(`Draft advisory ready for ${audience}.`);
+      await refresh();
+    });
+  });
+
+  $('#btn-replay').addEventListener('click', triggerReplay);
+  $('#btn-approve-all').addEventListener('click', triggerApproveAll);
+  $('#btn-situation').addEventListener('click', triggerSituation);
+  $('#btn-refresh').addEventListener('click', refresh);
+  $('#btn-print').addEventListener('click', () => window.print());
+  $('#btn-theme').addEventListener('click', toggleTheme);
+  $('#btn-palette').addEventListener('click', openPalette);
+
+  $('#palette-input').addEventListener('input', debounce((e) => {
+    state.palette.query = e.target.value; state.palette.cursor = 0; renderPalette();
+  }, 60));
+  $('#palette-list').addEventListener('click', (e) => {
+    const button = e.target.closest('button[data-cmd]');
+    if (button) runPaletteCommand(button.dataset.cmd);
+  });
+  $('#overlay-palette').addEventListener('click', (e) => {
+    if (e.target === $('#overlay-palette')) closePalette();
+  });
+  $('#overlay-help').addEventListener('click', (e) => {
+    if (e.target === $('#overlay-help')) e.currentTarget.classList.remove('show');
+  });
+
+  document.addEventListener('keydown', handleKeydown);
+}
+
+/* ── Boot ───────────────────────────────────────────────────────────────── */
+
+applyTheme(currentTheme());
+wire();
 refresh();
+
+// Passive tick: refresh "N min ago" without a full data pull.
+setInterval(() => {
+  if (!state.loading) { renderActivity(); renderProvenanceRows(); }
+}, 30000);
