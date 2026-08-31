@@ -261,17 +261,13 @@ function renderPipeline() {
 /* ── Activity list (Overview) ───────────────────────────────────────────── */
 
 const EVENT_META = {
-  proposal_created:       { dot: 'propose', verb: 'Proposal created' },
-  proposal_approved:      { dot: 'approve', verb: 'Proposal approved' },
-  proposal_rejected:      { dot: 'reject',  verb: 'Proposal rejected' },
-  alert_raised:           { dot: 'alert',   verb: 'Alert raised' },
-  fhir_publication:       { dot: 'approve', verb: 'Published to FHIR' },
-  ai_call:                { dot: 'ai',      verb: 'Gemini call' },
-  intake_extraction:      { dot: 'ai',      verb: 'Bulletin extracted' },
-  briefing_generated:     { dot: 'ai',      verb: 'Advisory drafted' },
-  situation_report:       { dot: 'ai',      verb: 'Situation report' },
-  crosswalk_attached:     { dot: 'approve', verb: 'Secondary coding attached' },
-  subscription_installed: { dot: 'propose', verb: 'Subscription installed' },
+  'mapping-proposed':    { dot: 'propose', verb: 'Proposal created' },
+  'mapping-approved':    { dot: 'approve', verb: 'Proposal approved' },
+  'mapping-rejected':    { dot: 'reject',  verb: 'Proposal rejected' },
+  'alert-created':       { dot: 'alert',   verb: 'Alert raised' },
+  'unstructured-intake': { dot: 'ai',      verb: 'Bulletin extracted' },
+  'briefing-drafted':    { dot: 'ai',      verb: 'Advisory drafted' },
+  'situation-report':    { dot: 'ai',      verb: 'Situation report' },
 };
 
 function renderActivity() {
@@ -763,28 +759,22 @@ function renderSiteCards(sites) {
 
 function chainNodeMarkup(e) {
   const cls = {
-    proposal_approved:   'approve',
-    proposal_rejected:   'reject',
-    proposal_created:    'propose',
-    alert_raised:        'alert',
-    ai_call:             'model',
-    intake_extraction:   'model',
-    briefing_generated:  'model',
-    situation_report:    'model',
-    crosswalk_attached:  'approve',
-    fhir_publication:    'approve',
+    'mapping-approved':    'approve',
+    'mapping-rejected':    'reject',
+    'mapping-proposed':    'propose',
+    'alert-created':       'alert',
+    'unstructured-intake': 'model',
+    'briefing-drafted':    'model',
+    'situation-report':    'model',
   }[e.event_type] || '';
   const glyph = {
-    proposal_approved:   '✓',
-    proposal_rejected:   '✗',
-    proposal_created:    '+',
-    alert_raised:        '!',
-    ai_call:             'AI',
-    intake_extraction:   'AI',
-    briefing_generated:  'AI',
-    situation_report:    'AI',
-    crosswalk_attached:  '⚭',
-    fhir_publication:    '⇧',
+    'mapping-approved':    '✓',
+    'mapping-rejected':    '✗',
+    'mapping-proposed':    '+',
+    'alert-created':       '!',
+    'unstructured-intake': 'AI',
+    'briefing-drafted':    'AI',
+    'situation-report':    'AI',
   }[e.event_type] || '·';
   return `<div class="chain-node ${cls}"
     title="#${e.sequence} · ${esc(e.event_type)} · ${esc(e.hash.slice(0, 16))}…">
