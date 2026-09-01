@@ -1,10 +1,13 @@
 import logging
+import math
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any
 
 import uvicorn
 from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query, Request, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -135,6 +138,33 @@ app = FastAPI(
     ),
     lifespan=lifespan,
 )
+
+
+def _json_safe(value: Any) -> Any:
+    """Replace values `json.dumps(allow_nan=False)` refuses with a printable string.
+
+    A validation error echoes the offending input back to the caller. When that
+    input is NaN or +/-Infinity -- which JSON cannot represent -- rendering the
+    422 raises, and the client gets an opaque 500 instead of the field-level
+    reason it should have got.
+    """
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return [_json_safe(item) for item in value]
+    return value
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(_: Request, error: RequestValidationError) -> JSONResponse:
+    # jsonable_encoder first: `ctx` can hold a live exception object.
+    # _json_safe second: the encoder leaves NaN/Infinity as floats.
+    return JSONResponse(
+        status_code=422,
+        content={"detail": _json_safe(jsonable_encoder(error.errors()))},
+    )
 
 
 @app.exception_handler(AiUnavailableError)

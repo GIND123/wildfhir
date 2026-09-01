@@ -1,3 +1,4 @@
+import hashlib
 import re
 from datetime import datetime
 from typing import Any
@@ -15,8 +16,19 @@ OAH_SOURCE_IDENTIFIER = "https://aquafhir.example/source-id"
 
 
 def fhir_id(value: str) -> str:
+    """Map an arbitrary source string onto a FHIR id ([A-Za-z0-9-.]{1,64}).
+
+    Normalisation is lossy, so two different site or source ids can collapse
+    onto the same string and silently merge two real places into one
+    Location. When the value is not already a legal id, a short digest of the
+    original keeps distinct inputs distinct.
+    """
     normalized = re.sub(r"[^A-Za-z0-9\-.]", "-", value).strip("-")
-    return (normalized or "unknown")[:64]
+    if normalized == value and 0 < len(normalized) <= 64:
+        return normalized
+    suffix = hashlib.sha256(value.encode("utf-8")).hexdigest()[:8]
+    stem = (normalized or "unknown")[:55].rstrip("-.")
+    return f"{stem or 'unknown'}-{suffix}"
 
 
 def build_resources(

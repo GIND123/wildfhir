@@ -29,7 +29,9 @@ class RawReading(BaseModel):
     source_id: str = Field(min_length=1, max_length=120)
     source_type: SourceType
     parameter: str = Field(min_length=1, max_length=200)
-    value: float
+    # allow_inf_nan=False: NaN/Infinity serialise to JSON null, which would
+    # publish an Observation whose valueQuantity has no value at all.
+    value: float = Field(allow_inf_nan=False)
     unit: str = Field(min_length=1, max_length=40)
     observed_at: datetime
     site_code: str = Field(min_length=1, max_length=100)
@@ -105,7 +107,7 @@ class MappingProposal(BaseModel):
 class ReviewDecision(BaseModel):
     reviewer: str = Field(min_length=1, max_length=120)
     coding: Coding | None = None
-    normalized_value: float | None = None
+    normalized_value: float | None = Field(default=None, allow_inf_nan=False)
     normalized_unit: str | None = None
     secondary_coding: Coding | None = None
 

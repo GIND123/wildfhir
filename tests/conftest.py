@@ -67,6 +67,32 @@ def curated_agent() -> ReviewedCodingAgent:
 
 
 @pytest.fixture
+def policy() -> ThresholdPolicy:
+    return ThresholdPolicy(THRESHOLDS)
+
+
+@pytest.fixture
+def pending_proposal(curated_agent: ReviewedCodingAgent):
+    """One proposal straight from the curated agent, ready to build resources."""
+    from aquafhir.models import RawReading
+
+    return curated_agent.propose(
+        RawReading(
+            source_id="pl-agency-001",
+            source_type="agency",
+            parameter="dissolved oxygen",
+            value=3.6,
+            unit="mg/L",
+            observed_at="2022-07-27T08:00:00Z",
+            site_code="oder-kostrzyn",
+            site_name="Oder at Kostrzyn",
+            latitude=52.5887,
+            longitude=14.6495,
+        )
+    )
+
+
+@pytest.fixture
 def service(tmp_path: Path, curated_agent: ReviewedCodingAgent) -> BridgeService:
     """Deterministic pipeline with AI switched off (no key)."""
     return _build(tmp_path, GeminiClient(api_key="", model="gemini-test"), curated_agent)
