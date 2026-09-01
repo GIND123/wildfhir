@@ -14,6 +14,16 @@ const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
 /* ── State ──────────────────────────────────────────────────────────────── */
 
+const OAH_SYSTEM = 'http://hl7.eu/fhir/ig/oah/CodeSystem/temporarySystem-oah-eu';
+const OAH_CATALOG = [
+  { code: 'electrical-conductivity', display: 'Electrical conductivity',                    unit: 'mS/cm' },
+  { code: 'ndci',                    display: 'Normalized Difference Chlorophyll Index',    unit: '1'     },
+  { code: 'waterTemperature',        display: 'Water temperature',                          unit: 'Cel'   },
+  { code: 'dissolved-oxygen',        display: 'Dissolved Oxygen',                           unit: 'mg/L'  },
+  { code: 'ph',                      display: 'pH',                                         unit: '[pH]'  },
+  { code: 'chloride',                display: 'Chloride',                                   unit: 'mg/L'  },
+];
+
 const state = {
   view: 'overview',
   health: {},
@@ -28,8 +38,12 @@ const state = {
   suggestions:    {},   // proposal id -> UMLS TerminologyMatch[]
   secondaryPicks: {},   // proposal id -> Coding
   filter: 'pending',
+  search: '',
   focusIndex: 0,        // review-queue keyboard cursor
   palette: { open: false, query: '', cursor: 0 },
+  drawer:  { open: false, proposalId: null, override: null, result: null, busy: false },
+  aiDrawer:{ open: false },
+  toasts:  [],
   loading: true,
 };
 
@@ -47,13 +61,47 @@ async function request(path, options = {}) {
   return response.json();
 }
 
-let toastTimer;
+let toastSeq = 0;
 function toast(message, isError = false) {
-  const node = $('#toast');
-  node.textContent = message;
-  node.className = isError ? 'toast show error' : 'toast show';
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { node.className = 'toast'; }, 4000);
+  const id = ++toastSeq;
+  state.toasts.push({ id, message, isError });
+  if (state.toasts.length > 4) state.toasts.shift();
+  renderToasts();
+  if (!isError) setTimeout(() => dismissToast(id), 4000);
+}
+function dismissToast(id) {
+  const stack = $('#toast-stack');
+  const node = stack?.querySelector(`[data-toast-id="${id}"]`);
+  if (node) {
+    node.classList.add('leaving');
+    setTimeout(() => {
+      state.toasts = state.toasts.filter((t) => t.id !== id);
+      renderToasts();
+    }, 200);
+  } else {
+    state.toasts = state.toasts.filter((t) => t.id !== id);
+    renderToasts();
+  }
+}
+function renderToasts() {
+  const stack = $('#toast-stack');
+  if (!stack) return;
+  const existing = new Set(Array.from(stack.children).map((n) => Number(n.dataset.toastId)));
+  const wanted = new Set(state.toasts.map((t) => t.id));
+  // Remove nodes that no longer belong.
+  Array.from(stack.children).forEach((n) => {
+    if (!wanted.has(Number(n.dataset.toastId))) n.remove();
+  });
+  // Add new ones.
+  for (const t of state.toasts) {
+    if (existing.has(t.id)) continue;
+    const div = document.createElement('div');
+    div.className = `toast show ${t.isError ? 'error' : ''}`;
+    div.dataset.toastId = String(t.id);
+    div.textContent = t.message;
+    div.addEventListener('click', () => dismissToast(t.id));
+    stack.appendChild(div);
+  }
 }
 
 async function withBusy(button, work) {
@@ -452,6 +500,21 @@ function proposalMarkup(proposal, focused) {
   </article>`;
 }
 
+function matchesSearch(proposal, q) {
+  if (!q) return true;
+  const bag = [
+    proposal.reading?.parameter,
+    proposal.reading?.site_name,
+    proposal.reading?.site_code,
+    proposal.reading?.source_id,
+    proposal.reading?.source_type,
+    proposal.coding?.code,
+    proposal.coding?.display,
+    proposal.reviewer,
+  ].filter(Boolean).join(' ').toLowerCase();
+  return bag.includes(q);
+}
+
 function renderReview() {
   const all = state.proposals;
   const counts = {
@@ -465,14 +528,16 @@ function renderReview() {
   $('#count-rejected').textContent = counts.rejected;
   $('#count-all').textContent      = counts.all;
 
-  const shown = state.filter === 'all' ? all : all.filter((p) => p.status === state.filter);
+  const q = state.search.trim().toLowerCase();
+  const byStatus = state.filter === 'all' ? all : all.filter((p) => p.status === state.filter);
+  const shown = byStatus.filter((p) => matchesSearch(p, q));
   const focusIdx = Math.max(0, Math.min(state.focusIndex, shown.length - 1));
   state.focusIndex = focusIdx;
 
   $('#proposal-list').innerHTML = shown.length
     ? shown.map((p, i) => proposalMarkup(p, i === focusIdx && state.filter === 'pending')).join('')
-    : `<div class="empty"><b>Nothing ${state.filter === 'all' ? 'here' : state.filter}.</b>
-        ${all.length ? 'Try another filter.' : 'Load the Oder replay from Overview or use Ingest.'}</div>`;
+    : `<div class="empty"><b>${q ? `Nothing matches “${esc(q)}”.` : `Nothing ${state.filter === 'all' ? 'here' : state.filter}.`}</b>
+        ${all.length ? (q ? 'Clear the search or change the filter.' : 'Try another filter.') : 'Load the Oder replay from Overview or use Ingest.'}</div>`;
 }
 
 /* ── Alerts + timeline ──────────────────────────────────────────────────── */
@@ -837,6 +902,310 @@ function situationMarkup(r) {
   </article>`;
 }
 
+/* ── Proposal detail drawer ─────────────────────────────────────────────── */
+
+function highlightJson(text) {
+  return esc(text)
+    .replace(/(&quot;[^&]+?&quot;)(:)/g, '<span class="k">$1</span>$2')
+    .replace(/: (&quot;[^&]*?&quot;)/g, ': <span class="s">$1</span>')
+    .replace(/: (-?\d+\.?\d*)/g, ': <span class="n">$1</span>');
+}
+
+function drawerMarkup() {
+  const p = state.proposals.find((x) => x.id === state.drawer.proposalId);
+  if (!p) return '';
+  const r = p.reading;
+  const proposedValue = p.normalized_value !== null && p.normalized_unit
+    ? `${p.normalized_value} ${esc(p.normalized_unit)}` : 'unresolved';
+  const proposedCode = p.coding ? p.coding.code : '—';
+
+  const ov = state.drawer.override || {
+    code: p.coding?.code || '',
+    value: p.normalized_value ?? '',
+    unit: p.normalized_unit || '',
+  };
+  const willOverrideCode = ov.code && p.coding && ov.code !== p.coding.code;
+  const willOverrideVal  = ov.value !== '' && Number(ov.value) !== p.normalized_value;
+  const willOverrideUnit = ov.unit && ov.unit !== p.normalized_unit;
+  const overriding = willOverrideCode || willOverrideVal || willOverrideUnit;
+
+  const result = state.drawer.result;
+  const isPending = p.status === 'pending';
+
+  const codeOptions = OAH_CATALOG.map((c) => `
+    <option value="${esc(c.code)}" ${c.code === ov.code ? 'selected' : ''}>
+      ${esc(c.code)} — ${esc(c.display)} (${esc(c.unit)})
+    </option>`).join('');
+
+  const compareOverride = overriding
+    ? `<div class="compare-cell override">
+         <span class="cell-label">Override</span>
+         <span class="cell-value">${esc(String(ov.value))} ${esc(ov.unit)}</span>
+         <span class="cell-sub">${esc(ov.code)}</span>
+       </div>`
+    : `<div class="compare-cell">
+         <span class="cell-label">Override</span>
+         <span class="cell-value muted">no override</span>
+         <span class="cell-sub muted">approves as proposed</span>
+       </div>`;
+
+  const aiBlock = p.ai ? `
+    <div class="drawer-section">
+      <h3>AI attribution</h3>
+      <div class="detail-row">
+        <span class="tag ai">${esc(p.ai.model)}</span>
+        <span class="tag mono">${esc(p.ai.template_id)}</span>
+        <span class="tag mono">prompt ${esc(p.ai.prompt_hash.slice(0, 16))}…</span>
+        <span class="tag mono">${p.ai.latency_ms} ms</span>
+        ${p.ai.disagreed_with_rules ? '<span class="tag warn">disagrees with curated rules</span>' : ''}
+        ${p.ai.needs_expert_review ? '<span class="tag warn">flagged for expert review</span>' : ''}
+      </div>
+      ${(p.ai.evidence || []).length ? `<p class="quote mt-2">
+        ${p.ai.evidence.map((s) => `“${esc(s)}”`).join(' · ')}
+      </p>` : ''}
+    </div>` : '';
+
+  const candBlock = (p.candidates && p.candidates.length > 1) ? `
+    <div class="drawer-section">
+      <h3>Candidates considered</h3>
+      <div class="detail-row">
+        ${p.candidates.map((c) => `
+          <button type="button" class="chip-btn" data-drawer-pick="${esc(c.code)}"
+            title="${esc(c.origin)}  score=${c.score.toFixed(2)}">
+            ${esc(c.code)} · ${c.score.toFixed(2)}
+          </button>`).join('')}
+      </div>
+    </div>` : '';
+
+  const resultBlock = result ? `
+    <div class="drawer-section">
+      <h3>FHIR Observation just published</h3>
+      <div class="fhir-preview">${highlightJson(JSON.stringify(result.observation, null, 2))}</div>
+      ${result.alerts && result.alerts.length ? `
+        <p class="hint mt-2">Threshold policy raised ${result.alerts.length} alert(s):
+          ${result.alerts.map((a) => `<span class="tag ${a.severity === 'critical' ? 'rejected' : 'pending'}">${esc(a.rule_code)} · ${esc(a.severity)}</span>`).join(' ')}
+        </p>` : `<p class="hint mt-2">No thresholds crossed.</p>`}
+    </div>` : '';
+
+  const overrideForm = isPending && !result ? `
+    <div class="drawer-section">
+      <h3>Reviewer override</h3>
+      <p class="override-note">Overriding the coding or value is hash-chained under your reviewer id. Leave blank to accept the proposal as-is.</p>
+      <div class="override-form">
+        <label class="field">
+          <span>OneAquaHealth code</span>
+          <select id="ovr-code">${codeOptions}</select>
+        </label>
+        <div class="field-row">
+          <label class="field">
+            <span>Normalized value</span>
+            <input id="ovr-value" type="number" step="any" value="${esc(String(ov.value))}" />
+          </label>
+          <label class="field">
+            <span>Unit (UCUM)</span>
+            <input id="ovr-unit" type="text" value="${esc(ov.unit)}" />
+          </label>
+        </div>
+      </div>
+    </div>` : '';
+
+  const actionRow = isPending && !result ? `
+    <div class="drawer-actions">
+      <button class="btn btn-quiet" id="drawer-close-2" type="button">Cancel</button>
+      <button class="btn btn-danger" id="drawer-reject" type="button">Reject</button>
+      <button class="btn btn-primary" id="drawer-approve" type="button">
+        ${overriding ? 'Approve with override' : 'Approve'}
+      </button>
+    </div>` : `
+    <div class="drawer-actions">
+      <button class="btn btn-quiet" id="drawer-close-2" type="button">Close</button>
+    </div>`;
+
+  return `
+    <div class="drawer-head">
+      <div>
+        <h2>${esc(r.parameter)} <span class="tag ${p.status}" style="margin-left:6px">${esc(p.status)}</span></h2>
+        <div class="sub">${esc(r.site_name)} · observed ${shortDate(r.observed_at)}</div>
+      </div>
+      <button class="btn btn-icon btn-quiet" id="drawer-close" type="button" aria-label="Close">${I.x}</button>
+    </div>
+    <div class="drawer-body">
+      <div class="drawer-section">
+        <h3>Mapping comparison</h3>
+        <div class="compare-grid">
+          <div class="compare-cell">
+            <span class="cell-label">As received</span>
+            <span class="cell-value">${r.value} ${esc(r.unit)}</span>
+            <span class="cell-sub">${esc(r.parameter)}</span>
+          </div>
+          <div class="compare-cell">
+            <span class="cell-label">${p.proposer === 'gemini-assisted' ? 'Gemini proposal' : 'Curated proposal'}</span>
+            <span class="cell-value">${esc(proposedValue)}</span>
+            <span class="cell-sub">${esc(proposedCode)}  ·  ${Math.round(p.confidence * 100)}%</span>
+          </div>
+          ${compareOverride}
+        </div>
+        <p class="rationale mt-2">${esc(p.rationale)}</p>
+      </div>
+      ${aiBlock}
+      ${candBlock}
+      ${overrideForm}
+      ${resultBlock}
+    </div>
+    ${actionRow}`;
+}
+
+function renderDrawer() {
+  const overlay = $('#overlay-drawer');
+  if (!state.drawer.open) { overlay.classList.remove('show'); return; }
+  $('#drawer-body').innerHTML = drawerMarkup();
+  overlay.classList.add('show');
+}
+
+function openDrawer(proposalId) {
+  state.drawer = { open: true, proposalId, override: null, result: null, busy: false };
+  renderDrawer();
+}
+
+function closeDrawer() {
+  state.drawer = { open: false, proposalId: null, override: null, result: null, busy: false };
+  $('#overlay-drawer').classList.remove('show');
+}
+
+function captureOverride() {
+  const code  = $('#ovr-code')?.value  || '';
+  const value = $('#ovr-value')?.value || '';
+  const unit  = $('#ovr-unit')?.value  || '';
+  state.drawer.override = { code, value, unit };
+}
+
+async function drawerApprove() {
+  const p = state.proposals.find((x) => x.id === state.drawer.proposalId);
+  if (!p) return;
+  captureOverride();
+  const ov = state.drawer.override;
+  const payload = { reviewer: reviewer() };
+  const secondary = state.secondaryPicks[p.id];
+  if (secondary) payload.secondary_coding = secondary;
+  if (ov.code && ov.code !== p.coding?.code) {
+    const meta = OAH_CATALOG.find((c) => c.code === ov.code);
+    payload.coding = { system: OAH_SYSTEM, code: ov.code, display: meta?.display || ov.code };
+  }
+  if (ov.value !== '' && ov.unit) {
+    const v = Number(ov.value);
+    if (!Number.isNaN(v) && (v !== p.normalized_value || ov.unit !== p.normalized_unit)) {
+      payload.normalized_value = v;
+      payload.normalized_unit  = ov.unit;
+    }
+  }
+  state.drawer.busy = true;
+  const btn = $('#drawer-approve');
+  await withBusy(btn, async () => {
+    const result = await request(`/proposals/${p.id}/approve`, {
+      method: 'POST', body: JSON.stringify(payload),
+    });
+    state.drawer.result = result;
+    toast(payload.coding || payload.normalized_value !== undefined
+      ? 'Approved with reviewer override. FHIR built and policy evaluated.'
+      : 'Approved. FHIR resources built and the policy evaluated.');
+    await refresh();
+    renderDrawer();
+  });
+}
+
+async function drawerReject() {
+  const id = state.drawer.proposalId;
+  await withBusy($('#drawer-reject'), async () => {
+    await rejectProposal(id);
+    closeDrawer();
+  });
+}
+
+/* ── AI transparency drawer ─────────────────────────────────────────────── */
+
+function aiCallsFromProvenance() {
+  return state.provenance
+    .filter((e) => ['unstructured-intake', 'briefing-drafted', 'situation-report', 'mapping-proposed']
+      .includes(e.event_type))
+    .filter((e) => {
+      // mapping-proposed only when it carried AI attribution (payload.ai != null)
+      if (e.event_type !== 'mapping-proposed') return true;
+      return e.payload?.ai != null;
+    })
+    .slice(0, 12);
+}
+
+function aiDrawerMarkup() {
+  const ai = state.ai;
+  const calls = aiCallsFromProvenance();
+  const glyphFor = (t) => ({
+    'unstructured-intake': 'IN',
+    'briefing-drafted':    'BR',
+    'situation-report':    'SR',
+    'mapping-proposed':    'CO',
+  }[t] || 'AI');
+  const labelFor = (t) => ({
+    'unstructured-intake': 'Bulletin extracted',
+    'briefing-drafted':    'Advisory drafted',
+    'situation-report':    'Situation report',
+    'mapping-proposed':    'Coding co-pilot',
+  }[t] || t);
+  const rows = calls.length
+    ? calls.map((e) => {
+        const a = e.payload?.ai || e.payload;
+        const latency = a?.latency_ms || '';
+        const hash = a?.prompt_hash || e.hash;
+        return `<div class="row">
+          <span class="glyph">${glyphFor(e.event_type)}</span>
+          <span><b>${esc(labelFor(e.event_type))}</b><br><span class="muted mono" style="font-size:11px">${esc(a?.template_id || e.event_type)}</span></span>
+          <span class="hash" title="${esc(hash)}">${esc((hash || '').slice(0, 12))}…</span>
+          <time>${latency ? latency + ' ms' : ago(e.created_at)}</time>
+        </div>`;
+      }).join('')
+    : '<div class="empty" style="margin:8px 0">No AI calls yet.</div>';
+
+  return `
+    <div class="drawer-head">
+      <div>
+        <h2>AI transparency</h2>
+        <div class="sub">${ai.enabled ? `${ai.model} · ${ai.assist_mode} mode` : 'AI disabled — set GEMINI_API_KEY'}</div>
+      </div>
+      <button class="btn btn-icon btn-quiet" id="ai-drawer-close" type="button" aria-label="Close">${I.x}</button>
+    </div>
+    <div class="drawer-body">
+      <div class="drawer-section">
+        <h3>Model &amp; policy</h3>
+        <dl class="kv" style="padding:0">
+          <dt>Provider</dt><dd>${esc(ai.provider || '—')}</dd>
+          <dt>Model</dt><dd>${esc(ai.model || '—')}</dd>
+          <dt>Assist mode</dt><dd>${esc(ai.assist_mode || '—')}</dd>
+          <dt>Assist below confidence</dt><dd>${ai.assist_below_confidence ?? '—'}</dd>
+          <dt>Confidence ceiling</dt><dd>${ai.confidence_ceiling ?? '—'}</dd>
+        </dl>
+        <p class="override-note mt-3">${esc(ai.detail || '')}</p>
+      </div>
+      <div class="drawer-section">
+        <h3>Features enabled</h3>
+        <div class="detail-row">
+          ${(ai.features || []).map((f) => `<span class="tag ai">${esc(f)}</span>`).join('') || '<span class="muted">none</span>'}
+        </div>
+      </div>
+      <div class="drawer-section">
+        <h3>Recent AI calls (from hash chain)</h3>
+        <div class="call-log">${rows}</div>
+      </div>
+    </div>`;
+}
+
+function renderAiDrawer() {
+  const overlay = $('#overlay-ai');
+  if (!state.aiDrawer.open) { overlay.classList.remove('show'); return; }
+  $('#ai-drawer-body').innerHTML = aiDrawerMarkup();
+  overlay.classList.add('show');
+}
+function openAiDrawer() { state.aiDrawer.open = true; renderAiDrawer(); }
+function closeAiDrawer() { state.aiDrawer.open = false; $('#overlay-ai').classList.remove('show'); }
+
 /* ── Top-level render ───────────────────────────────────────────────────── */
 
 function renderChips() {
@@ -1083,6 +1452,8 @@ function handleKeydown(e) {
 
   if (e.key === 'Escape') {
     $('#overlay-help').classList.remove('show');
+    if (state.drawer.open) closeDrawer();
+    if (state.aiDrawer.open) closeAiDrawer();
     return;
   }
 
@@ -1205,7 +1576,12 @@ function wire() {
 
   $('#proposal-list').addEventListener('click', async (e) => {
     const button = e.target.closest('button');
-    if (!button) return;
+    // Row click (not on a button) opens the detail drawer.
+    if (!button) {
+      const row = e.target.closest('.proposal');
+      if (row?.dataset.proposalId) openDrawer(row.dataset.proposalId);
+      return;
+    }
     const { approve, reject, suggest, pick } = button.dataset;
 
     if (suggest) {
@@ -1226,6 +1602,44 @@ function wire() {
     await withBusy(button, async () => {
       approve ? await approveProposal(approve) : await rejectProposal(reject);
     });
+  });
+
+  // Search input
+  $('#review-search').addEventListener('input', debounce((e) => {
+    state.search = e.target.value; state.focusIndex = 0; renderReview();
+  }, 80));
+
+  // Drawer wiring — delegated so it survives re-renders
+  $('#overlay-drawer').addEventListener('click', (e) => {
+    if (e.target.id === 'overlay-drawer') { closeDrawer(); return; }
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    if (btn.id === 'drawer-close' || btn.id === 'drawer-close-2') { closeDrawer(); return; }
+    if (btn.id === 'drawer-approve') { drawerApprove(); return; }
+    if (btn.id === 'drawer-reject')  { drawerReject();  return; }
+    const pick = btn.dataset.drawerPick;
+    if (pick) {
+      state.drawer.override = state.drawer.override || {};
+      state.drawer.override.code = pick;
+      renderDrawer();
+    }
+  });
+  $('#overlay-drawer').addEventListener('input', (e) => {
+    if (['ovr-code', 'ovr-value', 'ovr-unit'].includes(e.target.id)) {
+      captureOverride();
+      // Re-render only the compare row + action label — cheap to redo whole drawer.
+      renderDrawer();
+      // Restore focus + caret on the field the user is typing in.
+      const f = $(`#${e.target.id}`);
+      if (f) { f.focus(); if (f.setSelectionRange && f.value) f.setSelectionRange(f.value.length, f.value.length); }
+    }
+  });
+
+  // AI drawer — click the AI chip in topbar
+  $('#chip-ai').classList.add('clickable-chip');
+  $('#chip-ai').addEventListener('click', openAiDrawer);
+  $('#overlay-ai').addEventListener('click', (e) => {
+    if (e.target.id === 'overlay-ai' || e.target.closest('#ai-drawer-close')) closeAiDrawer();
   });
 
   $('#alert-list').addEventListener('click', async (e) => {
@@ -1275,3 +1689,12 @@ refresh();
 setInterval(() => {
   if (!state.loading) { renderActivity(); renderProvenanceRows(); }
 }, 30000);
+
+// Live poll every 15s while the tab is visible. Skips when a drawer or the
+// palette is open — the user is mid-decision, don't yank state out from under.
+setInterval(() => {
+  if (document.hidden) return;
+  if (state.drawer.open || state.aiDrawer.open || state.palette.open) return;
+  if (state.loading) return;
+  refresh().catch(() => { /* toast already fired inside request */ });
+}, 15000);

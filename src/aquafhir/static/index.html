@@ -297,6 +297,13 @@
               All <span class="count" id="count-all">0</span>
             </button>
             <span class="toolbar-spacer"></span>
+            <label class="search-wrap" aria-label="Search proposals">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                   width="14" height="14"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+              <input id="review-search" class="search-input" type="search"
+                     placeholder="Search parameter, site, source…" autocomplete="off" />
+            </label>
             <span class="hint" id="review-kbd">
               <kbd>J</kbd>/<kbd>K</kbd> move · <kbd>A</kbd> approve · <kbd>R</kbd> reject · <kbd>T</kbd> terminology
             </span>
@@ -539,7 +546,19 @@ Angler melden tote Fische flussabwärts — keine Messung vorhanden.</textarea>
       </div>
     </div>
 
-    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <!-- ── Proposal detail drawer ──────────────────────────────────── -->
+    <div id="overlay-drawer" class="overlay drawer-overlay" role="dialog"
+         aria-modal="true" aria-label="Proposal detail">
+      <div class="drawer" id="drawer-body"></div>
+    </div>
+
+    <!-- ── AI transparency drawer ──────────────────────────────────── -->
+    <div id="overlay-ai" class="overlay drawer-overlay" role="dialog"
+         aria-modal="true" aria-label="AI transparency">
+      <div class="drawer" id="ai-drawer-body"></div>
+    </div>
+
+    <div id="toast-stack" class="toast-stack" role="status" aria-live="polite"></div>
     <script src="/assets/app.js" defer></script>
   </body>
 </html>
