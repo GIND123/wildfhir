@@ -240,65 +240,84 @@ function renderPipeline() {
   const briefings = state.briefings.length;
 
   const nodes = [
-    { x:  55, label: 'Ingest',    sub: `${state.proposals.length} in`, kind: 'in' },
-    { x: 205, label: 'Propose',   sub: `${proposed} mappings`,          kind: 'in' },
-    { x: 365, label: 'Review',    sub: `${inReview} pending`,           kind: 'human' },
-    { x: 525, label: 'Publish',   sub: `${approved} to FHIR`,           kind: 'pub' },
-    { x: 685, label: 'Threshold', sub: `${alerts} alerts`,              kind: 'alert' },
-    { x: 845, label: 'Advisory',  sub: `${briefings} drafts`,           kind: 'alert' },
+    { x:  60, label: 'Ingest',    sub: `${state.proposals.length} in`, kind: 'in' },
+    { x: 210, label: 'Propose',   sub: `${proposed} mappings`,          kind: 'in' },
+    { x: 370, label: 'Review',    sub: `${inReview} pending`,           kind: 'human' },
+    { x: 530, label: 'Publish',   sub: `${approved} to FHIR`,           kind: 'pub' },
+    { x: 690, label: 'Threshold', sub: `${alerts} alerts`,              kind: 'alert' },
+    { x: 848, label: 'Advisory',  sub: `${briefings} drafts`,           kind: 'alert' },
   ];
-  const fillFor = (kind) => ({
-    in:    'var(--brand)',
-    human: 'var(--info)',
-    pub:   'var(--ok)',
-    alert: 'var(--warn)',
-  }[kind]);
-  const softFor = (kind) => ({
-    in:    'var(--brand-soft)',
-    human: 'var(--info-soft)',
-    pub:   'var(--ok-soft)',
-    alert: 'var(--warn-soft)',
-  }[kind]);
+  const strokeFor = (k) => ({
+    in: 'var(--brand)', human: 'var(--ai)', pub: 'var(--ok)', alert: 'var(--warn)',
+  }[k]);
+  const fillFor = (k) => `url(#grad-${k})`;
+
+  const defs = `
+    <defs>
+      <linearGradient id="grad-in" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="var(--brand-soft)"/>
+        <stop offset="100%" stop-color="var(--panel)"/>
+      </linearGradient>
+      <linearGradient id="grad-human" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="var(--ai-soft)"/>
+        <stop offset="100%" stop-color="var(--panel)"/>
+      </linearGradient>
+      <linearGradient id="grad-pub" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="var(--ok-soft)"/>
+        <stop offset="100%" stop-color="var(--panel)"/>
+      </linearGradient>
+      <linearGradient id="grad-alert" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="var(--warn-soft)"/>
+        <stop offset="100%" stop-color="var(--panel)"/>
+      </linearGradient>
+      <linearGradient id="grad-flow" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="var(--brand-ring)"/>
+        <stop offset="50%" stop-color="var(--brand)"/>
+        <stop offset="100%" stop-color="var(--brand-ring)"/>
+      </linearGradient>
+      <filter id="node-shadow" x="-20%" y="-40%" width="140%" height="180%">
+        <feDropShadow dx="0" dy="1" stdDeviation="1.2" flood-color="#0a1e2d" flood-opacity="0.10"/>
+      </filter>
+    </defs>`;
 
   const groups = nodes.map((n) => `
-    <g transform="translate(${n.x}, 60)">
-      <rect x="-58" y="-28" width="116" height="56" rx="10"
-            fill="${softFor(n.kind)}" stroke="${fillFor(n.kind)}" stroke-width="1.5" />
-      <text x="0" y="-4" text-anchor="middle"
+    <g transform="translate(${n.x}, 68)" filter="url(#node-shadow)">
+      <rect x="-64" y="-30" width="128" height="60" rx="12"
+            fill="${fillFor(n.kind)}" stroke="${strokeFor(n.kind)}" stroke-width="1.4" />
+      <text x="0" y="-6" text-anchor="middle"
             font-family="var(--font-sans)" font-size="13" font-weight="600"
-            fill="${fillFor(n.kind)}">${esc(n.label)}</text>
-      <text x="0" y="15" text-anchor="middle"
-            font-family="var(--font-mono)" font-size="11"
+            fill="${strokeFor(n.kind)}">${esc(n.label)}</text>
+      <text x="0" y="14" text-anchor="middle"
+            font-family="var(--font-mono)" font-size="11.5" font-weight="500"
             fill="var(--ink-3)">${esc(n.sub)}</text>
     </g>
   `).join('');
 
   const arrows = nodes.slice(0, -1).map((n, i) => {
     const next = nodes[i + 1];
-    const x1 = n.x + 60, x2 = next.x - 60;
+    const x1 = n.x + 64, x2 = next.x - 64;
     return `
       <g>
-        <line x1="${x1}" y1="60" x2="${x2}" y2="60"
-              stroke="var(--line)" stroke-width="1.5" />
-        <polygon points="${x2},60 ${x2 - 6},57 ${x2 - 6},63"
-                 fill="var(--ink-4)" />
+        <line x1="${x1}" y1="68" x2="${x2}" y2="68"
+              stroke="url(#grad-flow)" stroke-width="1.8" stroke-linecap="round" />
+        <polygon points="${x2},68 ${x2 - 7},64 ${x2 - 7},72" fill="var(--brand)" />
       </g>`;
   }).join('');
 
-  // Gate emphasis at Review
   const gate = `
-    <g transform="translate(365, 60)">
-      <rect x="-64" y="-34" width="128" height="68" rx="12"
-            fill="none" stroke="var(--info)" stroke-width="1.5"
-            stroke-dasharray="4 3" opacity="0.6" />
-      <text x="0" y="52" text-anchor="middle"
-            font-family="var(--font-sans)" font-size="10.5" font-weight="600"
-            fill="var(--info)" letter-spacing="0.5">HUMAN GATE</text>
+    <g transform="translate(370, 68)">
+      <rect x="-72" y="-40" width="144" height="80" rx="8"
+            fill="none" stroke="var(--ai)" stroke-width="1"
+            stroke-dasharray="4 3" opacity="0.5" />
+      <text x="0" y="54" text-anchor="middle"
+            font-family="var(--font-sans)" font-size="10" font-weight="500"
+            fill="var(--ai)" letter-spacing="0.02em">Human review required</text>
     </g>`;
 
   const svg = `
-    <svg class="pipeline-svg" viewBox="0 0 900 140"
+    <svg class="pipeline-svg" viewBox="0 0 908 158"
          preserveAspectRatio="xMidYMid meet" role="img" aria-label="Pipeline flow">
+      ${defs}
       ${arrows}
       ${gate}
       ${groups}
@@ -389,7 +408,9 @@ function aiDetail(ai) {
       <span class="detail-label">Co-pilot</span>
       <span class="tag ai">${esc(ai.model)}</span>
       <span class="tag mono">${esc(ai.template_id)}</span>
-      <span class="tag mono" title="SHA-256 of the exact rendered prompt">prompt ${esc(ai.prompt_hash.slice(0, 12))}</span>
+      <span class="tag mono copyable" data-value="${esc(ai.prompt_hash)}"
+            data-label="prompt hash"
+            title="SHA-256 of the exact rendered prompt — click to copy">prompt ${esc(ai.prompt_hash.slice(0, 12))}</span>
       <span class="tag mono">${ai.latency_ms} ms</span>
       ${flags.join('')}
     </div>
@@ -865,9 +886,12 @@ function renderProvenanceRows() {
     ? state.provenance.map((e) => `<tr>
         <td class="num">${e.sequence}</td>
         <td><b>${esc(e.event_type)}</b></td>
-        <td class="mono">${esc(e.entity_id.slice(0, 22))}</td>
-        <td class="mono" title="${esc(e.previous_hash)}">${esc(e.previous_hash.slice(0, 12))}…</td>
-        <td class="mono" title="${esc(e.hash)}">${esc(e.hash.slice(0, 12))}…</td>
+        <td class="mono copyable" data-value="${esc(e.entity_id)}" data-label="entity id"
+            title="click to copy — ${esc(e.entity_id)}">${esc(e.entity_id.slice(0, 22))}</td>
+        <td class="mono copyable" data-value="${esc(e.previous_hash)}" data-label="previous hash"
+            title="click to copy — ${esc(e.previous_hash)}">${esc(e.previous_hash.slice(0, 12))}…</td>
+        <td class="mono copyable" data-value="${esc(e.hash)}" data-label="hash"
+            title="click to copy — ${esc(e.hash)}">${esc(e.hash.slice(0, 12))}…</td>
         <td>${esc(ago(e.created_at))}</td>
       </tr>`).join('')
     : '<tr><td colspan="6"><span class="muted">No events recorded yet.</span></td></tr>';
@@ -1011,6 +1035,8 @@ function drawerMarkup() {
 
   const actionRow = isPending && !result ? `
     <div class="drawer-actions">
+      <button class="btn btn-quiet" id="drawer-export" type="button" title="Copy proposal JSON to clipboard">Export JSON</button>
+      <span style="flex:1"></span>
       <button class="btn btn-quiet" id="drawer-close-2" type="button">Cancel</button>
       <button class="btn btn-danger" id="drawer-reject" type="button">Reject</button>
       <button class="btn btn-primary" id="drawer-approve" type="button">
@@ -1018,6 +1044,8 @@ function drawerMarkup() {
       </button>
     </div>` : `
     <div class="drawer-actions">
+      <button class="btn btn-quiet" id="drawer-export" type="button" title="Copy proposal + FHIR JSON to clipboard">Export JSON</button>
+      <span style="flex:1"></span>
       <button class="btn btn-quiet" id="drawer-close-2" type="button">Close</button>
     </div>`;
 
@@ -1285,13 +1313,69 @@ async function refresh() {
 
 /* ── View switching ─────────────────────────────────────────────────────── */
 
-function switchView(name) {
+const KNOWN_VIEWS = ['overview', 'review', 'ingest', 'sites', 'alerts', 'audit'];
+
+function switchView(name, opts = {}) {
+  if (!KNOWN_VIEWS.includes(name)) name = 'overview';
   state.view = name;
   $$('.nav-item').forEach((n) => n.classList.toggle('is-active', n.dataset.view === name));
   $$('.view').forEach((v) => v.classList.toggle('is-active', v.dataset.view === name));
-  // Focus first heading for accessibility
   const heading = $(`.view[data-view="${name}"] h1`);
   if (heading) heading.setAttribute('tabindex', '-1');
+  if (!opts.silent) writeHash();
+}
+
+/* URL routing — hash form: #<view>?<key=value&...>  e.g. #review?filter=approved */
+function readHash() {
+  const raw = window.location.hash.replace(/^#/, '');
+  if (!raw) return { view: 'overview', params: {} };
+  const [view, qs] = raw.split('?');
+  const params = {};
+  if (qs) for (const part of qs.split('&')) {
+    const [k, v = ''] = part.split('=');
+    if (k) params[decodeURIComponent(k)] = decodeURIComponent(v);
+  }
+  return { view, params };
+}
+
+function writeHash() {
+  let hash = `#${state.view}`;
+  if (state.view === 'review' && state.filter && state.filter !== 'pending') {
+    hash += `?filter=${state.filter}`;
+  }
+  if (state.view === 'review' && state.search) {
+    hash += (hash.includes('?') ? '&' : '?') + `q=${encodeURIComponent(state.search)}`;
+  }
+  if (window.location.hash !== hash) {
+    history.replaceState(null, '', hash);
+  }
+}
+
+function applyHash() {
+  const { view, params } = readHash();
+  if (view && view !== state.view) switchView(view, { silent: true });
+  if (view === 'review') {
+    if (params.filter && ['pending', 'approved', 'rejected', 'all'].includes(params.filter)) {
+      state.filter = params.filter;
+      $$('.tab').forEach((t) => t.classList.toggle('is-active', t.dataset.filter === state.filter));
+    }
+    if (params.q !== undefined) {
+      state.search = params.q;
+      const input = $('#review-search');
+      if (input) input.value = params.q;
+    }
+    renderReview();
+  }
+}
+
+/* Copy-on-click — any element with .copyable copies data-value (or textContent) */
+async function copyToClipboard(text, label = 'value') {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(`Copied ${label} to clipboard`);
+  } catch (e) {
+    toast('Copy failed — permission not granted', true);
+  }
 }
 
 /* ── Command palette ────────────────────────────────────────────────────── */
@@ -1522,7 +1606,21 @@ function wire() {
     $$('.tab').forEach((t) => t.classList.toggle('is-active', t === tab));
     state.focusIndex = 0;
     renderReview();
+    writeHash();
   }));
+
+  // Copy-on-click delegation — any .copyable element copies its data-value.
+  document.addEventListener('click', (e) => {
+    const c = e.target.closest('.copyable');
+    if (!c) return;
+    const val = c.dataset.value || c.textContent.trim();
+    const label = c.dataset.label || 'hash';
+    e.preventDefault();
+    copyToClipboard(val, label);
+  });
+
+  // Hash routing — react to back/forward
+  window.addEventListener('hashchange', applyHash);
 
   $('#reviewer-name').value = localStorage.getItem(REVIEWER_KEY) || '';
   $('#reviewer-name').addEventListener('change', (e) => {
@@ -1617,6 +1715,13 @@ function wire() {
     if (btn.id === 'drawer-close' || btn.id === 'drawer-close-2') { closeDrawer(); return; }
     if (btn.id === 'drawer-approve') { drawerApprove(); return; }
     if (btn.id === 'drawer-reject')  { drawerReject();  return; }
+    if (btn.id === 'drawer-export')  {
+      const p = state.proposals.find((x) => x.id === state.drawer.proposalId);
+      if (!p) return;
+      const payload = { proposal: p, result: state.drawer.result || null };
+      copyToClipboard(JSON.stringify(payload, null, 2), 'proposal JSON');
+      return;
+    }
     const pick = btn.dataset.drawerPick;
     if (pick) {
       state.drawer.override = state.drawer.override || {};
@@ -1683,6 +1788,7 @@ function wire() {
 
 applyTheme(currentTheme());
 wire();
+applyHash();
 refresh();
 
 // Passive tick: refresh "N min ago" without a full data pull.
