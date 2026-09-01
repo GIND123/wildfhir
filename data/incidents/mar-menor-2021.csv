@@ -1,0 +1,7 @@
+source_id,source_type,parameter,value,unit,observed_at,site_code,site_name,latitude,longitude,evidence_url
+es-carm-marmenor,agency,nitrate,72.0,mg/L,2021-08-10T08:00:00Z,marmenor-north,Mar Menor northern basin,37.7300,-0.7800,
+es-carm-marmenor,agency,total phosphates,0.88,mg/L,2021-08-10T08:00:00Z,marmenor-north,Mar Menor northern basin,37.7300,-0.7800,
+es-carm-marmenor,agency,temp water,30.6,Cel,2021-08-12T08:00:00Z,marmenor-north,Mar Menor northern basin,37.7300,-0.7800,
+copernicus-s2,satellite,NDCI,0.47,1,2021-08-13T10:40:00Z,marmenor-north,Mar Menor northern basin,37.7300,-0.7800,
+es-carm-marmenor,agency,dissolved oxygen,1.40,mg/L,2021-08-16T06:00:00Z,marmenor-lamanga,Mar Menor at La Manga shore,37.7000,-0.7500,
+es-carm-marmenor,agency,electrical conductivity,68.0,mS/cm,2021-08-16T06:00:00Z,marmenor-lamanga,Mar Menor at La Manga shore,37.7000,-0.7500,

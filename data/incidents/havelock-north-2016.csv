@@ -1,0 +1,7 @@
+source_id,source_type,parameter,value,unit,observed_at,site_code,site_name,latitude,longitude,evidence_url
+hbrc-brookvale,agency,total coliforms,1900,{cfu}/100mL,2016-08-08T07:00:00Z,brookvale-bore-1,Brookvale Road bore field,-39.6667,176.8833,
+hbrc-brookvale,agency,faecal coliforms,940,CFU/100mL,2016-08-10T07:00:00Z,brookvale-bore-1,Brookvale Road bore field,-39.6667,176.8833,
+hbrc-brookvale,agency,ammonium,2.4,mg/L,2016-08-08T07:00:00Z,brookvale-pond,Pond 90 m from the bore head,-39.6660,176.8845,
+hbrc-brookvale,agency,nitrate,58.0,mg/L,2016-08-08T07:00:00Z,brookvale-pond,Pond 90 m from the bore head,-39.6660,176.8845,
+hbrc-brookvale,agency,total suspended solids,66.0,mg/L,2016-08-07T22:00:00Z,brookvale-bore-1,Brookvale Road bore field,-39.6667,176.8833,
+hbrc-brookvale,agency,free chlorine residual,0.00,mg/L,2016-08-08T07:00:00Z,brookvale-bore-1,Brookvale Road bore field,-39.6667,176.8833,

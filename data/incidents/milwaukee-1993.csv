@@ -1,0 +1,7 @@
+source_id,source_type,parameter,value,unit,observed_at,site_code,site_name,latitude,longitude,evidence_url
+mke-howard-ave,agency,turbidity,0.30,[NTU],1993-03-20T06:00:00Z,mke-howard-ave-finished,Howard Avenue plant finished water,42.9736,-87.8814,
+mke-howard-ave,agency,turbidity,1.70,[NTU],1993-03-28T06:00:00Z,mke-howard-ave-finished,Howard Avenue plant finished water,42.9736,-87.8814,
+mke-howard-ave,agency,total suspended solids,4.2,mg/L,1993-03-20T06:00:00Z,mke-howard-ave-finished,Howard Avenue plant finished water,42.9736,-87.8814,
+mke-howard-ave,agency,total suspended solids,31.5,mg/L,1993-03-28T06:00:00Z,mke-howard-ave-finished,Howard Avenue plant finished water,42.9736,-87.8814,
+mke-howard-ave,agency,suspended solids,48.0,mg/L,1993-04-01T06:00:00Z,mke-howard-ave-finished,Howard Avenue plant finished water,42.9736,-87.8814,
+mke-intake,agency,water temperature,3.8,Cel,1993-03-28T06:00:00Z,mke-lake-intake,Lake Michigan south intake,42.9800,-87.8600,

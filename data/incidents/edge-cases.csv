@@ -1,0 +1,11 @@
+source_id,source_type,parameter,value,unit,observed_at,site_code,site_name,latitude,longitude,evidence_url
+sensor-fault-lab,agency,dissolved oxygen,-5.0,mg/L,2026-06-01T08:00:00Z,edge-site,Edge-case test site,50.0000,10.0000,
+sensor-fault-lab,agency,pH,130.0,[pH],2026-06-01T08:00:00Z,edge-site,Edge-case test site,50.0000,10.0000,
+sensor-fault-lab,agency,water temperature,-400.0,Cel,2026-06-01T08:00:00Z,edge-site,Edge-case test site,50.0000,10.0000,
+sensor-fault-lab,agency,electrical conductivity,999999.0,mS/cm,2026-06-01T08:00:00Z,edge-site,Edge-case test site,50.0000,10.0000,
+boundary-lab,agency,dissolved oxygen,4.0,mg/L,2026-06-01T09:00:00Z,edge-site,Edge-case test site,50.0000,10.0000,
+boundary-lab,agency,electrical conductivity,2.0,mS/cm,2026-06-01T09:00:00Z,edge-site,Edge-case test site,50.0000,10.0000,
+boundary-lab,agency,dissolved oxygen,4.01,mg/L,2026-06-01T10:00:00Z,edge-site,Edge-case test site,50.0000,10.0000,
+boundary-lab,agency,electrical conductivity,1.99,mS/cm,2026-06-01T10:00:00Z,edge-site,Edge-case test site,50.0000,10.0000,
+unknown-lab,agency,radon activity concentration,42.0,Bq/L,2026-06-01T11:00:00Z,edge-site,Edge-case test site,50.0000,10.0000,
+unknown-lab,agency,dissolved oxygen,6.2,quarts per fortnight,2026-06-01T11:00:00Z,edge-site,Edge-case test site,50.0000,10.0000,

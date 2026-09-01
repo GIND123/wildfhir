@@ -1,0 +1,8 @@
+source_id,source_type,parameter,value,unit,observed_at,site_code,site_name,latitude,longitude,evidence_url
+hu-katved-kolontar,agency,pH,13.0,[pH],2010-10-04T14:00:00Z,torna-kolontar,Torna creek at Kolontar,47.1000,17.4333,
+hu-katved-kolontar,agency,aluminium,42000,ug/L,2010-10-04T14:00:00Z,torna-kolontar,Torna creek at Kolontar,47.1000,17.4333,
+hu-katved-marcal,agency,pH,130.0,[pH],2010-10-05T08:00:00Z,marcal-karako,Marcal at Karako,47.2000,17.1500,
+hu-katved-marcal,agency,pH,9.6,[pH],2010-10-06T08:00:00Z,marcal-karako,Marcal at Karako,47.2000,17.1500,
+hu-katved-marcal,agency,dissolved O2,2.10,mg/L,2010-10-06T08:00:00Z,marcal-karako,Marcal at Karako,47.2000,17.1500,
+hu-katved-gyor,agency,pH,8.4,[pH],2010-10-09T08:00:00Z,danube-gyor,Danube at Gyor,47.6875,17.6504,
+hu-katved-gyor,agency,aluminium,310,ug/L,2010-10-09T08:00:00Z,danube-gyor,Danube at Gyor,47.6875,17.6504,

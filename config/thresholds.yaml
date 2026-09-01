@@ -1,8 +1,16 @@
 # Demonstration policy only. These values are deliberately not described as
-# regulatory WFD/EQS limits. Replace them with approved, site-specific policy.
+# regulatory WFD/EQS, Drinking Water Directive, or Bathing Water Directive
+# limits. Replace them with approved, site-specific policy before any real use.
+#
+# Each rule may carry an optional `id`. It disambiguates two rules on the same
+# code (a low and a high bound) so both can raise distinct alerts. Rules
+# without one keep the code as their identity.
+#
+# Rules are grouped by the incident in docs/incidents.md that motivated them.
 policy_id: oder-replay-demo-v1
 policy_status: demo-not-for-operational-use
 rules:
+  # -- salinity / conductivity (Oder 2022) --------------------------------
   - code: electrical-conductivity
     operator: gte
     value: 2.0
@@ -10,6 +18,15 @@ rules:
     severity: high
     message: Conductivity pattern warrants cross-border ecological review.
     audiences: [public-health, veterinary, water-authority]
+  - code: chloride
+    operator: gte
+    value: 800.0
+    unit: mg/L
+    severity: high
+    message: Chloride elevated; check for a saline discharge upstream.
+    audiences: [water-authority, veterinary]
+
+  # -- algal bloom proxies (Toledo 2014, Mar Menor 2019/2021) -------------
   - code: ndci
     operator: gte
     value: 0.35
@@ -17,6 +34,15 @@ rules:
     severity: high
     message: Satellite chlorophyll proxy warrants bloom investigation.
     audiences: [public-health, veterinary, water-authority]
+  - code: mci
+    operator: gte
+    value: 0.20
+    unit: '1'
+    severity: high
+    message: Maximum Chlorophyll Index warrants bloom investigation and toxin sampling.
+    audiences: [public-health, veterinary, water-authority]
+
+  # -- oxygen and thermal stress (Oder 2022, Mar Menor 2021) --------------
   - code: dissolved-oxygen
     operator: lte
     value: 4.0
@@ -24,4 +50,115 @@ rules:
     severity: critical
     message: Low dissolved oxygen may threaten aquatic life.
     audiences: [veterinary, water-authority]
+  - code: waterTemperature
+    operator: gte
+    value: 25.0
+    unit: Cel
+    severity: moderate
+    message: Elevated water temperature compounds bloom and hypoxia risk.
+    audiences: [water-authority]
 
+  # -- acute pH excursions (Ajka 2010 caustic, Gold King 2015 acidic) -----
+  - id: ph-alkaline
+    code: ph
+    operator: gte
+    value: 9.0
+    unit: '[pH]'
+    severity: critical
+    message: Strongly alkaline water; caustic release suspected.
+    audiences: [public-health, veterinary, water-authority]
+  - id: ph-acidic
+    code: ph
+    operator: lte
+    value: 5.5
+    unit: '[pH]'
+    severity: critical
+    message: Strongly acidic water; acid mine drainage or acidic discharge suspected.
+    audiences: [public-health, veterinary, water-authority]
+
+  # -- faecal indicator organisms (Walkerton 2000, Havelock North 2016,
+  #    Seine 2024, Brixham 2024). 1 dL = 100 mL. -------------------------
+  - code: coliforms
+    operator: gte
+    value: 900.0
+    unit: '{cfu}/dL'
+    severity: critical
+    message: Faecal indicator organisms above the demonstration recreational bound.
+    audiences: [public-health, veterinary, water-authority]
+
+  # -- nutrients (Mar Menor 2019/2021, Havelock North 2016) --------------
+  - code: nitrate
+    operator: gte
+    value: 50.0
+    unit: mg/L
+    severity: high
+    message: Nitrate elevated; eutrophication and drinking-water risk warrant review.
+    audiences: [public-health, water-authority]
+  - code: ammonium
+    operator: gte
+    value: 1.0
+    unit: mg/L
+    severity: high
+    message: Ammonium elevated; untreated sewage or slurry ingress suspected.
+    audiences: [public-health, water-authority]
+  - code: total-phosphates
+    operator: gte
+    value: 0.5
+    unit: mg/L
+    severity: moderate
+    message: Total phosphates elevated; bloom-forming conditions accumulating.
+    audiences: [water-authority]
+
+  # -- particulates as a treatment-breakthrough proxy (Milwaukee 1993,
+  #    Brixham 2024, Ostersund 2010) -------------------------------------
+  - code: tss
+    operator: gte
+    value: 25.0
+    unit: mg/L
+    severity: high
+    message: Suspended solids elevated; filtration performance and pathogen breakthrough warrant review.
+    audiences: [public-health, water-authority]
+
+  # -- dissolved metals (Flint 2014, Baia Mare 2000, Ajka 2010) ----------
+  - code: lead-dissolved
+    operator: gte
+    value: 10.0
+    unit: ug/L
+    severity: critical
+    message: Dissolved lead above the demonstration bound; exposure assessment required.
+    audiences: [public-health, water-authority]
+  - code: aluminium-dissolved
+    operator: gte
+    value: 200.0
+    unit: ug/L
+    severity: high
+    message: Dissolved aluminium elevated; caustic or coagulant release suspected.
+    audiences: [public-health, water-authority]
+  - code: copper-dissolved
+    operator: gte
+    value: 100.0
+    unit: ug/L
+    severity: high
+    message: Dissolved copper elevated; mine drainage or industrial discharge suspected.
+    audiences: [veterinary, water-authority]
+  - code: zinc-dissolved
+    operator: gte
+    value: 500.0
+    unit: ug/L
+    severity: high
+    message: Dissolved zinc elevated; mine drainage or industrial discharge suspected.
+    audiences: [veterinary, water-authority]
+  - code: mercury-dissolved
+    operator: gte
+    value: 1.0
+    unit: ug/L
+    severity: critical
+    message: Dissolved mercury above the demonstration bound; fish-consumption advice warranted.
+    audiences: [public-health, veterinary, water-authority]
+  - code: arsenic-dissolved
+    operator: gte
+    value: 10.0
+    unit: ug/L
+    severity: critical
+    message: Dissolved arsenic above the demonstration bound; abstraction review required.
+    audiences: [public-health, water-authority]

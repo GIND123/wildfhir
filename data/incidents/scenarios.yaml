@@ -1,0 +1,332 @@
+# Incident simulation manifest.
+#
+# Each scenario names a fixture and the outcome the deterministic pipeline must
+# produce for it. `tests/test_incidents.py` runs every one of these offline, with
+# no keys and no network, so the incident catalogue in docs/incidents.md is
+# executable rather than aspirational. `scripts/simulate.py` runs the same
+# scenarios against a live server.
+#
+# Outcome vocabulary, one per source row:
+#   coded        proposal carries an OAH coding and a normalized UCUM quantity
+#   blocked_qty  coding found, quantity withheld (unresolvable unit, or the
+#                normalized value is outside the reviewed plausible range).
+#                Approval is refused until a person corrects it.
+#   no_code      no curated match. The concept is absent from the OAH IG's
+#                temporary code system, or too far from any alias to guess.
+#
+# All measurement values are SYNTHETIC, shaped around the published narrative of
+# each incident. They are not reconstructed measurements, and the demonstration
+# thresholds are not WFD, Drinking Water Directive, or Bathing Water Directive
+# limits. See docs/incidents.md for the sources behind each narrative.
+
+version: 1
+policy_id: oder-replay-demo-v1
+
+scenarios:
+  - id: oder-2022
+    title: Oder River fish kill (Poland / Germany, July-August 2022)
+    dataset: data/incidents/oder-2022.csv
+    bulletin: data/incidents/oder-2022.bulletin.txt
+    rows: 11
+    expect:
+      coded: 9
+      blocked_qty: 0
+      no_code: 2
+      alerts:
+        - {code: electrical-conductivity, severity: high}
+        - {code: chloride, severity: high}
+        - {code: ndci, severity: high}
+        - {code: dissolved-oxygen, severity: critical}
+        - {code: waterTemperature, severity: moderate}
+      audiences: [public-health, veterinary, water-authority]
+    edge_cases:
+      - multilingual-label-defeats-alias-matching   # "Leitfaehigkeit", "chlorki"
+      - unit-conversion-uS-to-mS
+      - concept-absent-from-oah-ig                  # Prymnesium parvum cell count
+      - cross-border-audience-routing
+    notes: >-
+      "Leitfaehigkeit" scores 0.31 against every curated alias and is refused by
+      the deterministic path. That refusal is the point: it is the reading the
+      Gemini co-pilot resolves, and the reviewer still decides. "chlorki" is the
+      Polish label and matches "chloride" on string similarity alone.
+
+  - id: milwaukee-1993
+    title: Milwaukee cryptosporidiosis outbreak (USA, March-April 1993)
+    dataset: data/incidents/milwaukee-1993.csv
+    rows: 6
+    expect:
+      coded: 4
+      blocked_qty: 0
+      no_code: 2
+      alerts:
+        - {code: tss, severity: high}
+      audiences: [public-health, water-authority]
+    edge_cases:
+      - concept-absent-from-oah-ig                  # turbidity has no OAH code
+      - documented-proxy-indicator                  # TSS stands in, reviewer decides
+      - rising-trend-across-days
+    notes: >-
+      Turbidity is the indicator the outbreak actually turned on, and the OAH
+      temporary code system has no term for it. The bridge refuses to code it
+      rather than inventing one, and the reviewer sees the refusal. Total
+      suspended solids is a defensible proxy the IG does define.
+
+  - id: walkerton-2000
+    title: Walkerton E. coli O157:H7 outbreak (Ontario, Canada, May 2000)
+    dataset: data/incidents/walkerton-2000.csv
+    bulletin: data/incidents/walkerton-2000.bulletin.txt
+    rows: 5
+    expect:
+      coded: 4
+      blocked_qty: 0
+      no_code: 1
+      alerts:
+        - {code: coliforms, severity: critical}
+        - {code: ammonium, severity: high}
+        - {code: tss, severity: high}
+      audiences: [public-health, veterinary, water-authority]
+    edge_cases:
+      - concept-absent-from-oah-ig                  # free chlorine residual
+      - two-source-unit-spellings                   # {cfu}/100mL and CFU/100mL
+      - tamper-evidence                             # see docs/incidents.md
+    notes: >-
+      The inquiry found falsified operating records. The hash chain is the
+      counter-measure being demonstrated here: run the tamper drill in
+      docs/incidents.md after approving these proposals.
+
+  - id: toledo-2014
+    title: Toledo "do not drink" advisory (Ohio, USA, August 2014)
+    dataset: data/incidents/toledo-2014.csv
+    rows: 7
+    expect:
+      coded: 6
+      blocked_qty: 0
+      no_code: 1
+      alerts:
+        - {code: ndci, severity: high}
+        - {code: mci, severity: high}
+        - {code: total-phosphates, severity: moderate}
+        - {code: waterTemperature, severity: moderate}
+      audiences: [public-health, veterinary, water-authority]
+    edge_cases:
+      - satellite-and-agency-fusion-at-one-site
+      - concept-absent-from-oah-ig                  # microcystin-LR
+      - two-independent-bloom-indices-agree
+    notes: >-
+      Microcystin is the toxin the advisory was actually issued on, and the OAH
+      IG has no code for it. Two satellite indices (NDCI and MCI) both cross
+      five days earlier, which is the earlier-warning claim being tested.
+
+  - id: havelock-north-2016
+    title: Havelock North campylobacteriosis outbreak (New Zealand, August 2016)
+    dataset: data/incidents/havelock-north-2016.csv
+    rows: 6
+    expect:
+      coded: 5
+      blocked_qty: 0
+      no_code: 1
+      alerts:
+        - {code: coliforms, severity: critical}
+        - {code: ammonium, severity: high}
+        - {code: nitrate, severity: high}
+        - {code: tss, severity: high}
+      audiences: [public-health, veterinary, water-authority]
+    edge_cases:
+      - animal-to-water-to-human-pathway            # the One Health case
+      - rainfall-driven-ingress
+      - concept-absent-from-oah-ig                  # free chlorine residual
+    notes: >-
+      Sheep faeces, heavy rain, an unchlorinated bore. The veterinary and
+      public-health audiences are routed from the same reading, which is the
+      One Health routing claim in one step.
+
+  - id: flint-2014
+    title: Flint drinking-water crisis (Michigan, USA, 2014-2015)
+    dataset: data/incidents/flint-2014.csv
+    rows: 6
+    expect:
+      coded: 5
+      blocked_qty: 0
+      no_code: 1
+      alerts:
+        - {code: lead-dissolved, severity: critical}
+      audiences: [public-health, water-authority]
+    edge_cases:
+      - sample-exclusion-is-detectable              # the tamper drill
+      - citizen-sample-alongside-agency-sample
+      - unit-conversion-mg-to-ug
+    notes: >-
+      Two high lead samples were dropped from the regulatory round, which moved
+      the reported 90th percentile below the action level. Every reading here is
+      hash-chained on ingestion, so removing one after the fact is detectable.
+      The citizen sample (Virginia Tech kit) is ingested through the same path
+      as the agency sample and carries source_type=citizen.
+
+  - id: baia-mare-2000
+    title: Baia Mare cyanide spill, Somes-Tisza-Danube (Romania / Hungary / Serbia, January-February 2000)
+    dataset: data/incidents/baia-mare-2000.csv
+    rows: 8
+    expect:
+      coded: 5
+      blocked_qty: 0
+      no_code: 3
+      alerts:
+        - {code: copper-dissolved, severity: high}
+        - {code: zinc-dissolved, severity: high}
+        - {code: dissolved-oxygen, severity: critical}
+      audiences: [veterinary, water-authority]
+    edge_cases:
+      - concept-absent-from-oah-ig                  # total cyanide, three times
+      - three-country-plume-tracking
+      - co-contaminants-carry-the-signal
+    notes: >-
+      Cyanide, the actual contaminant, has no OAH code, so the bridge refuses it
+      three times over. The alert that does fire comes from the co-released
+      metals and the oxygen collapse. That is an honest result and it is also
+      the strongest argument for submitting the gap to the IG.
+
+  - id: ajka-2010
+    title: Ajka alumina plant red-mud spill (Hungary, October 2010)
+    dataset: data/incidents/ajka-2010.csv
+    rows: 7
+    expect:
+      coded: 6
+      blocked_qty: 1
+      no_code: 0
+      alerts:
+        - {code: ph, severity: critical}
+        - {code: aluminium-dissolved, severity: high}
+        - {code: dissolved-oxygen, severity: critical}
+      audiences: [public-health, veterinary, water-authority]
+    edge_cases:
+      - implausible-value-blocks-quantity           # pH 130.0, a decimal typo
+      - two-rules-on-one-code                       # ph-alkaline and ph-acidic
+      - downstream-dilution-below-threshold         # Danube at Gyor does not fire
+    notes: >-
+      The pH 130.0 row is a deliberate decimal typo for 13.0. It is coded but its
+      quantity is withheld, so it publishes nothing and raises nothing until a
+      person fixes it. Before the plausible-range guard existed, a value like
+      this went straight through at 0.99 confidence.
+
+  - id: mar-menor-2021
+    title: Mar Menor lagoon anoxic fish kill (Spain, August 2021)
+    dataset: data/incidents/mar-menor-2021.csv
+    rows: 6
+    expect:
+      coded: 6
+      blocked_qty: 0
+      no_code: 0
+      alerts:
+        - {code: nitrate, severity: high}
+        - {code: total-phosphates, severity: moderate}
+        - {code: waterTemperature, severity: moderate}
+        - {code: ndci, severity: high}
+        - {code: dissolved-oxygen, severity: critical}
+        - {code: electrical-conductivity, severity: high}
+      audiences: [public-health, veterinary, water-authority]
+    edge_cases:
+      - full-eutrophication-chain-in-one-timeline
+      - naturally-high-conductivity-fires-anyway    # a saline lagoon, not a river
+      - every-row-codes-cleanly
+    notes: >-
+      The one scenario where nothing is refused and nothing is blocked: the whole
+      nutrient-to-heat-to-bloom-to-anoxia chain is inside the OAH vocabulary.
+      It also exposes a real policy weakness. The conductivity rule was written
+      for a freshwater river; a hypersaline lagoon crosses it by nature, not by
+      pollution. Site-specific policy is required before operational use.
+
+  - id: akerselva-2011
+    title: Akerselva chlorine release (Oslo, Norway, March 2011)
+    dataset: data/incidents/akerselva-2011.csv
+    bulletin: data/incidents/akerselva-2011.bulletin.txt
+    rows: 6
+    expect:
+      coded: 5
+      blocked_qty: 0
+      no_code: 1
+      alerts:
+        - {code: dissolved-oxygen, severity: critical}
+      audiences: [veterinary, water-authority]
+    edge_cases:
+      - urban-stream-in-a-oah-pilot-city            # Oslo
+      - concept-absent-from-oah-ig                  # free chlorine residual
+      - upstream-normal-downstream-critical
+    notes: >-
+      Oslo is one of the five OneAquaHealth pilot cities and the Akerselva is
+      exactly the kind of urban stream the project studies. The upstream reading
+      is unremarkable and the downstream one is critical, which is the
+      site-resolved routing case.
+
+  - id: seine-2024
+    title: Seine bathing-water exceedances (Paris, France, July-August 2024)
+    dataset: data/incidents/seine-2024.csv
+    rows: 6
+    expect:
+      coded: 4
+      blocked_qty: 1
+      no_code: 1
+      alerts:
+        - {code: coliforms, severity: critical}
+      audiences: [public-health, veterinary, water-authority]
+    edge_cases:
+      - incompatible-estimators-must-not-be-converted   # MPN vs CFU
+      - concept-absent-from-oah-ig                      # enterococci
+      - same-site-same-time-two-disagreeing-sources
+    notes: >-
+      Two sources report the same site at the same instant and disagree by more
+      than threefold, because one reports MPN and the other CFU. MPN is
+      deliberately absent from the conversion table: MPN and CFU are different
+      estimators and silently equating them would be exactly the failure this
+      project exists to prevent. The MPN row is coded but its quantity is
+      withheld for a reviewer. Enterococci, the other Bathing Water Directive
+      indicator, has no OAH code at all.
+
+  - id: brixham-2024
+    title: Brixham cryptosporidiosis outbreak (Devon, UK, May 2024)
+    dataset: data/incidents/brixham-2024.csv
+    bulletin: data/incidents/brixham-2024.bulletin.txt
+    rows: 5
+    expect:
+      coded: 4
+      blocked_qty: 0
+      no_code: 1
+      alerts:
+        - {code: coliforms, severity: critical}
+        - {code: tss, severity: high}
+      audiences: [public-health, veterinary, water-authority]
+    edge_cases:
+      - citizen-illness-reports-precede-the-lab-result
+      - concept-absent-from-oah-ig                  # free chlorine residual
+      - recovery-reading-does-not-alert
+    notes: >-
+      Residents reported illness on 14 May; the boil notice followed on 15 May.
+      The 20 May reading is a recovery value that must not alert, which is the
+      "does the alert clear" case.
+
+  - id: edge-cases
+    title: Synthetic edge cases - sensor faults, boundaries, and unknown inputs
+    dataset: data/incidents/edge-cases.csv
+    rows: 10
+    expect:
+      coded: 4
+      blocked_qty: 5
+      no_code: 1
+      alerts:
+        - {code: dissolved-oxygen, severity: critical}
+        - {code: electrical-conductivity, severity: high}
+      audiences: [public-health, veterinary, water-authority]
+    edge_cases:
+      - negative-dissolved-oxygen-blocked
+      - ph-decimal-typo-blocked
+      - below-absolute-zero-blocked
+      - absurd-magnitude-blocked
+      - threshold-boundary-inclusive               # 4.0 and 2.0 fire
+      - threshold-boundary-exclusive               # 4.01 and 1.99 do not
+      - unknown-parameter-refused
+      - unknown-unit-blocks-quantity
+    notes: >-
+      Not an incident. This fixture is the deliberate abuse case, and it is the
+      one to run first when changing coding.py or thresholds.py. Every one of the
+      four sensor-fault rows raised a false alert before the plausible-range
+      guard existed; the negative dissolved-oxygen row raised a *critical* one
+      routed to veterinary and water-authority at 0.99 confidence.

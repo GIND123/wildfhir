@@ -1,0 +1,9 @@
+source_id,source_type,parameter,value,unit,observed_at,site_code,site_name,latitude,longitude,evidence_url
+ro-aurul-tailings,agency,total cyanide,32.0,mg/L,2000-01-30T22:00:00Z,somes-baia-mare,Somes below Aurul tailings dam,47.6567,23.5686,
+ro-aurul-tailings,agency,copper,2100,ug/L,2000-01-30T22:00:00Z,somes-baia-mare,Somes below Aurul tailings dam,47.6567,23.5686,
+ro-aurul-tailings,agency,zinc,4800,ug/L,2000-01-30T22:00:00Z,somes-baia-mare,Somes below Aurul tailings dam,47.6567,23.5686,
+hu-vituki-tisza,agency,total cyanide,7.8,mg/L,2000-02-04T06:00:00Z,tisza-szolnok,Tisza at Szolnok,47.1747,20.1936,
+hu-vituki-tisza,agency,dissolved O2,3.10,mg/L,2000-02-04T06:00:00Z,tisza-szolnok,Tisza at Szolnok,47.1747,20.1936,
+hu-vituki-tisza,agency,pH,7.9,[pH],2000-02-04T06:00:00Z,tisza-szolnok,Tisza at Szolnok,47.1747,20.1936,
+rs-danube-novisad,agency,total cyanide,0.42,mg/L,2000-02-11T06:00:00Z,danube-novi-sad,Danube at Novi Sad,45.2671,19.8335,
+rs-danube-novisad,agency,copper,180,ug/L,2000-02-11T06:00:00Z,danube-novi-sad,Danube at Novi Sad,45.2671,19.8335,

@@ -1,0 +1,7 @@
+source_id,source_type,parameter,value,unit,observed_at,site_code,site_name,latitude,longitude,evidence_url
+paris-eau-lab,agency,E. coli,980,CFU/100mL,2024-07-30T06:00:00Z,seine-alexandre-iii,Seine at Pont Alexandre III,48.8638,2.3136,
+fluidion-alert,agency,E. coli,3400,MPN/100mL,2024-07-30T06:00:00Z,seine-alexandre-iii,Seine at Pont Alexandre III,48.8638,2.3136,
+paris-eau-lab,agency,enterococci,410,{cfu}/100mL,2024-07-30T06:00:00Z,seine-alexandre-iii,Seine at Pont Alexandre III,48.8638,2.3136,
+paris-eau-lab,agency,E. coli,220,CFU/100mL,2024-08-01T06:00:00Z,seine-alexandre-iii,Seine at Pont Alexandre III,48.8638,2.3136,
+paris-eau-lab,agency,ammonium,0.42,mg/L,2024-07-30T06:00:00Z,seine-bras-marie,Seine at Bras Marie,48.8530,2.3550,
+paris-eau-lab,agency,E. coli,1450,CFU/100mL,2024-07-30T06:00:00Z,seine-bras-marie,Seine at Bras Marie,48.8530,2.3550,

@@ -1,0 +1,6 @@
+source_id,source_type,parameter,value,unit,observed_at,site_code,site_name,latitude,longitude,evidence_url
+walkerton-puc,agency,free chlorine residual,0.00,mg/L,2000-05-15T09:00:00Z,walkerton-well-5,Walkerton Well 5,44.1281,-81.1483,
+walkerton-puc,agency,total coliforms,2400,{cfu}/100mL,2000-05-15T09:00:00Z,walkerton-well-5,Walkerton Well 5,44.1281,-81.1483,
+walkerton-puc,agency,faecal coliforms,1600,CFU/100mL,2000-05-17T09:00:00Z,walkerton-distribution,Walkerton distribution system,44.1247,-81.1470,
+walkerton-puc,agency,ammonium,1.8,mg/L,2000-05-17T09:00:00Z,walkerton-well-5,Walkerton Well 5,44.1281,-81.1483,
+walkerton-puc,agency,total suspended solids,42.0,mg/L,2000-05-13T09:00:00Z,walkerton-well-5,Walkerton Well 5,44.1281,-81.1483,

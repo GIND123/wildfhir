@@ -10,7 +10,7 @@ This repository contains only the first concept from the source brief: **the One
 
 ## Current status: done vs. pending
 
-**Done and tested (167 offline tests, no live Gemini or UMLS call ever runs in CI):**
+**Done and tested (251 offline tests, no live Gemini or UMLS call ever runs in CI):**
 
 - Curated OAH terminology coding and reviewed unit conversion ([coding.py](src/aquafhir/coding.py))
 - Gemini coding co-pilot, unstructured-bulletin intake, audience advisory drafting, grounded situation reports — all human-reviewed, all degrade cleanly with no key ([coding_llm.py](src/aquafhir/coding_llm.py), [intake.py](src/aquafhir/intake.py), [briefing.py](src/aquafhir/briefing.py))
@@ -21,6 +21,8 @@ This repository contains only the first concept from the source brief: **the One
 - SQLite-backed, hash-chained provenance for every proposal, decision, alert, and model/terminology call
 - A dependency-free reviewer console — queue, ingest, alerts, and audit trail — including a UMLS suggestion picker on each pending proposal
 - **Defensive ingestion boundaries.** The rest-hook Subscription surface accepts whatever a FHIR server sends: null or non-numeric quantities, absent ids, FHIR partial dates (`2022-07`), and wrong-typed `code.coding` are skipped with a log line instead of raising. Non-finite quantities are rejected at the model boundary rather than published as a JSON-null `valueQuantity.value` ([test_robustness.py](tests/test_robustness.py))
+- **A failed sensor cannot raise an alert.** Each indicator carries a reviewed `plausible_range` in [coding-rules.yaml](config/coding-rules.yaml), enforced in the single place both proposers compute a published number. A dissolved-oxygen probe reporting `-5.0 mg/L`, a `pH` of `130.0`, or a temperature below absolute zero is coded but its *quantity is withheld* — no publication, no alert, approval blocked until a person corrects it (see [§ The incident catalogue](#the-incident-catalogue))
+- **An executable incident catalogue.** Twelve real water-and-health incidents — Oder 2022, Milwaukee 1993, Walkerton 2000, Toledo 2014, Havelock North 2016, Flint 2014, Baia Mare 2000, Ajka 2010, Mar Menor 2021, Akerselva 2011, Seine 2024, Brixham 2024 — replayed as fixtures with their expected coding, refusal, and audience-routing outcomes enforced in CI ([incidents.md](docs/incidents.md), [test_incidents.py](tests/test_incidents.py), [simulate.py](scripts/simulate.py))
 - Docker Compose stack: bridge + HAPI + PostgreSQL, pinned image versions
 
 **Pending — tracked honestly rather than hidden:**
@@ -28,7 +30,9 @@ This repository contains only the first concept from the source brief: **the One
 - **Environmental LOINC coverage is genuinely incomplete.** LOINC has exact terms for pH, chloride, and conductivity in water, but *none* for dissolved oxygen or water temperature in an environmental specimen, and nothing for a satellite-derived index like NDCI. The crosswalk returns nothing for those rather than offering a plausible-looking wrong code, which is why the OAH IG's temporary code system exists at all. Submitting the gaps to LOINC is the real fix.
 - **Crosswalk provenance detail.** Approval today hash-chains only a boolean (`reviewer_attached_secondary_coding`). A production version should hash-chain the exact query/response the same way Gemini calls already are (prompt hash, response hash, latency) — tracked in [production-checklist.md](docs/production-checklist.md).
 - **SNOMED CT candidates are unvalidated.** LOINC results are checked against the published term table; SNOMED concept ids are passed through, because this repository deliberately does not vendor the SNOMED release.
-- **Live Earth-observation and agency connectors.** Still replaying the transparent synthetic Oder CSV; a real Copernicus Sentinel-2 or national river-monitoring feed is the next highest-value addition (see [§ Judging-criteria mapping](#judging-criteria-mapping), Scale row).
+- **The One Health loop is only half published.** The OAH IG already defines the human leg (`gastrointestinal`, `campylobacter`, `cryptosporidium`, `hospitalization-*`) and the animal leg (`fish`, `amphibians`, `ticks`), plus a second profile for them — `observation-health-measure-oah`. This bridge publishes only the environmental leg. Publishing the human counterpart against the same `Location` is the single highest-value next addition ([incidents.md](docs/incidents.md#terminology-gaps-this-catalogue-found)).
+- **Coded-value indicators are not supported.** `foam` (Foam/colour/smell), `macrophytes`, and `macroinvertebreates` are `CodeableConcept` observations, not quantities, and this bridge publishes `valueQuantity` only. They are the backbone of citizen-science stream assessment.
+- **Live Earth-observation and agency connectors.** Still replaying transparent synthetic CSVs; a real Copernicus Sentinel-2 or national river-monitoring feed is the next highest-value connector (see [§ Judging-criteria mapping](#judging-criteria-mapping), Scale row).
 - Everything else listed in [§ Implemented versus production work](#implemented-versus-production-work).
 
 ## Hackathon alignment
@@ -43,9 +47,9 @@ Built for the **IEEE OneAquaHealth Global Hackathon 2026**, an EU Horizon Europe
 
 | Criterion | How this repository addresses it |
 |---|---|
-| **Impact & Alignment with the OneAquaHealth mission** | Every environmental reading is normalized into the *same* FHIR resource model the OneAquaHealth project already publishes, and a crossed threshold routes an alert to human-health, veterinary, *and* water-authority audiences in one step — the ecosystem→health link is the product, not a bolt-on chart. |
+| **Impact & Alignment with the OneAquaHealth mission** | Every environmental reading is normalized into the *same* FHIR resource model the OneAquaHealth project already publishes, and a crossed threshold routes an alert to human-health, veterinary, *and* water-authority audiences in one step — the ecosystem→health link is the product, not a bolt-on chart. The claim is tested against twelve real incidents rather than asserted: the [incident catalogue](docs/incidents.md) includes an urban stream in an OAH pilot city (Oslo's Akerselva), a citizen-signal-first outbreak (Brixham 2024), and an animal→water→human pathway routed to veterinary and public-health audiences from one reading (Havelock North 2016). |
 | **Innovation & Creativity** | A working Gemini co-pilot that maps multilingual, abbreviated, and free-text source data onto OAH terminology under enum-constrained grounding, and drafts audience-specific advisories — with a hash-chained ledger recording the model id and the exact prompt hash behind every proposal (§ [The Gemini co-pilot](#the-gemini-co-pilot)). Layered on top, a **terminology crosswalk** finds the real LOINC code for the same curated OAH concept — searching the published LOINC table scoped to environmental specimens, which surfaces `9481-3` pH of Water where a generic clinical UMLS search returns *Peliosis hepatis* — so a reviewer can publish both the project-specific code and a standard one a downstream EHR already understands (§ [The terminology crosswalk](#the-terminology-crosswalk)). FHIR-for-environment bridges with reviewer gating are rare; ones that also close the "temporary code system → real terminology" gap are rarer still. |
-| **Architecture** | HAPI FHIR R4 loaded with the real `hl7.eu.fhir.oah` package, R4 rest-hook Subscriptions, a versioned/unit-aware alert policy, a swappable `CodingProposer` contract the model plugs into without touching the FHIR or alerting layers, a two-source `TerminologyCrosswalk` that validates every LOINC candidate against the published term table and degrades source-by-source, and documented sequence diagrams (see [architecture.md](docs/architecture.md)). 167 tests, all offline, including a malformed-input suite covering every shape a FHIR server or a source can push at it. |
+| **Architecture** | HAPI FHIR R4 loaded with the real `hl7.eu.fhir.oah` package, R4 rest-hook Subscriptions, a versioned/unit-aware alert policy, a swappable `CodingProposer` contract the model plugs into without touching the FHIR or alerting layers, a two-source `TerminologyCrosswalk` that validates every LOINC candidate against the published term table and degrades source-by-source, and documented sequence diagrams (see [architecture.md](docs/architecture.md)). 251 tests, all offline, including a malformed-input suite covering every shape a FHIR server or a source can push at it, and **an executable incident catalogue** — twelve real water-and-health incidents replayed as fixtures with their expected coding, refusal, and audience-routing outcomes enforced in CI ([incidents.md](docs/incidents.md)). |
 | **UX** | A dependency-free reviewer console, not a dashboard of charts. Each queue row reads *as received → OneAquaHealth FHIR*, with the model's quoted evidence, competing candidates, and a visible flag when the AI disagrees with the curated rules. Alerts carry one-click advisory drafting; the audit trail is a real table. The reviewer sees what the model saw. See the [demo script](docs/demo-script.md). |
 | **Scale** | Config-driven terminology ([coding-rules.yaml](config/coding-rules.yaml)) and policy ([thresholds.yaml](config/thresholds.yaml)) — adding an indicator is a YAML edit, and the model's vocabulary widens with it automatically. `auto` assist mode spends a model call only where rules are weak, so cost scales with novelty rather than volume. Gap analysis in § [Implemented versus production work](#implemented-versus-production-work). |
 
@@ -192,7 +196,7 @@ Then start and test:
 
 ```bash
 uvicorn aquafhir.main:app --reload
-pytest          # 167 tests, fully offline — no keys needed, no network touched
+pytest          # 251 tests, fully offline — no keys needed, no network touched
 ruff check .
 ```
 
@@ -322,7 +326,7 @@ The builder therefore creates all required surrounding resources, uses `http://u
 http://hl7.eu/fhir/ig/oah/StructureDefinition/observation-indicators-oah
 ```
 
-The OAH IG currently carries environmental concepts such as `electrical-conductivity`, `dissolved-oxygen`, `waterTemperature`, and `ndci` in its temporary project code system. The scaffold uses those codes rather than inventing unsupported LOINC mappings.
+The OAH IG's temporary project code system publishes **286 concepts**, spanning the environmental leg (`electrical-conductivity`, `dissolved-oxygen`, `waterTemperature`, `ndci`, `nitrate`, `ammonium`, `tss`, `coliforms`, the dissolved-metals series), the animal leg (`fish`, `amphibians`, `birds`, `ticks`), and the human leg (`gastrointestinal`, `campylobacter`, `cryptosporidium`, `hospitalization-*`). The curated catalog uses 19 of them, every one verified against the published code system and guarded by a test that fails if an unpublished code is ever introduced. Concepts the IG does not define — turbidity, free chlorine residual, cyanide, microcystin, enterococci — are refused rather than mapped to a neighbour; the resulting gap list is in [incidents.md](docs/incidents.md#terminology-gaps-this-catalogue-found).
 
 A second coding is now supported, but only after terminology review by a person: the crosswalk (§ [The terminology crosswalk](#the-terminology-crosswalk)) suggests a real LOINC/SNOMED CT candidate for the curated code's display text, and `Observation.code.coding` only ever gains a second entry when a reviewer supplies `ReviewDecision.secondary_coding` at approval time — never automatically.
 
@@ -484,13 +488,73 @@ Guardrails mirror `coding_llm.py`'s posture:
 as a second entry in `Observation.code.coding`, and the approval provenance entry records
 `reviewer_attached_secondary_coding: true`.
 
+## The incident catalogue
+
+A prototype that only replays its own happy path proves very little. So the pipeline is
+driven against **twelve real water-and-health incidents**, reconstructed as fixtures, with
+their expected outcome written down and enforced in CI.
+
+| Incident | What it exercises |
+|---|---|
+| **Oder River fish kill** (PL/DE, 2022) | Cross-border latency; `Leitfähigkeit` and `chlorki` defeating alias matching; µS/cm → mS/cm |
+| **Milwaukee cryptosporidiosis** (US, 1993) | A ten-year turbidity baseline breached and not acted on — and turbidity having no OAH code |
+| **Walkerton *E. coli*** (CA, 2000) | Falsified operating records → the hash chain; two spellings of one unit |
+| **Toledo "do not drink"** (US, 2014) | Satellite bloom indices crossing a day before the advisory; microcystin gap |
+| **Havelock North campylobacteriosis** (NZ, 2016) | The One Health pathway: one reading routed to veterinary *and* public health |
+| **Flint drinking-water crisis** (US, 2014–15) | Two high lead samples excluded from a regulatory round → the tamper drill |
+| **Baia Mare cyanide spill** (RO/HU/RS, 2000) | A plume across three countries — and the contaminant having no OAH code at all |
+| **Ajka red-mud spill** (HU, 2010) | pH 13 caustic release, a `130.0` decimal typo blocked, downstream dilution |
+| **Mar Menor anoxic fish kill** (ES, 2021) | The full nutrient→heat→bloom→anoxia chain; a global threshold failing on a saline lagoon |
+| **Akerselva chlorine release** (NO, 2011) | An urban stream in an **OAH pilot city**; upstream normal, downstream critical |
+| **Seine bathing water** (FR, 2024) | Two sources, same site, same instant, MPN vs CFU — refused rather than converted |
+| **Brixham cryptosporidiosis** (UK, 2024) | Citizen illness reports preceding the laboratory result |
+
+Plus a thirteenth synthetic fixture of deliberate abuse cases: sensor faults, threshold
+boundaries, nonsense units, and unknown indicators.
+
+```bash
+pytest tests/test_incidents.py -q     # 84 assertions, offline, no keys, ~0.1s
+
+uvicorn aquafhir.main:app --reload    # terminal 1
+python scripts/simulate.py            # terminal 2 — every scenario over real HTTP
+```
+
+The harness ingests each fixture, approves what is approvable, **rejects what is not with a
+written reason**, collects the alerts, and verifies the hash chain. It exits non-zero when a
+scenario stops matching the document, so it doubles as a release gate:
+
+```
+Summary
+  scenarios      13/13 matched the documented outcome
+  alerts raised  46
+  approved       67
+  refused        22
+  audit chain    VALID over 224 entries
+```
+
+Two results are worth reading the catalogue for. **The refusals are the point:** free
+chlorine residual — the single most important operational indicator in drinking-water
+treatment — appears in *five* of the twelve incidents and has no code in the OAH IG, so the
+bridge refuses it five times rather than mapping it to a neighbour. That produces an
+exportable list of gaps to submit to the IG and to LOINC, which is a more useful Track 7
+output than a chart. And **building the catalogue found a real defect:** a dissolved-oxygen
+probe reporting a physically impossible `-5.0 mg/L` used to raise a *critical* alert to the
+veterinary and water-authority audiences at 0.99 confidence. Reviewed plausible ranges now
+withhold the number instead.
+
+Full write-ups, sources for every incident, the edge-case matrix, and an explicit honesty
+statement are in **[docs/incidents.md](docs/incidents.md)**.
+
 ## Repository map
 
 ```text
 .
 ├── config/                    # reviewed terminology and demo alert policy
-├── data/                      # transparent synthetic Oder replay CSV
-├── docs/                      # architecture, API, demo, production notes
+├── data/
+│   ├── oder-replay.csv        # transparent synthetic Oder replay
+│   └── incidents/             # 13 incident fixtures + expectations manifest
+├── docs/                      # architecture, API, demo, incidents, production notes
+├── scripts/simulate.py        # drives the incident catalogue against a live bridge
 ├── infra/hapi/               # HAPI R4 + OAH package configuration
 ├── src/aquafhir/
 │   ├── coding.py             # curated proposer + the catalog the model is grounded in
@@ -508,7 +572,8 @@ as a second entry in `Observation.code.coding`, and the approval provenance entr
 │   ├── thresholds.py         # unit-aware versioned policy evaluation
 │   ├── main.py               # FastAPI surface
 │   └── static/               # dependency-free reviewer console (no build step)
-├── tests/                    # coding, AI guardrail, terminology, transport, policy, audit tests
+├── tests/                    # coding, AI guardrail, terminology, transport, policy, audit,
+│                             # robustness, and incident-catalogue tests
 ├── compose.yaml              # bridge + HAPI + PostgreSQL
 └── Dockerfile
 ```

@@ -1,0 +1,7 @@
+source_id,source_type,parameter,value,unit,observed_at,site_code,site_name,latitude,longitude,evidence_url
+mdeq-lcr-round1,agency,lead,0.004,mg/L,2015-06-25T12:00:00Z,flint-site-042,Flint LCR tier-1 site 042,43.0125,-83.6875,
+mdeq-lcr-round1,agency,lead,0.011,mg/L,2015-06-26T12:00:00Z,flint-site-071,Flint LCR tier-1 site 071,43.0160,-83.6920,
+mdeq-lcr-round1,agency,lead,0.104,mg/L,2015-06-29T12:00:00Z,flint-site-088,Flint LCR tier-1 site 088,43.0201,-83.6841,
+mdeq-lcr-round1,agency,lead,0.020,mg/L,2015-07-01T12:00:00Z,flint-site-095,Flint LCR tier-1 site 095,43.0090,-83.6799,
+vt-flintwaterstudy,citizen,lead,0.158,mg/L,2015-08-17T12:00:00Z,flint-site-101,Flint citizen sampling kit 101,43.0240,-83.6910,
+flint-wtp,agency,free chlorine residual,0.02,mg/L,2015-01-12T12:00:00Z,flint-distribution,Flint distribution system,43.0125,-83.6875,

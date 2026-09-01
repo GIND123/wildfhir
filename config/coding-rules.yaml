@@ -1,5 +1,18 @@
 # Curated mappings are the authoritative baseline. An LLM adapter may propose
 # candidates later, but it must never bypass the review state machine.
+#
+# Every `code` below is a real concept published in the OneAquaHealth temporary
+# code system (286 concepts, https://build.fhir.org/ig/hl7-eu/oah/
+# CodeSystem-temporarySystem-oah-eu.html). Nothing here is invented. Where a
+# real incident turned on an indicator the IG does not define -- turbidity,
+# free chlorine residual, cyanide, microcystin -- there is deliberately no rule,
+# so the pipeline refuses to code it. See docs/incidents.md.
+#
+# `plausible_range` is a reviewed physical/instrument bound on the *normalized*
+# quantity. A value outside it is not published as a number: the quantity is
+# withheld exactly like an unresolvable unit, approval is blocked, and a person
+# corrects it. A stuck or miswired sensor must not be able to raise a critical
+# alert.
 system: http://hl7.eu/fhir/ig/oah/CodeSystem/temporarySystem-oah-eu
 rules:
   - code: electrical-conductivity
@@ -8,26 +21,119 @@ rules:
     accepted_units: [mS/cm]
     unit_conversions:
       uS/cm: { factor: 0.001, target: mS/cm }
+    plausible_range: { min: 0.0, max: 200.0 }
   - code: ndci
     display: Normalized Difference Chlorophyll Index (NDCI)
     aliases: [ndci, normalized difference chlorophyll index, sentinel chlorophyll index]
     accepted_units: ['1']
+    plausible_range: { min: -1.0, max: 1.0 }
+  - code: mci
+    display: Maximum Chlorophyll Index (MCI)
+    aliases: [mci, maximum chlorophyll index, meris maximum chlorophyll index]
+    accepted_units: ['1']
+    plausible_range: { min: -1.0, max: 1.0 }
   - code: waterTemperature
     display: Water temperature
     aliases: [water temperature, stream temperature, temp water]
     accepted_units: [Cel]
     unit_conversions:
       degC: { factor: 1.0, target: Cel }
+    plausible_range: { min: -5.0, max: 50.0 }
   - code: dissolved-oxygen
     display: Dissolved Oxygen
     aliases: [dissolved oxygen, dissolved o2, do]
     accepted_units: [mg/L]
+    plausible_range: { min: 0.0, max: 25.0 }
   - code: ph
     display: pH
     aliases: [ph, pH]
     accepted_units: ['[pH]']
+    plausible_range: { min: 0.0, max: 14.0 }
   - code: chloride
     display: Chloride
     aliases: [chloride, cl-, chloride dissolved]
     accepted_units: [mg/L]
-
+    plausible_range: { min: 0.0, max: 50000.0 }
+  - code: nitrate
+    display: Nitrate
+    aliases: [nitrate, no3, nitrate as n, nitraat, nitrato]
+    accepted_units: [mg/L]
+    unit_conversions:
+      ug/L: { factor: 0.001, target: mg/L }
+    plausible_range: { min: 0.0, max: 2000.0 }
+  - code: nitrite
+    display: Nitrite
+    aliases: [nitrite, no2, nitrite as n]
+    accepted_units: [mg/L]
+    plausible_range: { min: 0.0, max: 500.0 }
+  - code: ammonium
+    display: Ammonium
+    aliases: [ammonium, nh4, ammonium as n, ammoniacal nitrogen]
+    accepted_units: [mg/L]
+    plausible_range: { min: 0.0, max: 1000.0 }
+  - code: total-phosphates
+    display: Total phosphates
+    aliases: [total phosphates, total phosphorus, tp, phosphate total]
+    accepted_units: [mg/L]
+    plausible_range: { min: 0.0, max: 500.0 }
+  - code: tss
+    display: Total suspended solids (TSS)
+    aliases: [total suspended solids, tss, suspended solids, suspended sediment]
+    accepted_units: [mg/L]
+    plausible_range: { min: 0.0, max: 100000.0 }
+  # Coliform counts. `{cfu}/dL` is the UCUM form of the customary
+  # "CFU/100 mL" (100 mL is exactly 1 dL). MPN is deliberately *not* listed as a
+  # convertible unit: MPN and CFU are different estimators, and silently
+  # equating them is the class of error this bridge exists to prevent. An MPN
+  # result therefore arrives as an unresolved unit for a reviewer to decide.
+  - code: coliforms
+    display: Coliforms
+    aliases: [coliforms, total coliforms, faecal coliforms, fecal coliforms, e coli, escherichia coli]
+    accepted_units: ['{cfu}/dL']
+    unit_conversions:
+      '{cfu}/100mL': { factor: 1.0, target: '{cfu}/dL' }
+      'CFU/100mL': { factor: 1.0, target: '{cfu}/dL' }
+    plausible_range: { min: 0.0, max: 100000000.0 }
+  - code: lead-dissolved
+    display: Lead dissolved
+    aliases: [lead, lead dissolved, dissolved lead, pb]
+    accepted_units: [ug/L]
+    unit_conversions:
+      mg/L: { factor: 1000.0, target: ug/L }
+      '[ppb]': { factor: 1.0, target: ug/L }
+    plausible_range: { min: 0.0, max: 100000.0 }
+  - code: mercury-dissolved
+    display: Mercury dissolved
+    aliases: [mercury, mercury dissolved, dissolved mercury, hg]
+    accepted_units: [ug/L]
+    unit_conversions:
+      mg/L: { factor: 1000.0, target: ug/L }
+    plausible_range: { min: 0.0, max: 10000.0 }
+  - code: copper-dissolved
+    display: Copper dissolved
+    aliases: [copper, copper dissolved, dissolved copper, cu]
+    accepted_units: [ug/L]
+    unit_conversions:
+      mg/L: { factor: 1000.0, target: ug/L }
+    plausible_range: { min: 0.0, max: 1000000.0 }
+  - code: zinc-dissolved
+    display: Zinc dissolved
+    aliases: [zinc, zinc dissolved, dissolved zinc, zn]
+    accepted_units: [ug/L]
+    unit_conversions:
+      mg/L: { factor: 1000.0, target: ug/L }
+    plausible_range: { min: 0.0, max: 1000000.0 }
+  - code: arsenic-dissolved
+    display: Arsenic dissolved
+    aliases: [arsenic, arsenic dissolved, dissolved arsenic, as]
+    accepted_units: [ug/L]
+    unit_conversions:
+      mg/L: { factor: 1000.0, target: ug/L }
+    plausible_range: { min: 0.0, max: 100000.0 }
+  - code: aluminium-dissolved
+    display: Aluminium dissolved
+    aliases: [aluminium, aluminum, aluminium dissolved, dissolved aluminium, al]
+    accepted_units: [ug/L]
+    unit_conversions:
+      mg/L: { factor: 1000.0, target: ug/L }
+    plausible_range: { min: 0.0, max: 1000000.0 }

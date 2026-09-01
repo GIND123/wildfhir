@@ -1,0 +1,8 @@
+source_id,source_type,parameter,value,unit,observed_at,site_code,site_name,latitude,longitude,evidence_url
+copernicus-s2,satellite,NDCI,0.22,1,2014-07-27T10:20:00Z,toledo-crib-intake,Toledo Lake Erie crib intake,41.6906,-83.2599,
+copernicus-s2,satellite,maximum chlorophyll index,0.14,1,2014-07-27T10:20:00Z,toledo-crib-intake,Toledo Lake Erie crib intake,41.6906,-83.2599,
+copernicus-s2,satellite,NDCI,0.51,1,2014-08-01T10:20:00Z,toledo-crib-intake,Toledo Lake Erie crib intake,41.6906,-83.2599,
+copernicus-s2,satellite,maximum chlorophyll index,0.38,1,2014-08-01T10:20:00Z,toledo-crib-intake,Toledo Lake Erie crib intake,41.6906,-83.2599,
+toledo-collins-park,agency,microcystin-LR,2.50,ug/L,2014-08-02T04:00:00Z,toledo-collins-park,Collins Park treatment plant finished water,41.6528,-83.5379,
+toledo-collins-park,agency,water temperature,26.8,Cel,2014-08-02T04:00:00Z,toledo-crib-intake,Toledo Lake Erie crib intake,41.6906,-83.2599,
+toledo-collins-park,agency,total phosphates,0.94,mg/L,2014-08-01T04:00:00Z,toledo-crib-intake,Toledo Lake Erie crib intake,41.6906,-83.2599,

@@ -47,7 +47,12 @@ class ThresholdPolicy:
                 continue
             comparison = OPERATORS[rule["operator"]]
             if comparison(value, float(rule["value"])):
-                stable_key = f"{observation_id}|{self.policy_id}|{rule['code']}"
+                # A policy may carry more than one rule for the same code (a
+                # low and a high bound, say). `id` disambiguates them so two
+                # rules that fire together cannot collide onto one alert id.
+                # Rules without an explicit `id` keep their historical id.
+                rule_key = rule.get("id", rule["code"])
+                stable_key = f"{observation_id}|{self.policy_id}|{rule_key}"
                 alerts.append(
                     Alert(
                         id=str(uuid5(NAMESPACE_URL, stable_key)),

@@ -1,0 +1,7 @@
+source_id,source_type,parameter,value,unit,observed_at,site_code,site_name,latitude,longitude,evidence_url
+oslo-vav-oset,agency,free chlorine residual,4.10,mg/L,2011-03-08T18:00:00Z,akerselva-nydalen,Akerselva at Nydalen,59.9475,10.7594,
+oslo-vav-oset,agency,dissolved oxygen,9.80,mg/L,2011-03-08T12:00:00Z,akerselva-nydalen,Akerselva at Nydalen,59.9475,10.7594,
+oslo-vav-oset,agency,pH,7.2,[pH],2011-03-08T18:00:00Z,akerselva-nydalen,Akerselva at Nydalen,59.9475,10.7594,
+oslo-vav-nedre,agency,dissolved oxygen,3.10,mg/L,2011-03-09T09:00:00Z,akerselva-vaterland,Akerselva at Vaterland,59.9110,10.7590,
+oslo-vav-nedre,agency,electrical conductivity,0.86,mS/cm,2011-03-09T09:00:00Z,akerselva-vaterland,Akerselva at Vaterland,59.9110,10.7590,
+oslo-vav-nedre,agency,water temperature,3.1,Cel,2011-03-09T09:00:00Z,akerselva-vaterland,Akerselva at Vaterland,59.9110,10.7590,

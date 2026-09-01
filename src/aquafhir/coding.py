@@ -160,14 +160,38 @@ class ReviewedCodingAgent:
 
         This is deliberately the *only* place a published number is computed.
         No model output ever performs this arithmetic.
+
+        A converted value outside the rule's reviewed `plausible_range` is
+        withheld exactly like an unresolvable unit: no number, no publication,
+        no alert, and approval blocked until a person corrects it. Both
+        proposers route their arithmetic through here, so a failed sensor
+        cannot raise an alert down either path.
         """
         if unit in rule.get("accepted_units", []):
-            return value, unit, "Unit is an accepted UCUM code."
-        conversion = rule.get("unit_conversions", {}).get(unit)
-        if conversion:
-            return (
-                value * float(conversion["factor"]),
-                conversion["target"],
-                f"Converted from {unit}.",
-            )
-        return None, None, f"Unit '{unit}' needs reviewer correction."
+            converted, target, note = value, unit, "Unit is an accepted UCUM code."
+        else:
+            conversion = rule.get("unit_conversions", {}).get(unit)
+            if not conversion:
+                return None, None, f"Unit '{unit}' needs reviewer correction."
+            converted = value * float(conversion["factor"])
+            target = conversion["target"]
+            note = f"Converted from {unit}."
+
+        implausible = _range_violation(converted, target, rule)
+        if implausible:
+            return None, None, f"{note} {implausible}"
+        return converted, target, note
+
+
+def _range_violation(value: float, unit: str, rule: dict[str, Any]) -> str | None:
+    """Describe why a normalized quantity is outside its reviewed bounds, or None."""
+    limits = rule.get("plausible_range")
+    if not limits:
+        return None
+    low, high = float(limits["min"]), float(limits["max"])
+    if low <= value <= high:
+        return None
+    return (
+        f"Normalized value {value:g} {unit} is outside the reviewed plausible range "
+        f"{low:g}-{high:g} {unit}; quantity withheld for reviewer correction."
+    )

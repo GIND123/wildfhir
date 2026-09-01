@@ -12,6 +12,7 @@ services:
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       GEMINI_ASSIST_MODE: ${GEMINI_ASSIST_MODE:-auto}
       GEMINI_THINKING_BUDGET: ${GEMINI_THINKING_BUDGET:-0}
+      UMLS_API_KEY: ${UMLS_API_KEY:-}
     ports:
       - "8000:8000"
     volumes:

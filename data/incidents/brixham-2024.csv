@@ -1,0 +1,6 @@
+source_id,source_type,parameter,value,unit,observed_at,site_code,site_name,latitude,longitude,evidence_url
+sww-hillhead,agency,total suspended solids,38.0,mg/L,2024-05-14T09:00:00Z,hillhead-reservoir,Hillhead service reservoir,50.4090,-3.5540,
+sww-hillhead,agency,total coliforms,1250,{cfu}/100mL,2024-05-15T09:00:00Z,hillhead-reservoir,Hillhead service reservoir,50.4090,-3.5540,
+sww-hillhead,agency,free chlorine residual,0.06,mg/L,2024-05-15T09:00:00Z,hillhead-reservoir,Hillhead service reservoir,50.4090,-3.5540,
+sww-brixham,agency,total coliforms,640,CFU/100mL,2024-05-16T09:00:00Z,brixham-distribution,Brixham distribution zone,50.3950,-3.5150,
+sww-brixham,agency,total suspended solids,12.0,mg/L,2024-05-20T09:00:00Z,brixham-distribution,Brixham distribution zone,50.3950,-3.5150,

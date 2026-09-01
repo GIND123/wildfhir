@@ -1,0 +1,12 @@
+source_id,source_type,parameter,value,unit,observed_at,site_code,site_name,latitude,longitude,evidence_url
+pl-gios-wios,agency,EC,1.20,mS/cm,2022-07-24T08:00:00Z,oder-kostrzyn,Oder at Kostrzyn,52.5887,14.6495,
+pl-gios-wios,agency,chlorki,340,mg/L,2022-07-24T08:00:00Z,oder-kostrzyn,Oder at Kostrzyn,52.5887,14.6495,
+copernicus-s2,satellite,NDCI,0.18,1,2022-07-25T10:15:00Z,oder-kostrzyn,Oder at Kostrzyn,52.5887,14.6495,
+pl-gios-wios,agency,Leitfaehigkeit,2350,uS/cm,2022-07-27T08:00:00Z,oder-kostrzyn,Oder at Kostrzyn,52.5887,14.6495,
+pl-gios-wios,agency,chloride dissolved,1180,mg/L,2022-07-27T08:00:00Z,oder-kostrzyn,Oder at Kostrzyn,52.5887,14.6495,
+pl-gios-wios,agency,temp water,26.4,Cel,2022-07-27T08:00:00Z,oder-kostrzyn,Oder at Kostrzyn,52.5887,14.6495,
+copernicus-s2,satellite,normalized difference chlorophyll index,0.43,1,2022-07-28T10:15:00Z,oder-kostrzyn,Oder at Kostrzyn,52.5887,14.6495,
+de-lfu-bb,agency,dissolved O2,3.60,mg/L,2022-07-29T07:30:00Z,oder-frankfurt,Oder at Frankfurt (Oder),52.3471,14.5506,
+de-lfu-bb,agency,electrical conductivity,2.41,mS/cm,2022-08-06T09:00:00Z,oder-frankfurt,Oder at Frankfurt (Oder),52.3471,14.5506,
+de-lfu-bb,agency,mercury,0.35,ug/L,2022-08-09T09:00:00Z,oder-frankfurt,Oder at Frankfurt (Oder),52.3471,14.5506,
+pl-gios-wios,agency,Prymnesium parvum cell count,98000,{cells}/mL,2022-08-10T09:00:00Z,oder-szczecin,Oder at Szczecin,53.4285,14.5528,
