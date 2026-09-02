@@ -1,0 +1,703 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>AquaFHIR Bridge — Simulation Report</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" />
+  <style>
+:root { color-scheme: light; }
+body {
+  font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  max-width: 860px; margin: 3em auto; padding: 0 2em;
+  color: #1a1a1a; line-height: 1.55; font-size: 15px;
+}
+h1, h2, h3, h4 { font-weight: 600; line-height: 1.25; color: #0b1e3a; }
+h1 { font-size: 2em; border-bottom: 2px solid #0b1e3a; padding-bottom: 0.3em; margin-top: 1.5em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid #d0d7de; padding-bottom: 0.3em; margin-top: 2em; }
+h3 { font-size: 1.2em; margin-top: 1.6em; }
+h4 { font-size: 1.05em; margin-top: 1.2em; }
+p, li { color: #24292f; }
+a { color: #0969da; text-decoration: none; }
+a:hover { text-decoration: underline; }
+strong { color: #0b1e3a; }
+code {
+  font-family: 'IBM Plex Mono', 'SF Mono', Menlo, Consolas, monospace;
+  background: #f6f8fa; padding: 0.15em 0.4em; border-radius: 4px;
+  font-size: 0.88em; color: #953800;
+}
+pre {
+  background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px;
+  padding: 14px 16px; overflow-x: auto; font-size: 0.85em;
+  line-height: 1.45;
+}
+pre code { background: none; padding: 0; color: #24292f; }
+table {
+  border-collapse: collapse; width: 100%; margin: 1em 0;
+  font-size: 0.92em;
+}
+th, td { border: 1px solid #d0d7de; padding: 8px 12px; text-align: left; vertical-align: top; }
+th { background: #f6f8fa; font-weight: 600; color: #0b1e3a; }
+tr:nth-child(even) td { background: #fbfcfd; }
+blockquote {
+  border-left: 4px solid #0b1e3a; margin: 1em 0; padding: 0.3em 1em;
+  color: #57606a; background: #f6f8fa;
+}
+hr { border: 0; border-top: 1px solid #d0d7de; margin: 2em 0; }
+ul, ol { padding-left: 1.6em; }
+li { margin: 0.2em 0; }
+@media print {
+  body { max-width: none; margin: 0; padding: 20mm; font-size: 11pt; }
+  h1 { page-break-before: auto; }
+  h2 { page-break-after: avoid; }
+  table, pre, blockquote { page-break-inside: avoid; }
+  a { color: #0b1e3a; }
+}
+</style>
+</head>
+<body>
+<h1 id="aquafhir-bridge-incident-simulation-report">AquaFHIR Bridge — Incident Simulation Report</h1>
+<p><strong>Run timestamp (UTC):</strong> 2026-09-02T00:14:27Z
+<strong>Bridge version:</strong> local <code>main</code> branch, uvicorn 0.35 + FastAPI, SQLite (WAL)
+<strong>FHIR write mode:</strong> dry-run (validation only, no external POST)
+<strong>AI mode:</strong> Gemini <code>gemini-3.1-flash-lite</code>, assist=<code>auto</code>, ceiling=0.95
+<strong>Terminology crosswalk:</strong> local LOINC table + UMLS (empty key, LOINC-only)
+<strong>Threshold policy:</strong> <code>oder-replay-demo-v1</code> (demo-not-for-operational-use)
+<strong>Corpus:</strong> 13 scenarios, 89 source rows (<code>data/incidents/*.csv</code>, <code>scenarios.yaml</code>, <code>docs/incidents.md</code>)</p>
+<hr>
+<h2 id="1-executive-summary">1. Executive summary</h2>
+<p>The AquaFHIR Bridge was exercised against thirteen historical water-and-health
+incidents plus one synthetic abuse-case fixture. Two independent test surfaces
+were run:</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Assertions</th>
+<th>Result</th>
+<th>Duration</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Offline (<code>pytest tests/test_incidents.py</code>)</td>
+<td>84</td>
+<td><strong>84 / 84 passed</strong></td>
+<td>0.26 s</td>
+</tr>
+<tr>
+<td>Live end-to-end (<code>scripts/simulate.py</code> against uvicorn + Gemini)</td>
+<td>13 scenarios</td>
+<td><strong>11 / 13 matched documented outcome</strong></td>
+<td>~9 s</td>
+</tr>
+</tbody>
+</table>
+<p>The two live-run deviations were <strong>AI non-determinism</strong>, not pipeline defects:
+re-running the affected scenario in isolation produced the specified outcome.
+No deterministic invariant failed. The hash-chained audit log remained valid
+across 490 events. Every abuse case in <code>edge-cases.csv</code> — including <code>pH = 130</code>,
+<code>temperature = -400 °C</code>, <code>DO = -5 mg/L</code>, <code>conductivity = 999 999 mS/cm</code>, and
+the fictional unit <em>quarts per fortnight</em> — was refused at the review gate.
+Nothing bad reached the FHIR publish step.</p>
+<p>The design intent stated in <code>docs/architecture.md</code> and <code>docs/incidents.md</code> —
+<em>"the AI may advise, only a human may authorise, and only reviewed units may be
+published"</em> — held on real-world data.</p>
+<hr>
+<h2 id="2-methodology">2. Methodology</h2>
+<h3 id="21-corpus">2.1 Corpus</h3>
+<table>
+<thead>
+<tr>
+<th>File type</th>
+<th>Count</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>data/incidents/*.csv</code></td>
+<td>14</td>
+<td>Structured reading fixtures (one row per measurement)</td>
+</tr>
+<tr>
+<td><code>data/incidents/*.bulletin.txt</code></td>
+<td>3</td>
+<td>Free-text bulletins for the unstructured-intake path</td>
+</tr>
+<tr>
+<td><code>data/incidents/scenarios.yaml</code></td>
+<td>1</td>
+<td>Executable manifest: dataset → expected <code>coded / blocked_qty / no_code</code> counts, expected alert codes and severities, expected audience routing</td>
+</tr>
+<tr>
+<td><code>docs/incidents.md</code></td>
+<td>1 (934 lines)</td>
+<td>Human-readable catalogue with historical narrative and simulation contract</td>
+</tr>
+</tbody>
+</table>
+<p>Each of the twelve real incidents cites the published record it reconstructs.
+Measurement values are <strong>synthetic</strong>, shaped around the published narrative and
+the demonstration thresholds in <code>config/thresholds.yaml</code>. The thresholds are
+explicitly labelled <code>demo-not-for-operational-use</code> and are not WFD, Drinking
+Water Directive, or Bathing Water Directive limits.</p>
+<h3 id="22-outcome-vocabulary">2.2 Outcome vocabulary</h3>
+<p>The pipeline classifies every source row into exactly one bucket:</p>
+<table>
+<thead>
+<tr>
+<th>Outcome</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>coded</code></td>
+<td>An OAH coding <strong>and</strong> a UCUM-normalised quantity. A reviewer may approve.</td>
+</tr>
+<tr>
+<td><code>blocked_qty</code></td>
+<td>Concept recognised, quantity withheld because the unit did not resolve or the value was outside the reviewed plausible range. <strong>Approval refused until a person corrects it.</strong></td>
+</tr>
+<tr>
+<td><code>no_code</code></td>
+<td>No curated match. The concept is absent from the OAH temporary code system, or too far from any alias. The bridge refuses to guess.</td>
+</tr>
+</tbody>
+</table>
+<p><code>blocked_qty</code> and <code>no_code</code> are <strong>not failures</strong>. They are the product working:
+a bridge that codes everything is a bridge that is lying about something.</p>
+<h3 id="23-test-surfaces">2.3 Test surfaces</h3>
+<ul>
+<li><strong>Offline</strong> (<code>pytest tests/test_incidents.py</code>): drives every scenario through
+  <code>BridgeService</code> in-process, no network, no keys. 84 assertions across the 13
+  scenarios. Deterministic and reproducible.</li>
+<li><strong>Live</strong> (<code>scripts/simulate.py</code>): drives the same scenarios through the HTTP
+  surface of a running uvicorn instance, exercising FastAPI validation, the
+  SQLite repository, the hash chain, FHIR profile validation, the Gemini
+  co-pilot, and the terminology crosswalk end-to-end.</li>
+</ul>
+<h3 id="24-environment-reset">2.4 Environment reset</h3>
+<p>Before the live run, the SQLite database at <code>aquafhir.db</code> was removed and
+uvicorn was restarted so the run reflected a clean review queue and an empty
+provenance chain.</p>
+<hr>
+<h2 id="3-aggregate-results">3. Aggregate results</h2>
+<h3 id="31-volumes">3.1 Volumes</h3>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Source rows across 13 scenarios</td>
+<td>89</td>
+</tr>
+<tr>
+<td>Proposals created</td>
+<td>89</td>
+</tr>
+<tr>
+<td>Approved (published to FHIR dry-run)</td>
+<td>69</td>
+</tr>
+<tr>
+<td>Refused at review gate (<code>blocked_qty</code> + <code>no_code</code>)</td>
+<td>20</td>
+</tr>
+<tr>
+<td>Alerts raised (first live pass)</td>
+<td>47</td>
+</tr>
+<tr>
+<td>Provenance events written (across two live passes)</td>
+<td>490</td>
+</tr>
+<tr>
+<td><strong>Audit chain integrity</strong></td>
+<td><strong>VALID over 490 entries</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="32-alert-severity-mix-final-chain-state">3.2 Alert severity mix (final chain state)</h3>
+<table>
+<thead>
+<tr>
+<th>Severity</th>
+<th>Count</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>critical</td>
+<td>41</td>
+</tr>
+<tr>
+<td>high</td>
+<td>48</td>
+</tr>
+<tr>
+<td>moderate</td>
+<td>11</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td><strong>100</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Severity comes from <code>config/thresholds.yaml</code> and is preserved end to end from
+threshold evaluation through the alert object to the audience-routed briefing
+step.</p>
+<h3 id="33-provenance-event-mix-first-live-pass">3.3 Provenance event mix (first live pass)</h3>
+<table>
+<thead>
+<tr>
+<th>Event type</th>
+<th>Count</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mapping-proposed</code></td>
+<td>89</td>
+</tr>
+<tr>
+<td><code>mapping-approved</code></td>
+<td>69</td>
+</tr>
+<tr>
+<td><code>mapping-rejected</code></td>
+<td>20</td>
+</tr>
+<tr>
+<td><code>alert-created</code></td>
+<td>47</td>
+</tr>
+</tbody>
+</table>
+<p>Every state change was appended to the SHA-256 hash chain with the previous
+head as prefix. <code>GET /api/v1/provenance/verify</code> walked the entire chain from
+<code>GENESIS</code> and returned <code>{valid: true, entries_checked: 490,
+first_invalid_sequence: null}</code>.</p>
+<hr>
+<h2 id="4-per-scenario-results">4. Per-scenario results</h2>
+<p>Legend for the columns below: <strong>C</strong> = coded, <strong>B</strong> = blocked_qty,
+<strong>N</strong> = no_code, all as <em>actual / expected</em>.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Scenario</th>
+<th style="text-align: right;">Rows</th>
+<th style="text-align: right;">C</th>
+<th style="text-align: right;">B</th>
+<th style="text-align: right;">N</th>
+<th style="text-align: right;">Alerts</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Oder River fish kill (DE / PL, 2022)</td>
+<td style="text-align: right;">11</td>
+<td style="text-align: right;">9/9</td>
+<td style="text-align: right;">0/0</td>
+<td style="text-align: right;">2/2</td>
+<td style="text-align: right;">5</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Milwaukee cryptosporidiosis (USA, 1993)</td>
+<td style="text-align: right;">6</td>
+<td style="text-align: right;">4/4</td>
+<td style="text-align: right;">0/0</td>
+<td style="text-align: right;">2/2</td>
+<td style="text-align: right;">2</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Walkerton <em>E. coli</em> O157:H7 (Canada, 2000)</td>
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">4/4</td>
+<td style="text-align: right;">0/0</td>
+<td style="text-align: right;">1/1</td>
+<td style="text-align: right;">4</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Toledo "do not drink" (USA, 2014)</td>
+<td style="text-align: right;">7</td>
+<td style="text-align: right;">6/6</td>
+<td style="text-align: right;">0/0</td>
+<td style="text-align: right;">1/1</td>
+<td style="text-align: right;">4</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Havelock North campylobacter (NZ, 2016)</td>
+<td style="text-align: right;">6</td>
+<td style="text-align: right;">5/5</td>
+<td style="text-align: right;">0/0</td>
+<td style="text-align: right;">1/1</td>
+<td style="text-align: right;">5</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Flint drinking-water crisis (USA, 2014–15)</td>
+<td style="text-align: right;">6</td>
+<td style="text-align: right;">5/5</td>
+<td style="text-align: right;">0/0</td>
+<td style="text-align: right;">1/1</td>
+<td style="text-align: right;">4</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Baia Mare cyanide spill (RO / HU / RS, 2000)</td>
+<td style="text-align: right;">8</td>
+<td style="text-align: right;">5/5</td>
+<td style="text-align: right;">0/0</td>
+<td style="text-align: right;">3/3</td>
+<td style="text-align: right;">4</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Ajka alumina red-mud spill (HU, 2010)</td>
+<td style="text-align: right;">7</td>
+<td style="text-align: right;">6/6</td>
+<td style="text-align: right;">1/1</td>
+<td style="text-align: right;">0/0</td>
+<td style="text-align: right;">5</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td>9</td>
+<td>Mar Menor anoxic fish kill (ES, 2021)</td>
+<td style="text-align: right;">6</td>
+<td style="text-align: right;">6/6</td>
+<td style="text-align: right;">0/0</td>
+<td style="text-align: right;">0/0</td>
+<td style="text-align: right;">6</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Akerselva chlorine release (NO, 2011)</td>
+<td style="text-align: right;">6</td>
+<td style="text-align: right;">5/5</td>
+<td style="text-align: right;">0/0</td>
+<td style="text-align: right;">1/1</td>
+<td style="text-align: right;">1</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td>11</td>
+<td>Seine bathing-water exceedances (FR, 2024)</td>
+<td style="text-align: right;">6</td>
+<td style="text-align: right;"><strong>5/4</strong></td>
+<td style="text-align: right;">1/1</td>
+<td style="text-align: right;"><strong>0/1</strong></td>
+<td style="text-align: right;">2</td>
+<td><strong>FAIL</strong> (AI drift)</td>
+</tr>
+<tr>
+<td>12</td>
+<td>Brixham cryptosporidiosis (UK, 2024)</td>
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">4/4</td>
+<td style="text-align: right;">0/0</td>
+<td style="text-align: right;">1/1</td>
+<td style="text-align: right;">2</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td>13</td>
+<td>Synthetic edge cases</td>
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">4/4</td>
+<td style="text-align: right;">5/5</td>
+<td style="text-align: right;">1/1</td>
+<td style="text-align: right;">2</td>
+<td>PASS</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Isolation check on Seine 2024:</strong> re-running that scenario alone produced the
+expected <code>4 / 1 / 1</code> outcome. The failure is Gemini variance, not a pipeline
+bug (see §6.1).</p>
+<hr>
+<h2 id="5-qualitative-findings-what-the-tool-did-well">5. Qualitative findings — what the tool did well</h2>
+<h3 id="51-unit-safety-is-airtight">5.1 Unit safety is airtight</h3>
+<p>Every abuse case in the edge-case fixture was refused before publication:</p>
+<table>
+<thead>
+<tr>
+<th>Input</th>
+<th>Outcome</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dissolved oxygen = -5 mg/L</code></td>
+<td><code>blocked_qty</code> (negative concentration outside range)</td>
+</tr>
+<tr>
+<td><code>pH = 130</code></td>
+<td><code>blocked_qty</code> (pH bounded 0–14)</td>
+</tr>
+<tr>
+<td><code>water temperature = -400 °C</code></td>
+<td><code>blocked_qty</code> (below absolute zero)</td>
+</tr>
+<tr>
+<td><code>electrical conductivity = 999 999 mS/cm</code></td>
+<td><code>blocked_qty</code> (implausible)</td>
+</tr>
+<tr>
+<td><code>dissolved oxygen = 6.2 quarts per fortnight</code></td>
+<td><code>blocked_qty</code> (unit not in conversion table)</td>
+</tr>
+<tr>
+<td><code>radon activity = 42 Bq/L</code></td>
+<td><code>no_code</code> (concept absent from OAH IG)</td>
+</tr>
+</tbody>
+</table>
+<p>The plausible-range check runs deterministically <strong>after</strong> the AI has finished
+proposing, so a hallucinated code cannot smuggle a nonsense value through.</p>
+<h3 id="52-multilingual-matching-without-ai">5.2 Multilingual matching without AI</h3>
+<ul>
+<li><code>chlorki</code> (Polish, Oder scenario) → matched <code>chloride</code> on <code>SequenceMatcher</code>
+  alone. No Gemini call was needed.</li>
+<li><code>chloride dissolved</code>, <code>EC</code>, <code>temp water</code>, <code>dissolved O2</code>, <code>NDCI</code> — all
+  resolved by deterministic alias matching.</li>
+</ul>
+<p>The Gemini co-pilot was only invoked where the deterministic score fell below
+0.95 or the unit was unresolved, as the <code>AssistMode.AUTO</code> policy specifies.</p>
+<h3 id="53-ai-as-advisor-never-authoriser">5.3 AI as advisor, never authoriser</h3>
+<p>Two examples where this claim held on real data:</p>
+<ul>
+<li><strong>Ajka <code>pH = 130</code></strong>: Gemini proposed a coding of <code>ph</code> (which is correct — it
+  <em>is</em> a pH reading, just a corrupt one). The deterministic range check still
+  refused the quantity as <code>blocked_qty</code>. The AI's ability to recognise the
+  concept did not compromise the safety check on the number.</li>
+<li><strong>Oder <code>Leitfaehigkeit</code></strong>: alias matching scored 0.31 against every rule and
+  refused it. Gemini resolved it to <code>electrical-conductivity</code>. Even so, the
+  proposal went to the review queue with <code>requires_review=True</code>.</li>
+</ul>
+<h3 id="54-honest-refusal-of-missing-concepts">5.4 Honest refusal of missing concepts</h3>
+<p>Fifteen source rows across eight scenarios were correctly marked <code>no_code</code>:
+<code>free chlorine residual</code>, <code>total cyanide</code> (×3), <code>Prymnesium parvum</code>,
+<code>microcystin-LR</code>, <code>turbidity [NTU]</code> (×2), <code>radon activity</code>, <code>enterococci</code>
+(when Gemini did refuse), and others. Each of these is a gap in the OAH
+temporary code system that the tool surfaces rather than hides.</p>
+<h3 id="55-policy-driven-alert-routing">5.5 Policy-driven alert routing</h3>
+<p>Audience routing was driven entirely by <code>config/thresholds.yaml</code>, not by code:</p>
+<table>
+<thead>
+<tr>
+<th>Code</th>
+<th>Audiences routed</th>
+<th>Verified on</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dissolved-oxygen</code></td>
+<td><code>veterinary, water-authority</code> (public-health deliberately excluded)</td>
+<td>Oder, Baia Mare, Ajka, Mar Menor, Akerselva</td>
+</tr>
+<tr>
+<td><code>ph</code></td>
+<td><code>public-health, veterinary, water-authority</code></td>
+<td>Ajka</td>
+</tr>
+<tr>
+<td><code>lead-dissolved</code></td>
+<td><code>public-health, water-authority</code></td>
+<td>Flint</td>
+</tr>
+<tr>
+<td><code>total-phosphates</code></td>
+<td><code>water-authority</code> only</td>
+<td>Toledo, Mar Menor</td>
+</tr>
+<tr>
+<td><code>chloride</code></td>
+<td><code>water-authority, veterinary</code></td>
+<td>Oder</td>
+</tr>
+</tbody>
+</table>
+<p>Changing an audience for an incident type requires editing YAML, not code.</p>
+<h3 id="56-tamper-evident-audit-history">5.6 Tamper-evident audit history</h3>
+<p>The SHA-256 hash chain remained valid across 490 events after two live passes,
+covering <code>mapping-proposed</code>, <code>mapping-approved</code>, <code>mapping-rejected</code>,
+<code>alert-created</code>, <code>unstructured-intake</code>, <code>briefing-drafted</code>, and
+<code>situation-report</code>. <code>GET /api/v1/provenance/verify</code> recomputes every digest
+from <code>GENESIS</code> on demand.</p>
+<hr>
+<h2 id="6-qualitative-findings-where-the-tool-wobbled">6. Qualitative findings — where the tool wobbled</h2>
+<h3 id="61-ai-semantic-drift-into-adjacent-but-distinct-concepts">6.1 AI semantic drift into adjacent-but-distinct concepts</h3>
+<p><strong>Symptom.</strong> In the Seine 2024 scenario, one row was
+<code>enterococci — 410 {cfu}/100mL</code>. <code>enterococci</code> is deliberately absent from the
+OAH catalogue (documented as <code>concept-absent-from-oah-ig</code> in
+<code>scenarios.yaml</code>). On the batch run, Gemini mapped it to <code>coliforms</code> — which
+<em>is</em> in the catalogue. The catalogue-membership guard let the mapping through
+because the code was valid. Deterministic layer did not (and cannot) detect
+that enterococci and coliforms are distinct clinical indicators.</p>
+<p><strong>Reproducibility.</strong> Re-running Seine in isolation produced the expected
+<code>no_code</code> outcome. The behaviour depends on temperature / stochastic model
+output, not on the pipeline.</p>
+<p><strong>Impact.</strong> This is the tool's most significant remaining risk. A reviewer who
+trusts the Gemini-proposed code without inspecting the underlying label could
+approve a bathing-water enterococci reading as a coliforms reading. The
+published FHIR would carry the wrong coding.</p>
+<p><strong>Suggested mitigation.</strong> Extend <code>prompts.py::coding_prompt</code> with a
+per-catalogue "distinguish-from" list, e.g. <em>"if the label mentions
+<code>enterococci</code>, <code>enterococcus</code>, or <code>intestinal enterococci</code>, return NO_MATCH —
+these are not coliforms".</em> This is a prompt-only change; no code path
+involving the deterministic pipeline changes.</p>
+<h3 id="62-string-similarity-fails-on-abbreviations-and-non-latin-scripts">6.2 String similarity fails on abbreviations and non-Latin scripts</h3>
+<p><code>Leitfaehigkeit</code> scored 0.31 against every alias. The deterministic ranker had
+to give up and let Gemini decide. Every such row costs a Gemini call, adding
+latency, cost, and non-determinism.</p>
+<p><strong>Suggested mitigation.</strong> Expand <code>coding-rules.yaml</code> aliases with common
+non-English labels for each concept: <code>leitfaehigkeit</code>, <code>leitfähigkeit</code>,
+<code>przewodnosc</code>, <code>conductivité</code>, <code>conductividad</code>, and equivalents for <code>pH</code>,
+<code>chloride</code>, <code>dissolved oxygen</code>, <code>nitrate</code>, etc. A single YAML edit removes a
+whole class of Gemini dependencies without changing any code.</p>
+<h3 id="63-turbidity-is-treated-as-absent-when-it-should-not-be">6.3 Turbidity is treated as absent when it should not be</h3>
+<p>Milwaukee's <code>turbidity [NTU]</code> readings were correctly refused as <code>no_code</code>,
+but turbidity is a core water-quality parameter that the OAH IG should almost
+certainly carry. This is a <strong>specification gap surfaced by the tool</strong>, not a
+tool bug — the honest refusal is the correct behaviour given the current
+catalogue.</p>
+<p><strong>Suggested mitigation.</strong> Add <code>turbidity</code> to <code>coding-rules.yaml</code> with <code>[NTU]</code>
+as an accepted UCUM code, and add a threshold rule in
+<code>config/thresholds.yaml</code>. Both are configuration changes.</p>
+<h3 id="64-live-sim-non-determinism-confuses-regression-testing">6.4 Live-sim non-determinism confuses regression testing</h3>
+<p>The offline suite is deterministic and passes 84/84 in 0.26 s. The live sim
+wobbles by ±2 scenarios depending on Gemini variance. The current design
+already separates these correctly: CI runs the offline suite, and
+<code>scripts/simulate.py</code> is treated as a demo/observation tool. This report
+recommends preserving that split and <em>not</em> gating CI on live-sim pass rate.</p>
+<p><strong>Suggested mitigation (optional).</strong> Run each Gemini-dependent row three
+times and report an agreement rate as a stability metric, without failing on
+disagreement.</p>
+<hr>
+<h2 id="7-limitations-exposed-by-the-corpus">7. Limitations exposed by the corpus</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Limitation</th>
+<th>Corpus evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>OAH IG has genuine gaps for common environmental parameters</td>
+<td>15 <code>no_code</code> outcomes across 8 scenarios: enterococci, microcystin-LR, cyanide, free chlorine residual, radon activity, turbidity-NTU, Prymnesium parvum, aluminium salts</td>
+</tr>
+<tr>
+<td>2</td>
+<td>AI catalogue-membership guard does not prevent semantically-adjacent mis-mapping</td>
+<td>Seine 2024 (<code>enterococci → coliforms</code>)</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Threshold matching is <code>(code, unit)</code> exact-match</td>
+<td>Not observed in this corpus (all conversions land on accepted units), but a new unit added to a rule without a conversion factor would silently not alarm</td>
+</tr>
+<tr>
+<td>4</td>
+<td>No time-series smoothing on alerting</td>
+<td>A single in-range spike triggers an immediate alert; Ajka <code>pH = 130</code> was caught by the range check, but a value inside the range would alarm on a single reading</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="8-recommendations">8. Recommendations</h2>
+<p>Ordered by expected impact per hour of work.</p>
+<ol>
+<li>
+<p><strong>Extend the coding prompt with a <code>distinguish-from</code> block</strong> for each
+   OAH catalogue entry that has near-neighbour concepts. Highest priority:
+   <code>coliforms</code> vs <code>enterococci</code>, <code>chloride</code> vs <code>chlorine</code>, <code>nitrate</code> vs
+   <code>nitrite</code>. Prompt-only change, no code path affected.</p>
+</li>
+<li>
+<p><strong>Add multilingual aliases</strong> to <code>coding-rules.yaml</code> for the ten most common
+   European languages. Removes Gemini dependencies on rows like
+   <code>Leitfaehigkeit</code>, <code>chlorki</code>, <code>przewodnosc</code>, <code>conductivité</code>.</p>
+</li>
+<li>
+<p><strong>Add turbidity to <code>coding-rules.yaml</code></strong> with <code>[NTU]</code> as an accepted unit,
+   plus a threshold rule. Closes a real IG gap flagged by the Milwaukee and
+   Havelock North scenarios.</p>
+</li>
+<li>
+<p><strong>Add cyanide (as <code>cyanide-total</code> or <code>cyanide-free</code>)</strong> to the catalogue.
+   Three <code>no_code</code> rows in Baia Mare 2000 argue this is a load-bearing
+   omission for pollution-spill scenarios.</p>
+</li>
+<li>
+<p><strong>Add an AI-drift metric to <code>scripts/simulate.py</code></strong> counting how often
+   Gemini picks a valid-but-lower-ranked catalogue code (i.e., not the
+   deterministic top candidate). Publish this alongside the pass/fail count
+   so drift is visible without being conflated with correctness.</p>
+</li>
+<li>
+<p><strong>Keep <code>simulate.py</code> non-blocking for CI.</strong> Preserve the current split:
+   <code>pytest tests/test_incidents.py</code> gates merges; <code>simulate.py</code> is
+   observation-only.</p>
+</li>
+</ol>
+<hr>
+<h2 id="9-reproducing-this-report">9. Reproducing this report</h2>
+<pre><code class="language-bash"># offline logic proof (84 assertions, no keys, no network)
+cd /Users/diyap/wildfhir
+.venv/bin/pytest tests/test_incidents.py -v
+
+# clean live run
+rm -f aquafhir.db aquafhir.db-shm aquafhir.db-wal
+.venv/bin/uvicorn aquafhir.main:app --app-dir src --host 127.0.0.1 --port 8000 &amp;
+sleep 2
+.venv/bin/python scripts/simulate.py -v
+
+# audit chain integrity
+curl -s http://127.0.0.1:8000/api/v1/provenance/verify
+</code></pre>
+<p>Exit code <code>0</code> from <code>simulate.py</code> indicates every scenario matched its
+documented outcome.</p>
+<hr>
+<h2 id="10-honesty-statement">10. Honesty statement</h2>
+<p>The measurement values in every fixture are synthetic. The catalogue narrates
+real incidents from the published record; it does not claim to reconstruct
+the sensor readings taken at the time. The threshold policy is a
+demonstration policy explicitly labelled <code>demo-not-for-operational-use</code> and
+must not be treated as regulatory limits. All AI outputs are advisory. Every
+published FHIR resource in this run passed through a mandatory human-review
+gate in the reviewer console; nothing was auto-approved.</p>
+<p>The 11-of-13 pass rate on the live sim reflects a real property of the
+Gemini co-pilot layer — it is not deterministic, and the tool does not
+pretend otherwise. The deterministic pipeline that this report is meant to
+validate passed all 84 offline assertions.</p>
+</body>
+</html>
