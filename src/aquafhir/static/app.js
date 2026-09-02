@@ -10,9 +10,9 @@
   const $$ = (s, root = document) => Array.from(root.querySelectorAll(s));
   const POLL_MS = 20000;
 
-  const PAGES = ["board", "list", "alerts", "advisories", "reports", "audit", "policy", "integrations"];
+  const PAGES = ["flow", "board", "list", "alerts", "advisories", "reports", "audit", "policy", "integrations"];
   const PAGE_TITLES = {
-    board: "Board", list: "Queue", alerts: "Incidents", advisories: "Advisories",
+    flow: "Data flow", board: "Board", list: "Queue", alerts: "Incidents", advisories: "Advisories",
     reports: "Reports", audit: "Audit log", policy: "Policy & catalog", integrations: "Integrations",
   };
   const AUDIENCE_LABEL = {
@@ -203,6 +203,123 @@
     return `${esc(p.reading.parameter)}<span class="to">→</span>${code}`;
   }
 
+  /* ── data flow (wire diagram) ─────────────────────────────────────────── */
+
+  // from, to, and which edge of each node the wire leaves and enters.
+  const WIRES = [
+    ["fn-ingest", "r", "fn-coding", "l", ""],
+    ["fn-coding", "r", "fn-review", "l", ""],
+    ["fn-review", "r", "fn-fhir", "l", ""],
+    ["fn-fhir", "r", "fn-policy", "l", ""],
+    ["fn-policy", "r", "fn-router", "l", ""],
+    ["fn-gemini", "b", "fn-coding", "t", "is-dashed"],
+    ["fn-umls", "b", "fn-review", "t", "is-dashed"],
+    ["fn-router", "b", "fa-public", "t", ""],
+    ["fn-router", "b", "fa-vet", "t", ""],
+    ["fn-router", "b", "fa-water", "t", ""],
+  ];
+
+  // Wires are measured from the live DOM rather than hard-coded, so the diagram
+  // survives any container width, font size, or wrapped label.
+  function drawWires() {
+    const canvas = $("#flow-canvas"), svg = $("#flow-wires");
+    if (!canvas || !svg || !canvas.offsetParent) return;   // page hidden: nothing to measure
+    const base = canvas.getBoundingClientRect();
+    if (!base.width || !base.height) return;
+    svg.setAttribute("viewBox", `0 0 ${base.width} ${base.height}`);
+    svg.setAttribute("width", base.width);
+    svg.setAttribute("height", base.height);
+
+    // Anchor on the port dot when the node draws one, so CSS can move a port
+    // (to clear the gate badge, say) and the wire follows it automatically.
+    const anchor = (id, side) => {
+      const el = document.getElementById(id);
+      if (!el) return null;
+      const port = el.querySelector(`.fport-${side}`);
+      if (port) {
+        const p = port.getBoundingClientRect();
+        return [p.left - base.left + p.width / 2, p.top - base.top + p.height / 2];
+      }
+      const r = el.getBoundingClientRect();
+      const x = r.left - base.left, y = r.top - base.top;
+      if (side === "r") return [x + r.width, y + r.height / 2];
+      if (side === "l") return [x, y + r.height / 2];
+      if (side === "t") return [x + r.width / 2, y];
+      return [x + r.width / 2, y + r.height];        // "b"
+    };
+
+    // The wire stops short of the target port so the arrowhead sits in clear
+    // space instead of being covered by the port dot, which paints above the SVG.
+    const GAP = 11;
+    const PULL = { l: [-GAP, 0, 0], r: [GAP, 0, 180], t: [0, -GAP, 90], b: [0, GAP, 270] };
+
+    let out = "";
+    WIRES.forEach(([from, fs, to, ts, cls], i) => {
+      const a = anchor(from, fs), b = anchor(to, ts);
+      if (!a || !b) return;
+      const [dx, dy, ang] = PULL[ts];
+      const end = [b[0] + dx, b[1] + dy];
+      const horizontal = (fs === "r" || fs === "l") && (ts === "r" || ts === "l");
+      let d;
+      if (horizontal) {
+        const k = Math.max(18, Math.abs(end[0] - a[0]) * 0.45);
+        d = `M ${a[0]} ${a[1]} C ${a[0] + k} ${a[1]}, ${end[0] - k} ${end[1]}, ${end[0]} ${end[1]}`;
+      } else {
+        const k = Math.max(16, Math.abs(end[1] - a[1]) * 0.55);
+        d = `M ${a[0]} ${a[1]} C ${a[0]} ${a[1] + k}, ${end[0]} ${end[1] - k}, ${end[0]} ${end[1]}`;
+      }
+      // Arrowhead is a rotated triangle so it inherits the lit stroke colour.
+      out += `<path d="${d}" class="${cls}" data-from="${from}" data-to="${to}" data-i="${i}"/>`;
+      out += `<polygon class="wire-head" data-i="${i}" points="0,-3.6 7,0 0,3.6" transform="translate(${end[0]} ${end[1]}) rotate(${ang})"/>`;
+    });
+    svg.innerHTML = out;
+  }
+
+  // Hovering or focusing a node lights only the wires touching it.
+  function litWires(id) {
+    $$("#flow-wires path").forEach((p) => {
+      const on = Boolean(id) && (p.dataset.from === id || p.dataset.to === id);
+      p.classList.toggle("is-lit", on);
+      const head = $(`#flow-wires polygon[data-i="${p.dataset.i}"]`);
+      if (head) head.classList.toggle("is-lit", on);
+    });
+  }
+
+  function renderFlow() {
+    const set = (sel, v) => { const n = $(sel); if (n) n.textContent = v; };
+    const pending = state.proposals.filter((p) => p.status === "pending").length;
+    const approved = state.proposals.filter((p) => p.status === "approved").length;
+    const coded = state.proposals.filter((p) => p.coding).length;
+    const secondary = state.provenance.filter(
+      (e) => e.event_type === "mapping-approved" && e.payload.reviewer_attached_secondary_coding).length;
+
+    set("#flow-c-ingest", state.proposals.length);
+    set("#flow-c-coding", coded);
+    set("#flow-c-review", pending);
+    set("#flow-c-fhir", approved);
+    set("#flow-c-policy", state.alerts.length);
+    set("#flow-c-alerts", state.briefings.length);
+    set("#flow-c-gemini", state.proposals.filter((p) => p.ai).length);
+    set("#flow-c-umls", secondary);
+
+    const byAudience = (a) => state.alerts.filter((x) => x.audiences.includes(a)).length;
+    [["public-health", "#flow-a-public", "#fa-public"], ["veterinary", "#flow-a-vet", "#fa-vet"],
+      ["water-authority", "#flow-a-water", "#fa-water"]].forEach(([aud, numSel, chipSel]) => {
+      const n = byAudience(aud);
+      set(numSel, n);
+      const chip = $(chipSel);
+      if (chip) chip.classList.toggle("is-active", n > 0);
+    });
+
+    const badge = $("#flow-ledger-status");
+    if (badge) {
+      if (!state.chain) { badge.className = "flow-ledger-status idle"; badge.textContent = "checking"; }
+      else if (state.chain.valid) { badge.className = "flow-ledger-status"; badge.textContent = `verified · ${state.chain.entries_checked}`; }
+      else { badge.className = "flow-ledger-status bad"; badge.textContent = `broken at #${state.chain.first_invalid_sequence}`; }
+    }
+    requestAnimationFrame(drawWires);
+  }
+
   /* ── board ────────────────────────────────────────────────────────────── */
 
   function cardHtml(p) {
@@ -382,6 +499,132 @@
       : `<div class="empty"><b>${state.briefings.length ? "No advisories match" : "No advisories drafted"}</b>${state.ai.enabled ? "Open an incident and draft one per audience." : "Set GEMINI_API_KEY to enable drafting."}</div>`;
   }
 
+  /* ── site map (Leaflet + OpenStreetMap) ───────────────────────────────── */
+  /* Tiles come from the OSM public tile server, which is fine for a review
+     console's traffic but must be swapped for a proper provider before any
+     real deployment. Nothing here needs an API key. */
+
+  const OSM_TILES = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+  const OSM_ATTRIB = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors';
+  const NOMINATIM = "https://nominatim.openstreetmap.org/search";
+  const map = { instance: null, layer: null, fitted: false, searchTimer: null, lastSearch: 0 };
+
+  // One row per distinct site, with the counts that decide colour and radius.
+  function siteRollup() {
+    const rows = new Map();
+    state.proposals.forEach((p) => {
+      const r = p.reading;
+      if (!Number.isFinite(r.latitude) || !Number.isFinite(r.longitude)) return;
+      const row = rows.get(r.site_code) || {
+        code: r.site_code, name: r.site_name, lat: r.latitude, lon: r.longitude,
+        total: 0, pending: 0, approved: 0, rejected: 0, sources: new Set(), alerts: [],
+      };
+      row.total += 1; row[p.status] += 1; row.sources.add(r.source_type);
+      rows.set(r.site_code, row);
+    });
+    state.alerts.forEach((a) => { const row = rows.get(a.site_code); if (row) row.alerts.push(a); });
+    return [...rows.values()];
+  }
+
+  function siteTone(row) {
+    if (row.alerts.some((a) => a.severity === "critical")) return { color: "#c9372c", rank: "Critical incident" };
+    if (row.alerts.length) return { color: "#e56910", rank: "High incident" };
+    if (row.approved) return { color: "#0c66e4", rank: "Observations published" };
+    return { color: "#8590a2", rank: "Pending review only" };
+  }
+
+  function renderMap() {
+    const host = $("#map-canvas");
+    if (!host) return;
+    const rows = siteRollup();
+    $("#map-count").textContent = rows.length
+      ? `${rows.length} site${rows.length === 1 ? "" : "s"} · ${rows.reduce((n, r) => n + r.total, 0)} readings`
+      : "no sites yet";
+
+    if (typeof window.L === "undefined") {
+      host.classList.add("is-dead");
+      host.innerHTML = '<div class="map-empty">Map library did not load. The rest of the console is unaffected.</div>';
+      return;
+    }
+    if (!map.instance) {
+      host.classList.remove("is-dead");
+      map.instance = window.L.map(host, { scrollWheelZoom: false, worldCopyJump: true })
+        .setView([52.4, 14.5], 6);
+      const tiles = window.L.tileLayer(OSM_TILES, { maxZoom: 18, attribution: OSM_ATTRIB });
+      // The public OSM tile server throttles bursts, which leaves holes in the
+      // basemap. Retry each failed tile once rather than showing a torn map.
+      tiles.on("tileerror", (event) => {
+        const img = event.tile;
+        if (!img || img.dataset.retried) return;
+        img.dataset.retried = "1";
+        const src = img.src;
+        window.setTimeout(() => { img.src = ""; img.src = src; }, 900);
+      });
+      tiles.addTo(map.instance);
+      // Scroll-to-zoom only once the reviewer has clicked in, so the page still scrolls.
+      map.instance.on("click", () => map.instance.scrollWheelZoom.enable());
+      map.instance.on("mouseout", () => map.instance.scrollWheelZoom.disable());
+      map.layer = window.L.layerGroup().addTo(map.instance);
+    }
+    map.layer.clearLayers();
+    if (!rows.length) return;
+
+    const max = Math.max(...rows.map((r) => r.total));
+    rows.forEach((row) => {
+      const tone = siteTone(row);
+      const marker = window.L.circleMarker([row.lat, row.lon], {
+        radius: 7 + Math.round(9 * Math.sqrt(row.total / max)),
+        color: tone.color, weight: 2, fillColor: tone.color, fillOpacity: .38,
+      });
+      const worst = row.alerts.slice().sort((a, b) =>
+        (b.severity === "critical") - (a.severity === "critical"))[0];
+      marker.bindPopup(
+        `<b>${esc(row.name)}</b>` +
+        `<div class="mp-meta">${esc(row.code)} · ${esc([...row.sources].join(", "))}</div>` +
+        `<div class="mp-meta">${row.total} readings · ${row.approved} approved · ${row.pending} pending</div>` +
+        (worst ? `<div class="mp-meta"><b>${esc(tone.rank)}:</b> ${esc(worst.rule_code)} at ${fnum(worst.value)} ${esc(worst.unit)}</div>` : "") +
+        `<a class="mp-link" href="#" data-map-site="${esc(row.code)}">Filter the queue to this site</a>`
+      );
+      marker.addTo(map.layer);
+    });
+
+    if (!map.fitted) {
+      map.instance.fitBounds(window.L.latLngBounds(rows.map((r) => [r.lat, r.lon])).pad(0.35), { maxZoom: 11 });
+      map.fitted = true;
+    }
+    // Leaflet needs a nudge when it was first laid out inside a hidden page.
+    window.setTimeout(() => map.instance && map.instance.invalidateSize(), 0);
+  }
+
+  function fitMapToSites() {
+    const rows = siteRollup();
+    if (!map.instance || !rows.length) { toast("No sites with coordinates yet.", "bad"); return; }
+    map.instance.fitBounds(window.L.latLngBounds(rows.map((r) => [r.lat, r.lon])).pad(0.35), { maxZoom: 11 });
+  }
+
+  // Nominatim asks for at most one request a second. The 700 ms debounce plus
+  // the hard floor below keeps us inside that even while somebody types fast.
+  async function geocode(query) {
+    const box = $("#map-suggest");
+    if (!query.trim()) { box.hidden = true; return; }
+    const wait = Math.max(0, 1000 - (Date.now() - map.lastSearch));
+    if (wait) await new Promise((r) => window.setTimeout(r, wait));
+    map.lastSearch = Date.now();
+    try {
+      const url = `${NOMINATIM}?q=${encodeURIComponent(query)}&format=jsonv2&limit=5&addressdetails=0`;
+      const response = await fetch(url, { headers: { Accept: "application/json" } });
+      if (!response.ok) throw new Error(`Nominatim returned ${response.status}`);
+      const hits = await response.json();
+      box.hidden = false;
+      box.innerHTML = hits.length
+        ? hits.map((h) => `<button type="button" data-lat="${h.lat}" data-lon="${h.lon}">${esc(h.display_name)}</button>`).join("")
+        : '<div class="ms-empty">No place matched.</div>';
+    } catch (error) {
+      box.hidden = false;
+      box.innerHTML = `<div class="ms-empty">Place search unavailable: ${esc(error.message)}</div>`;
+    }
+  }
+
   /* ── reports ──────────────────────────────────────────────────────────── */
 
   function renderReports() {
@@ -413,6 +656,7 @@
     const siteCodeByName = new Map(state.proposals.map((p) => [p.reading.site_name, p.reading.site_code]));
     $("#report-sites").innerHTML = table(group((p) => p.reading.site_name), (k) => state.alerts.filter((a) => a.site_code === siteCodeByName.get(k)).length);
     $("#report-sources").innerHTML = table(group((p) => `${p.reading.source_type} · ${p.reading.source_id}`), () => "-");
+    renderMap();
     $("#situation-report").innerHTML = state.situation ? situationHtml(state.situation) : "";
     $("#btn-situation").disabled = !state.ai.enabled;
     $("#btn-situation").title = state.ai.enabled ? "" : "Needs GEMINI_API_KEY";
@@ -1037,7 +1281,7 @@
     $("#btn-draft-all").disabled = !state.ai.enabled || !state.alerts.length;
     const siteOpts = `<option value="">All sites</option>${sites().map((s) => `<option value="${esc(s)}">${esc(s)}</option>`).join("")}`;
     ["#board-site", "#list-site"].forEach((id) => { const n = $(id); const v = n.value; n.innerHTML = siteOpts; n.value = v; });
-    ({ board: renderBoard, list: renderList, alerts: renderAlerts, advisories: renderBriefs, reports: renderReports, audit: renderAudit, policy: renderPolicy, integrations: renderIntegrations })[state.page]();
+    ({ flow: renderFlow, board: renderBoard, list: renderList, alerts: renderAlerts, advisories: renderBriefs, reports: renderReports, audit: renderAudit, policy: renderPolicy, integrations: renderIntegrations })[state.page]();
     if (state.drawer) renderDrawer();
   }
 
@@ -1095,6 +1339,12 @@
     const t = event.target;
     const el = (sel) => t.closest(sel);
     let n;
+    if ((n = el("[data-map-site]"))) {
+      event.preventDefault();
+      const row = state.proposals.find((p) => p.reading.site_code === n.dataset.mapSite);
+      if (row) { state.filters.list.site = row.reading.site_name; state.filters.list.status = "all"; go("list"); }
+      return;
+    }
     if ((n = el("[data-copy-text]"))) { event.preventDefault(); copy(n.dataset.copyText); return; }
     if ((n = el("[data-copy]"))) { event.preventDefault(); event.stopPropagation(); copy(n.dataset.copy); return; }
     if ((n = el("[data-close-drawer]"))) { closeDrawer(); return; }
@@ -1190,6 +1440,39 @@
   $("#brief-search").addEventListener("input", (e) => { state.filters.briefs.q = e.target.value; renderBriefs(); });
   $("#brief-audience").addEventListener("change", (e) => { state.filters.briefs.audience = e.target.value; renderBriefs(); });
 
+  // data flow: light the wires that touch the hovered or focused node
+  const flowCanvas = $("#flow-canvas");
+  if (flowCanvas) {
+    const lit = (e) => { const n = e.target.closest("[id^='fn-'], [id^='fa-']"); litWires(n ? n.id : null); };
+    flowCanvas.addEventListener("mouseover", lit);
+    flowCanvas.addEventListener("mouseout", (e) => { if (!flowCanvas.contains(e.relatedTarget)) litWires(null); });
+    flowCanvas.addEventListener("focusin", lit);
+    flowCanvas.addEventListener("focusout", () => litWires(null));
+  }
+  window.addEventListener("resize", () => {
+    if (state.page === "flow") drawWires();
+    if (state.page === "reports" && map.instance) map.instance.invalidateSize();
+  });
+
+  // map
+  $("#map-fit").addEventListener("click", fitMapToSites);
+  $("#map-search").addEventListener("input", (e) => {
+    const q = e.target.value;
+    window.clearTimeout(map.searchTimer);
+    map.searchTimer = window.setTimeout(() => geocode(q), 700);
+  });
+  $("#map-search").addEventListener("keydown", (e) => { if (e.key === "Escape") { $("#map-suggest").hidden = true; e.target.blur(); } });
+  $("#map-suggest").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-lat]");
+    if (!b || !map.instance) return;
+    map.instance.setView([Number(b.dataset.lat), Number(b.dataset.lon)], 11);
+    $("#map-suggest").hidden = true;
+    $("#map-search").value = "";
+  });
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".map-search")) { const s = $("#map-suggest"); if (s) s.hidden = true; }
+  });
+
   // reports, audit, integrations
   $("#btn-situation").addEventListener("click", (e) => situationReport(e.currentTarget));
   $("#btn-verify").addEventListener("click", (e) => verifyChain(e.currentTarget));
@@ -1229,8 +1512,8 @@
     if (typing || anyModalOpen() || e.metaKey || e.ctrlKey || e.altKey) return;
     if (chord === "g") {
       chord = null;
-      const map = { b: "board", q: "list", l: "list", i: "alerts", a: "audit", r: "reports", p: "policy", n: "integrations", v: "advisories" };
-      if (map[e.key.toLowerCase()]) { e.preventDefault(); go(map[e.key.toLowerCase()]); }
+      const dest = { f: "flow", b: "board", q: "list", l: "list", i: "alerts", a: "audit", r: "reports", p: "policy", n: "integrations", v: "advisories" };
+      if (dest[e.key.toLowerCase()]) { e.preventDefault(); go(dest[e.key.toLowerCase()]); }
       return;
     }
     switch (e.key) {
