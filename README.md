@@ -10,7 +10,7 @@ This repository contains only the first concept from the source brief: **the One
 
 ## Current status: done vs. pending
 
-**Done and tested (251 offline tests, no live Gemini or UMLS call ever runs in CI):**
+**Done and tested (286 offline tests, no live Gemini or UMLS call ever runs in CI):**
 
 - Curated OAH terminology coding and reviewed unit conversion ([coding.py](src/aquafhir/coding.py))
 - Gemini coding co-pilot, unstructured-bulletin intake, audience advisory drafting, grounded situation reports — all human-reviewed, all degrade cleanly with no key ([coding_llm.py](src/aquafhir/coding_llm.py), [intake.py](src/aquafhir/intake.py), [briefing.py](src/aquafhir/briefing.py))
@@ -23,6 +23,7 @@ This repository contains only the first concept from the source brief: **the One
 - **Defensive ingestion boundaries.** The rest-hook Subscription surface accepts whatever a FHIR server sends: null or non-numeric quantities, absent ids, FHIR partial dates (`2022-07`), and wrong-typed `code.coding` are skipped with a log line instead of raising. Non-finite quantities are rejected at the model boundary rather than published as a JSON-null `valueQuantity.value` ([test_robustness.py](tests/test_robustness.py))
 - **A failed sensor cannot raise an alert.** Each indicator carries a reviewed `plausible_range` in [coding-rules.yaml](config/coding-rules.yaml), enforced in the single place both proposers compute a published number. A dissolved-oxygen probe reporting `-5.0 mg/L`, a `pH` of `130.0`, or a temperature below absolute zero is coded but its *quantity is withheld* — no publication, no alert, approval blocked until a person corrects it (see [§ The incident catalogue](#the-incident-catalogue))
 - **An executable incident catalogue.** Twelve real water-and-health incidents — Oder 2022, Milwaukee 1993, Walkerton 2000, Toledo 2014, Havelock North 2016, Flint 2014, Baia Mare 2000, Ajka 2010, Mar Menor 2021, Akerselva 2011, Seine 2024, Brixham 2024 — replayed as fixtures with their expected coding, refusal, and audience-routing outcomes enforced in CI ([incidents.md](docs/incidents.md), [test_incidents.py](tests/test_incidents.py), [simulate.py](scripts/simulate.py))
+- **A biodiversity crosswalk that fills a gap the official IG left open.** The OAH code system has ten biological indicators and no taxonomy at all. This suggests a GBIF Backbone taxon for the organism named in a source label, keyless, reviewer-gated, published as an `Observation.component` that validates against the OAH profile with zero errors ([gbif.py](src/aquafhir/gbif.py); see [§ The biodiversity crosswalk](#the-biodiversity-crosswalk))
 - Docker Compose stack: bridge + HAPI + PostgreSQL, pinned image versions
 
 **Pending — tracked honestly rather than hidden:**
@@ -48,8 +49,8 @@ Built for the **IEEE OneAquaHealth Global Hackathon 2026**, an EU Horizon Europe
 | Criterion | How this repository addresses it |
 |---|---|
 | **Impact & Alignment with the OneAquaHealth mission** | Every environmental reading is normalized into the *same* FHIR resource model the OneAquaHealth project already publishes, and a crossed threshold routes an alert to human-health, veterinary, *and* water-authority audiences in one step — the ecosystem→health link is the product, not a bolt-on chart. The claim is tested against twelve real incidents rather than asserted: the [incident catalogue](docs/incidents.md) includes an urban stream in an OAH pilot city (Oslo's Akerselva), a citizen-signal-first outbreak (Brixham 2024), and an animal→water→human pathway routed to veterinary and public-health audiences from one reading (Havelock North 2016). |
-| **Innovation & Creativity** | A working Gemini co-pilot that maps multilingual, abbreviated, and free-text source data onto OAH terminology under enum-constrained grounding, and drafts audience-specific advisories — with a hash-chained ledger recording the model id and the exact prompt hash behind every proposal (§ [The Gemini co-pilot](#the-gemini-co-pilot)). Layered on top, a **terminology crosswalk** finds the real LOINC code for the same curated OAH concept — searching the published LOINC table scoped to environmental specimens, which surfaces `9481-3` pH of Water where a generic clinical UMLS search returns *Peliosis hepatis* — so a reviewer can publish both the project-specific code and a standard one a downstream EHR already understands (§ [The terminology crosswalk](#the-terminology-crosswalk)). FHIR-for-environment bridges with reviewer gating are rare; ones that also close the "temporary code system → real terminology" gap are rarer still. |
-| **Architecture** | HAPI FHIR R4 loaded with the real `hl7.eu.fhir.oah` package, R4 rest-hook Subscriptions, a versioned/unit-aware alert policy, a swappable `CodingProposer` contract the model plugs into without touching the FHIR or alerting layers, a two-source `TerminologyCrosswalk` that validates every LOINC candidate against the published term table and degrades source-by-source, and documented sequence diagrams (see [architecture.md](docs/architecture.md)). 251 tests, all offline, including a malformed-input suite covering every shape a FHIR server or a source can push at it, and **an executable incident catalogue** — twelve real water-and-health incidents replayed as fixtures with their expected coding, refusal, and audience-routing outcomes enforced in CI ([incidents.md](docs/incidents.md)). |
+| **Innovation & Creativity** | A working Gemini co-pilot that maps multilingual, abbreviated, and free-text source data onto OAH terminology under enum-constrained grounding, and drafts audience-specific advisories — with a hash-chained ledger recording the model id and the exact prompt hash behind every proposal (§ [The Gemini co-pilot](#the-gemini-co-pilot)). Layered on top, a **terminology crosswalk** finds the real LOINC code for the same curated OAH concept — searching the published LOINC table scoped to environmental specimens, which surfaces `9481-3` pH of Water where a generic clinical UMLS search returns *Peliosis hepatis* — so a reviewer can publish both the project-specific code and a standard one a downstream EHR already understands (§ [The terminology crosswalk](#the-terminology-crosswalk)). FHIR-for-environment bridges with reviewer gating are rare; ones that also close the "temporary code system → real terminology" gap are rarer still. On top of that, a **biodiversity crosswalk** names the organism a source label mentions, filling a white space the official IG itself leaves open: it defines ten biological indicators and binds none of them to a taxonomy (§ [The biodiversity crosswalk](#the-biodiversity-crosswalk)). |
+| **Architecture** | HAPI FHIR R4 loaded with the real `hl7.eu.fhir.oah` package, R4 rest-hook Subscriptions, a versioned/unit-aware alert policy, a swappable `CodingProposer` contract the model plugs into without touching the FHIR or alerting layers, a two-source `TerminologyCrosswalk` that validates every LOINC candidate against the published term table and degrades source-by-source, and documented sequence diagrams (see [architecture.md](docs/architecture.md)). 286 tests, all offline, including a malformed-input suite covering every shape a FHIR server or a source can push at it, and **an executable incident catalogue** — twelve real water-and-health incidents replayed as fixtures with their expected coding, refusal, and audience-routing outcomes enforced in CI ([incidents.md](docs/incidents.md)). |
 | **UX** | A dependency-free review console built like a work-management tool, not a dashboard of charts. Every proposal is a card that reads *as received → OneAquaHealth FHIR*; opening it shows the model's quoted evidence, the competing candidates, a visible flag when the AI disagrees with the curated rules, the LOINC/SNOMED crosswalk, the exact FHIR Observation once approved, and its own hash-chain history. Reviewers can drag a card to a decision, bulk-approve inspected rows, or use ⌘K and keyboard shortcuts. Incidents carry one-click advisory drafting per audience; the audit log is a real table with verification. The reviewer sees what the model saw. See the [demo script](docs/demo-script.md). |
 | **Scale** | Config-driven terminology ([coding-rules.yaml](config/coding-rules.yaml)) and policy ([thresholds.yaml](config/thresholds.yaml)) — adding an indicator is a YAML edit, and the model's vocabulary widens with it automatically. `auto` assist mode spends a model call only where rules are weak, so cost scales with novelty rather than volume. Gap analysis in § [Implemented versus production work](#implemented-versus-production-work). |
 
@@ -196,7 +197,7 @@ Then start and test:
 
 ```bash
 uvicorn aquafhir.main:app --reload
-pytest          # 251 tests, fully offline — no keys needed, no network touched
+pytest          # 286 tests, fully offline — no keys needed, no network touched
 ruff check .
 ```
 
@@ -395,6 +396,98 @@ in [coding-rules.yaml](config/coding-rules.yaml). Demonstration alert rules live
 in [thresholds.yaml](config/thresholds.yaml), which prevents a terminology edit — or a
 model — from silently changing safety policy.
 
+## The biodiversity crosswalk
+
+The OneAquaHealth IG's temporary code system carries biological indicators as
+coarse buckets: `fishes`, `diatomes`, `macroinvertebreates`, `macrophytes`,
+`amphibians`, `birds`. Ten such codes, and **not one of them is backed by a
+taxonomy**. There is no Darwin Core, no GBIF, no ENVO, no NCBI Taxonomy
+anywhere in the guide. A reading that says *Prymnesium parvum* loses the
+organism the moment it is coded, which for a One Health bus is the part that
+matters most: the species is what links the water body to the fish kill to the
+human advisory.
+
+This crosswalk closes that gap the same way the LOINC one does. It suggests a
+[GBIF Backbone Taxonomy](https://www.gbif.org/dataset/d7dddbf4-2cf0-4f39-9b2a-bb099caae36c)
+key for the organism named in a source label, and a reviewer attaches it or
+ignores it. It needs no key and no registration.
+
+### It reads the source label, not the curated code
+
+The two crosswalks sit on different axes, and getting this wrong makes the
+feature useless. The OAH display `fishes` is not a taxon and GBIF refuses it;
+the raw source label `Prymnesium parvum cell count` names one exactly. So the
+taxon lookup keys on `reading.parameter`, and it deliberately still runs when
+the curated catalog could not code the reading at all. That is not an edge
+case: a reading the catalog cannot code is precisely where an organism name
+most often survives untranslated.
+
+### Unlike a clinical search, GBIF declines cleanly
+
+The [terminology crosswalk](#the-terminology-crosswalk) has to work hard to
+stop UMLS offering *Peliosis hepatis* for `pH`. GBIF has the opposite
+character, which is what makes it safe to run over raw, uncurated text:
+
+| Source label | GBIF answer |
+|---|---|
+| `Prymnesium parvum cell count` | `7513065` *Prymnesium parvum* N.Carter, EXACT |
+| `dissolved oxygen` | no match |
+| `pH` | no match |
+| `Leitfähigkeit` | no match |
+| `chloride` | no match |
+
+There is one trap, and the client is built around it. A refusal comes back as
+`{"matchType": "NONE", "confidence": 100}` — a **full** confidence score
+attached to a non-answer. Any implementation that thresholds on `confidence`
+accepts every miss. [`gbif.py`](src/aquafhir/gbif.py) therefore decides on
+`matchType` alone and treats `confidence` as display metadata, and there is a
+test asserting exactly that.
+
+### Where the taxon lands, and why not in `code.coding`
+
+The indicator axis and the organism axis are different things, and the
+threshold policy reads `Observation.code.coding[0]`. Putting a taxon there
+would let a biodiversity suggestion reach the alerting path. So the taxon is
+published as an `Observation.component`:
+
+```json
+"code":      { "coding": [{ "code": "fishes" }] },
+"valueQuantity": { "value": 214, "code": "{count}" },
+"component": [{
+  "code":  { "coding": [{ "system": "http://loinc.org", "code": "41852-5" }] },
+  "valueCodeableConcept": {
+    "coding": [{ "system": "https://doi.org/10.15468/39omei", "code": "8215487",
+                 "display": "Salmo trutta Linnaeus, 1758" }] }
+}]
+```
+
+The component code is **not** a repeat of the OAH indicator. The first
+implementation did that and HAPI's validator rejected it under FHIR invariant
+`obs-7`: *"If Observation.code is the same as an Observation.component.code
+then the value element associated with the code SHALL NOT be present."* It is
+now LOINC `41852-5` *Microorganism or agent identified in Specimen* — real,
+ACTIVE, specimen-agnostic, nominal scale, and checked against the vendored
+LOINC table by a test rather than taken on trust. The corrected resource
+validates against `observation-indicators-oah` with **zero errors** and is
+accepted by HAPI.
+
+### The system URI is a deliberate choice, not a standard
+
+There is no HL7-registered code system URI for GBIF taxon keys. This project
+publishes the DOI of the GBIF Backbone Taxonomy,
+`https://doi.org/10.15468/39omei`, because it identifies the exact checklist a
+key belongs to. That is a project decision pending registration, recorded here
+in the same register as the OAH temporary code system it sits beside.
+
+### What it still cannot do
+
+Naming the organism does not create an indicator to hang it on. The Oder
+replay's *Prymnesium parvum* reading resolves to GBIF `7513065` at 99%
+confidence and **still cannot be published**, because the OAH code system has
+no concept for phytoplankton cell density. The crosswalk surfaces the
+identification and the gap in the same breath, which is the honest result and
+one more entry for [the gap list](docs/incidents.md#terminology-gaps-this-catalogue-found).
+
 ## The terminology crosswalk
 
 The OAH IG's environmental concepts live in a temporary project code system
@@ -565,6 +658,7 @@ statement are in **[docs/incidents.md](docs/incidents.md)**.
 │   ├── briefing.py           # audience advisories and grounded situation reports
 │   ├── loinc_table.py        # published LOINC terms: validation + environmental search
 │   ├── umls.py               # minimal UMLS UTS REST client (apiKey auth)
+│   ├── gbif.py               # keyless GBIF Backbone client for organism identity
 │   ├── terminology.py        # local LOINC first, UMLS top-up, into suggested codings
 │   ├── fhir.py               # conformant resources, bundles, subscriptions
 │   ├── repository.py         # SQLite workflow state + hash chain
@@ -622,6 +716,10 @@ The detailed hardening gates are in [production-checklist.md](docs/production-ch
 | `UMLS_API_BASE` | `https://uts-ws.nlm.nih.gov/rest` | UTS REST API base |
 | `UMLS_TIMEOUT_SECONDS` | `15` | Per-call timeout |
 | `UMLS_MAX_RETRIES` | `2` | Retries only 408/429/5xx and network errors |
+| `GBIF_ENABLED` | `true` | Biodiversity crosswalk. No key exists to configure: GBIF read calls are unauthenticated, so this is a plain on/off switch |
+| `GBIF_API_BASE` | `https://api.gbif.org/v1` | GBIF REST API base |
+| `GBIF_TIMEOUT_SECONDS` | `15` | Per-call timeout |
+| `GBIF_MAX_RETRIES` | `2` | Retries only 408/429/5xx and network errors |
 | `UMLS_VOCABULARIES` | `LNC,SNOMEDCT_US` | Comma-separated UMLS source-vocabulary abbreviations searched and allowlist-checked |
 | `UMLS_CLIENT_ID` / `UMLS_CLIENT_SECRET` | *(empty)* | The client credentials NLM issues during the license request. Shown on the Integrations page for reference (id in full, secret as a fingerprint); never sent to the UTS API, which does not accept them |
 
@@ -635,5 +733,6 @@ The detailed hardening gates are in [production-checklist.md](docs/production-ch
 - [UMLS Terminology Services (UTS) REST API authentication](https://documentation.uts.nlm.nih.gov/rest/authentication.html)
 - [UMLS UTS Search API reference](https://documentation.uts.nlm.nih.gov/rest/search/)
 - [LOINC](https://loinc.org/) · [SNOMED CT (SNOMED International)](https://www.snomed.org/)
+- [GBIF Backbone Taxonomy](https://doi.org/10.15468/39omei) · [GBIF API (no key required)](https://techdocs.gbif.org/en/openapi/)
 
 The OAH guide is an unauthorised, changing continuous build. Freeze and archive the exact NPM package used by a release; never assume `0.1.0-ci-build` is immutable merely because the version string stays the same.

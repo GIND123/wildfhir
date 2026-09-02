@@ -16,6 +16,7 @@ from aquafhir.coding import CodingProposer, ReviewedCodingAgent
 from aquafhir.coding_llm import GeminiCodingAgent
 from aquafhir.config import Settings, get_settings
 from aquafhir.fhir import OAH_LOCATION_PROFILE, OAH_OBSERVATION_PROFILE, FhirClient
+from aquafhir.gbif import GbifClient, GbifError
 from aquafhir.gemini import GeminiClient, GeminiError
 from aquafhir.intake import UnstructuredIntake
 from aquafhir.loinc_table import LoincTable
@@ -97,6 +98,15 @@ def build_umls_client(settings: Settings) -> UMLSClient:
     )
 
 
+def build_gbif_client(settings: Settings) -> GbifClient:
+    return GbifClient(
+        enabled=settings.gbif_enabled,
+        api_base=settings.gbif_api_base,
+        timeout=settings.gbif_timeout_seconds,
+        max_retries=settings.gbif_max_retries,
+    )
+
+
 def build_service(settings: Settings) -> BridgeService:
     gemini = build_gemini_client(settings)
     umls = build_umls_client(settings)
@@ -117,6 +127,7 @@ def build_service(settings: Settings) -> BridgeService:
             umls,
             vocabularies=tuple(settings.umls_vocabulary_list),
             loinc_table=LoincTable(settings.loinc_table_path),
+            gbif=build_gbif_client(settings),
         ),
         replay_path=settings.replay_data_path,
     )
@@ -177,6 +188,14 @@ async def gemini_error_handler(_: Request, error: GeminiError) -> JSONResponse:
     return JSONResponse(
         status_code=502,
         content={"detail": f"Gemini upstream failure: {error}"},
+    )
+
+
+@app.exception_handler(GbifError)
+async def gbif_error_handler(_: Request, error: GbifError) -> JSONResponse:
+    return JSONResponse(
+        status_code=502,
+        content={"detail": f"GBIF upstream failure: {error}"},
     )
 
 
@@ -269,6 +288,12 @@ def terminology_status(service: Service) -> UmlsStatus:
         detail = (
             "No terminology source configured. The OAH coding and FHIR pipeline is "
             "unaffected; approved Observations simply carry one coding."
+        )
+    if "gbif" in sources:
+        detail += (
+            " The GBIF Backbone crosswalk additionally suggests a taxon for an "
+            "organism named in a source label; it is keyless and refuses cleanly "
+            "on anything that is not an organism."
         )
     return UmlsStatus(
         enabled=enabled,
@@ -466,6 +491,18 @@ def get_proposal(proposal_id: str, service: Service) -> MappingProposal:
 def terminology_suggestions(proposal_id: str, service: Service) -> list[TerminologyMatch]:
     try:
         return service.suggest_terminology(proposal_id)
+    except ProposalNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Proposal not found") from error
+
+
+@app.get(
+    "/api/v1/proposals/{proposal_id}/taxon-suggestions",
+    response_model=list[TerminologyMatch],
+    summary="Suggest a GBIF Backbone taxon for the organism named in the source label",
+)
+def taxon_suggestions(proposal_id: str, service: Service) -> list[TerminologyMatch]:
+    try:
+        return service.suggest_taxa(proposal_id)
     except ProposalNotFoundError as error:
         raise HTTPException(status_code=404, detail="Proposal not found") from error
 

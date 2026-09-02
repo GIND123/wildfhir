@@ -134,6 +134,8 @@ class BridgeService:
             proposal.normalized_unit = decision.normalized_unit
         if decision.secondary_coding:
             proposal.secondary_coding = decision.secondary_coding
+        if decision.taxon:
+            proposal.taxon = decision.taxon
         if not proposal.coding or proposal.normalized_value is None or not proposal.normalized_unit:
             raise InvalidReviewStateError(
                 "Proposal needs a coding, normalized value, and normalized UCUM unit"
@@ -166,6 +168,7 @@ class BridgeService:
                 "reviewer_overrode_coding": decision.coding is not None,
                 "reviewer_overrode_quantity": decision.normalized_value is not None,
                 "reviewer_attached_secondary_coding": decision.secondary_coding is not None,
+                "reviewer_attached_taxon": decision.taxon is not None,
             },
         )
         alerts = self._evaluate_and_store(observation)
@@ -309,6 +312,23 @@ class BridgeService:
         if not proposal.coding:
             return []
         return self.terminology.suggest(proposal.coding.display)
+
+    def suggest_taxa(self, proposal_id: str) -> list[TerminologyMatch]:
+        """Suggest a GBIF taxon for the organism named in the source label.
+
+        Unlike `suggest_terminology`, this does not need a curated coding. An
+        organism name most often survives in readings the catalog could not
+        code at all, and refusing to look would lose exactly the cases where
+        the identification matters most.
+        """
+        if self.terminology is None or not self.terminology.taxa_available:
+            raise AiUnavailableError(
+                "Biodiversity crosswalk is disabled (GBIF_ENABLED=false)"
+            )
+        proposal = self.repository.get_proposal(proposal_id)
+        if not proposal:
+            raise ProposalNotFoundError(proposal_id)
+        return self.terminology.suggest_taxa(proposal.reading.parameter)
 
     # -- internals ---------------------------------------------------------
 

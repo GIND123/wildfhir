@@ -90,6 +90,7 @@ class MappingProposal(BaseModel):
     reading: RawReading
     coding: Coding | None
     secondary_coding: Coding | None = None
+    taxon: Coding | None = None
     normalized_value: float | None
     normalized_unit: str | None
     confidence: float = Field(ge=0, le=1)
@@ -110,6 +111,10 @@ class ReviewDecision(BaseModel):
     normalized_value: float | None = Field(default=None, allow_inf_nan=False)
     normalized_unit: str | None = None
     secondary_coding: Coding | None = None
+    # A GBIF Backbone taxon the reviewer chose from the biodiversity crosswalk.
+    # Like `secondary_coding`, it is never inferred: no taxon reaches FHIR
+    # unless a person picked it here.
+    taxon: Coding | None = None
 
     @model_validator(mode="after")
     def quantity_override_is_complete(self) -> "ReviewDecision":

@@ -94,6 +94,21 @@ rules:
       '{cfu}/100mL': { factor: 1.0, target: '{cfu}/dL' }
       'CFU/100mL': { factor: 1.0, target: '{cfu}/dL' }
     plausible_range: { min: 0.0, max: 100000000.0 }
+  # Biological indicators. These are the codes the GBIF biodiversity crosswalk
+  # attaches a taxon to: the OAH code says *what kind of thing was counted*,
+  # the taxon says *which organism*. Both are real concepts in the published
+  # OAH code system. Note there is deliberately no rule for phytoplankton cell
+  # density: the IG has no code for it, so such readings stay uncoded.
+  - code: fishes
+    display: Fish
+    aliases: [fish, fishes, fish count, dead fish, fish abundance]
+    accepted_units: ['{count}']
+    plausible_range: { min: 0.0, max: 10000000.0 }
+  - code: macroinvertebreates
+    display: Benthic Macro invertebrates count
+    aliases: [macroinvertebrates, benthic macroinvertebrates, macroinvertebrate count, benthic invertebrates]
+    accepted_units: ['{count}']
+    plausible_range: { min: 0.0, max: 10000000.0 }
   - code: lead-dissolved
     display: Lead dissolved
     aliases: [lead, lead dissolved, dissolved lead, pb]

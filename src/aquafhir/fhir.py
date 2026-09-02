@@ -14,6 +14,16 @@ OAH_LOCATION_PROFILE = "http://hl7.eu/fhir/ig/oah/StructureDefinition/location-o
 OAH_LOCATION_IDENTIFIER = "https://aquafhir.example/location-id"
 OAH_SOURCE_IDENTIFIER = "https://aquafhir.example/source-id"
 
+# Component code for a reviewer-attached organism. It must differ from
+# `Observation.code`: FHIR invariant obs-7 forbids a component repeating the
+# observation's own code while a value is present, and HAPI enforces it. This
+# is a real, ACTIVE, specimen-agnostic LOINC term on a nominal scale, so a
+# coded value is the correct value type. Checked against the vendored LOINC
+# table in tests rather than taken on trust.
+TAXON_COMPONENT_SYSTEM = "http://loinc.org"
+TAXON_COMPONENT_CODE = "41852-5"
+TAXON_COMPONENT_DISPLAY = "Microorganism or agent identified in Specimen"
+
 
 def fhir_id(value: str) -> str:
     """Map an arbitrary source string onto a FHIR id ([A-Za-z0-9-.]{1,64}).
@@ -107,6 +117,38 @@ def build_resources(
     if reading.evidence_url:
         observation["note"].append(
             {"text": f"Source evidence URI: {reading.evidence_url}"}
+        )
+    if proposal.taxon:
+        # The taxon rides in a component, never in `code.coding`. `code` is the
+        # indicator axis and the threshold policy reads `code.coding[0]`, so
+        # mixing the two would let a biodiversity suggestion reach the alerting
+        # path. The component code repeats the reviewed OAH indicator rather
+        # than inventing a concept for "organism observed".
+        observation["component"] = [
+            {
+                "code": {
+                    "coding": [
+                        {
+                            "system": TAXON_COMPONENT_SYSTEM,
+                            "code": TAXON_COMPONENT_CODE,
+                            "display": TAXON_COMPONENT_DISPLAY,
+                        }
+                    ],
+                    "text": TAXON_COMPONENT_DISPLAY,
+                },
+                "valueCodeableConcept": {
+                    "coding": [proposal.taxon.model_dump()],
+                    "text": proposal.taxon.display,
+                },
+            }
+        ]
+        observation["note"].append(
+            {
+                "text": (
+                    f"Taxon {proposal.taxon.system}|{proposal.taxon.code} "
+                    "attached by reviewer from a GBIF biodiversity crosswalk suggestion."
+                )
+            }
         )
     if proposal.secondary_coding:
         observation["note"].append(

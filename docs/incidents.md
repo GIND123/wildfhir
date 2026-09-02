@@ -75,7 +75,7 @@ This is the sequence to run for a demo, a judging session, or a regression check
 ### 1. Prove the logic offline — no keys, no network, ~2 seconds
 
 ```bash
-pytest -q                              # 251 tests
+pytest -q                              # 286 tests
 pytest tests/test_incidents.py -q      # the 84 that are this catalogue
 ```
 
@@ -218,7 +218,11 @@ python scripts/simulate.py oder-2022 -v
   `GEMINI_API_KEY` and it becomes `coded` at `2.35 mS/cm`, computed from the reviewed
   conversion factor, never by the model.
 - `chlorki` — the Polish label — matches `chloride` on string similarity alone. No model needed.
-- `Prymnesium parvum cell count` is refused: the OAH IG has no code for a species cell count.
+- `Prymnesium parvum cell count` is refused on the indicator axis: the OAH IG has
+  no code for a species cell count. The biodiversity crosswalk still identifies
+  the organism as GBIF `7513065` *Prymnesium parvum* N.Carter at 99% confidence,
+  so the console reports the identification and the standards gap together
+  rather than losing both.
 - The 9 August mercury reading is the false lead that early reporting chased. It codes
   cleanly at `0.35 ug/L` and does **not** cross the demonstration threshold — the system
   neither hides it nor amplifies it.
@@ -873,6 +877,19 @@ The refusals are an output, not a shortfall. This is the list to submit.
 | **Microcystin / cyanotoxins** | Toledo 2014 | The substance drinking-water advisories are actually issued on. |
 | **Enterococci** | Seine 2024 | A mandatory Bathing Water Directive (2006/7/EC) indicator. `coliforms` covers only the *E. coli* half. |
 | Volatile organics (vinyl chloride, acrylates) | East Palestine 2023 | Whole class absent. |
+| **Phytoplankton cell density** | Oder 2022 | The IG has `diatomes` but no concept for a cell count of a named alga. Found while building the biodiversity crosswalk: GBIF resolves *Prymnesium parvum* to `7513065` at 99% confidence, and the reading still cannot be published because there is no indicator to hang it on. |
+
+### No taxonomy anywhere in the IG
+
+The code system carries ten biological indicators (`fishes`, `diatomes`,
+`macroinvertebreates`, `macrophytes`, `amphibians`, `birds`, `diptera`,
+`ticks`, `invasiveOrganisms`, `fish`) and binds **none** of them to Darwin
+Core, GBIF, ENVO or NCBI Taxonomy. A reading naming *Prymnesium parvum* loses
+the organism the moment it is coded. The
+[biodiversity crosswalk](../README.md#the-biodiversity-crosswalk) now suggests
+a GBIF Backbone key for the organism named in a source label, reviewer-gated
+and published as an `Observation.component`. Submitting a taxonomic binding to
+the IG is the real fix.
 
 ### Also observed in the IG
 

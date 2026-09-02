@@ -323,6 +323,8 @@ def test_every_curated_code_is_an_oah_temporary_code_system_concept(
         "total-phosphates",
         "tss",
         "coliforms",
+        "fishes",
+        "macroinvertebreates",
         "lead-dissolved",
         "mercury-dissolved",
         "copper-dissolved",

@@ -7,6 +7,7 @@ from aquafhir.coding import ReviewedCodingAgent
 from aquafhir.coding_llm import GeminiCodingAgent
 from aquafhir.config import AssistMode
 from aquafhir.fhir import FhirClient
+from aquafhir.gbif import GbifClient
 from aquafhir.gemini import GeminiClient
 from aquafhir.intake import UnstructuredIntake
 from aquafhir.loinc_table import LoincTable
@@ -15,7 +16,7 @@ from aquafhir.service import BridgeService
 from aquafhir.terminology import TerminologyCrosswalk
 from aquafhir.thresholds import ThresholdPolicy
 from aquafhir.umls import UMLSClient
-from tests.fakes import FakeGemini, FakeUMLS
+from tests.fakes import FakeGbif, FakeGemini, FakeUMLS
 
 ROOT = Path(__file__).parents[1]
 RULES = ROOT / "config" / "coding-rules.yaml"
@@ -29,6 +30,7 @@ def _build(
     coding_agent,
     umls: UMLSClient | None = None,
     loinc_table: LoincTable | None = None,
+    gbif: GbifClient | None = None,
 ) -> BridgeService:
     return BridgeService(
         repository=Repository(tmp_path / "test.db"),
@@ -38,7 +40,7 @@ def _build(
         intake=UnstructuredIntake(gemini),
         briefing_writer=BriefingWriter(gemini),
         terminology=TerminologyCrosswalk(
-            umls or UMLSClient(api_key=""), loinc_table=loinc_table
+            umls or UMLSClient(api_key=""), loinc_table=loinc_table, gbif=gbif
         ),
         replay_path=REPLAY,
     )
@@ -150,3 +152,18 @@ def hybrid_service(
         fake_umls,
         loinc_table=build_loinc_table(tmp_path),
     )
+
+
+@pytest.fixture
+def taxon_service(tmp_path: Path, curated_agent: ReviewedCodingAgent):
+    """Deterministic pipeline with a stubbed GBIF transport and no other source."""
+
+    def build(responses):
+        return _build(
+            tmp_path,
+            GeminiClient(api_key="", model="gemini-test"),
+            curated_agent,
+            gbif=FakeGbif(responses),
+        )
+
+    return build

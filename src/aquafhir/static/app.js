@@ -32,6 +32,8 @@
     observations: {},        // proposal id -> {observation, fhir_response} from approvals in this session
     suggestions: {},         // proposal id -> TerminologyMatch[]
     picks: {},               // proposal id -> chosen secondary Coding
+    taxa: {},                // proposal id -> GBIF TerminologyMatch[]
+    taxonPicks: {},          // proposal id -> chosen taxon Coding
     keys: new Map(),         // proposal id -> AQF-n
     situation: null,
     lastRefresh: null,
@@ -193,6 +195,7 @@
     if (p.ai?.disagreed_with_rules) out.push('<span class="lz amber">disagrees</span>');
     if (p.ai?.needs_expert_review) out.push('<span class="lz amber">expert</span>');
     if (p.secondary_coding) out.push(`<span class="lz teal">${esc(p.secondary_coding.code)}</span>`);
+    if (p.taxon) out.push('<span class="lz">taxon</span>');
     return out.join("");
   }
   const tagm = (value, full = value) => `<span class="tagm" data-copy="${esc(full)}" title="Click to copy">${esc(value)}</span>`;
@@ -959,23 +962,38 @@
       </dl></div>
       <div class="note info">${icon("info")}<span>The model may only pick from the grounded codes above and never computes the published number. The prompt hash covers template, system instruction, and rendered input, so an auditor can separate a template change from an input change.</span></div>`;
     }
+    function taxonSection() {
+      // Keyed on the raw source label, not the curated display: `fishes` is not
+      // a taxon, `Prymnesium parvum cell count` names one. So this half works
+      // even when nothing could be coded.
+      if (!(state.umls.sources || []).includes("gbif")) return "";
+      const found = state.taxa[p.id];
+      const pick = state.taxonPicks[p.id];
+      return `<div class="sec"><div class="sec-head"><h4>Organism (GBIF Backbone)</h4><button class="btn sm" data-suggest-taxon="${p.id}" type="button">${found ? "Search again" : "Identify organism"}</button></div>
+        <p class="quote">Reads the source label <b>${esc(p.reading.parameter)}</b>. The OneAquaHealth code system has no taxonomy, so a species name would otherwise be lost. GBIF refuses anything that is not an organism, so a chemical label returns nothing.</p>
+        ${!found ? '<p class="quote dim">Not searched yet.</p>' : found.length ? `<div class="chips">${found.map((m) => `<button class="chipbtn wrap ${pick && pick.code === m.code ? "is-on" : ""}" data-pick-taxon="${p.id}" data-system="${esc(m.system)}" data-code="${esc(m.code)}" data-display="${esc(m.display)}" title="${esc(m.display)}" type="button"><span class="lz lc">GBIF</span><span class="mono">${esc(m.code)}</span><span>${esc(m.display)}</span></button>`).join("")}</div>` : `<div class="note info">${icon("info")}<span>No organism named in this label. That is the expected answer for a chemical or physical reading.</span></div>`}
+        ${pick ? `<div class="note ok" style="margin-top:8px">${icon("check")}<span><b>${esc(pick.code)}</b> ${esc(pick.display)} will be published as an <code>Observation.component</code>, leaving the indicator coding untouched. <button class="btn link sm" data-unpick-taxon="${p.id}" type="button">Remove</button></span></div>` : ""}
+      </div>`;
+    }
     function crosswalkTab() {
-      if (p.status !== "pending") return `<div class="note info">${icon("info")}<span>${p.secondary_coding ? `Published with second coding ${esc(p.secondary_coding.code)} (${esc(p.secondary_coding.display)}).` : "This proposal was decided without a second coding."}</span></div>`;
-      if (!state.umls.enabled) return `<div class="note">${icon("alert")}<span>No terminology source is configured. Approvals carry the OAH coding alone. See Integrations.</span></div>`;
-      if (!p.coding) return `<div class="note">${icon("alert")}<span>Choose a curated code first; the crosswalk searches by the curated display term.</span></div>`;
+      if (p.status !== "pending") return `<div class="note info">${icon("info")}<span>${p.secondary_coding ? `Published with second coding ${esc(p.secondary_coding.code)} (${esc(p.secondary_coding.display)}).` : "This proposal was decided without a second coding."}</span></div>${p.taxon ? `<div class="note info" style="margin-top:8px">${icon("info")}<span>Published with organism ${esc(p.taxon.code)} (${esc(p.taxon.display)}).</span></div>` : ""}`;
+      if (!state.umls.enabled && !(state.umls.sources || []).includes("gbif")) return `<div class="note">${icon("alert")}<span>No terminology source is configured. Approvals carry the OAH coding alone. See Integrations.</span></div>`;
+      if (!p.coding) return `<div class="note">${icon("alert")}<span>No curated code, so there is nothing to crosswalk to LOINC or SNOMED. The organism lookup below reads the source label directly and still works.</span></div>${taxonSection()}`;
       const found = state.suggestions[p.id];
       const pick = state.picks[p.id];
       return `<div class="sec"><p class="quote">Searches <b>${esc(p.coding.display)}</b> in ${(state.umls.sources || []).map((s) => `<span class="lz lc">${esc(s)}</span>`).join(" ")} for a real ${(state.umls.vocabularies || []).join(" / ")} concept a downstream EHR already understands. Nothing is attached until you approve.</p></div>
       <div class="sec"><div class="sec-head"><h4>Candidates</h4><button class="btn sm" data-suggest="${p.id}" type="button">${found ? "Search again" : "Suggest LOINC / SNOMED"}</button></div>
         ${!found ? '<p class="quote dim">Not searched yet.</p>' : found.length ? `<div class="chips">${found.map((m) => `<button class="chipbtn ${pick && pick.code === m.code && pick.system === m.system ? "is-on" : ""}" data-pick="${p.id}" data-system="${esc(m.system)}" data-code="${esc(m.code)}" data-display="${esc(m.display)}" title="${esc(m.display)}" type="button"><span class="lz lc teal">${esc(m.vocabulary)}</span><span class="mono">${esc(m.code)}</span><span>${esc(m.display)}</span><span class="dim">${Math.round(m.score * 100)}%</span></button>`).join("")}</div>` : `<div class="note info">${icon("info")}<span>No publishable candidate. Environmental LOINC genuinely has no term for some OAH concepts (dissolved oxygen, water temperature, NDCI). That is a real answer, not a lookup failure.</span></div>`}
       </div>
-      ${pick ? `<div class="note ok">${icon("check")}<span><b>${esc(pick.code)}</b> ${esc(pick.display)} will be published as a second <code>Observation.code.coding</code> when you approve. <button class="btn link sm" data-unpick="${p.id}" type="button">Remove</button></span></div>` : ""}`;
+      ${pick ? `<div class="note ok">${icon("check")}<span><b>${esc(pick.code)}</b> ${esc(pick.display)} will be published as a second <code>Observation.code.coding</code> when you approve. <button class="btn link sm" data-unpick="${p.id}" type="button">Remove</button></span></div>` : ""}
+      ${taxonSection()}`;
     }
     function fhirTab() {
       const got = state.observations[p.id];
       const system = state.catalog.system || p.coding?.system || "";
       const codings = [p.coding ? { system, code: p.coding.code, display: p.coding.display } : null, p.secondary_coding || state.picks[p.id] || null].filter(Boolean);
       return `<div class="sec"><h4>Codings to publish</h4>${codings.length ? `<dl class="dl">${codings.map((c, i) => `<dt>${i === 0 ? "Primary" : "Secondary"}</dt><dd>${tagm(c.code)} ${esc(c.display)}<br><span class="dim mono">${esc(c.system)}</span></dd>`).join("")}</dl>` : '<p class="quote dim">No coding yet.</p>'}</div>
+      ${(p.taxon || state.taxonPicks[p.id]) ? `<div class="sec"><h4>Organism component</h4><dl class="dl"><dt>Taxon</dt><dd>${tagm((p.taxon || state.taxonPicks[p.id]).code)} ${esc((p.taxon || state.taxonPicks[p.id]).display)}<br><span class="dim mono">${esc((p.taxon || state.taxonPicks[p.id]).system)}</span></dd></dl><p class="quote dim">Published as <code>Observation.component</code>, not as a second <code>code.coding</code>: the indicator axis drives the alert policy and must stay untouched.</p></div>` : ""}
       <div class="sec"><h4>Profiles</h4><dl class="dl"><dt>Observation</dt><dd>${tagm(state.integrations?.fhir?.observation_profile || "-")}</dd><dt>Location</dt><dd>${tagm(state.integrations?.fhir?.location_profile || "-")}</dd><dt>Target</dt><dd>${tagm(state.integrations?.fhir?.base_url || "-")} <span class="lz lc ${state.health.fhir_write_mode === "enabled" ? "green" : "amber"}">${esc(state.health.fhir_write_mode || "-")}</span></dd></dl></div>
       ${got ? `<div class="sec"><div class="sec-head"><h4>Observation as published</h4><button class="btn sm subtle" data-copy-text="${esc(JSON.stringify(got.observation, null, 2))}" type="button">${icon("copy")}Copy</button></div><pre class="json">${esc(JSON.stringify(got.observation, null, 2))}</pre></div>
       <div class="sec"><div class="sec-head"><h4>Server response</h4><button class="btn sm subtle" data-copy-text="${esc(JSON.stringify(got.fhir_response, null, 2))}" type="button">${icon("copy")}Copy</button></div><pre class="json">${esc(JSON.stringify(got.fhir_response, null, 2))}</pre></div>`
@@ -1089,10 +1107,12 @@
       body.normalized_value = Number(v); body.normalized_unit = u;
     }
     if (state.picks[id]) body.secondary_coding = state.picks[id];
+    if (state.taxonPicks[id]) body.taxon = state.taxonPicks[id];
     await busy(button, async () => {
       const result = await api(`/proposals/${id}/approve`, { method: "POST", body: JSON.stringify(body) });
       state.observations[id] = { observation: result.observation, fhir_response: result.fhir_response };
       delete state.picks[id];
+      delete state.taxonPicks[id];
       closeModals();
       const n = result.alerts.length;
       toast(`${keyOf(id)} approved and ${state.health.fhir_write_mode === "enabled" ? "published" : "built (dry run)"}.${n ? ` ${n} incident${n > 1 ? "s" : ""} raised.` : ""}`, "ok",
@@ -1372,6 +1392,22 @@
       await busy(n, async () => { state.suggestions[id] = await api(`/proposals/${id}/terminology-suggestions`); renderDrawer(); toast(state.suggestions[id].length ? `${state.suggestions[id].length} candidate${state.suggestions[id].length > 1 ? "s" : ""} found.` : "No publishable candidate for this concept."); });
       return;
     }
+    if ((n = el("[data-suggest-taxon]"))) {
+      const id = n.dataset.suggestTaxon;
+      await busy(n, async () => {
+        state.taxa[id] = await api(`/proposals/${id}/taxon-suggestions`);
+        renderDrawer();
+        toast(state.taxa[id].length ? `${state.taxa[id].length} organism match${state.taxa[id].length > 1 ? "es" : ""} found.` : "No organism named in this label.");
+      });
+      return;
+    }
+    if ((n = el("[data-pick-taxon]"))) {
+      const { pickTaxon, system, code, display } = n.dataset;
+      const same = state.taxonPicks[pickTaxon] && state.taxonPicks[pickTaxon].code === code;
+      if (same) delete state.taxonPicks[pickTaxon]; else state.taxonPicks[pickTaxon] = { system, code, display };
+      renderDrawer(); toast(same ? "Organism removed." : `${display} will be attached on approval.`); return;
+    }
+    if ((n = el("[data-unpick-taxon]"))) { delete state.taxonPicks[n.dataset.unpickTaxon]; renderDrawer(); return; }
     if ((n = el("[data-pick]"))) {
       const { pick, system, code, display } = n.dataset;
       const same = state.picks[pick] && state.picks[pick].code === code && state.picks[pick].system === system;

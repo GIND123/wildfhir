@@ -73,6 +73,16 @@ class Settings(BaseSettings):
     # missing file disables the check with a warning; it never blocks startup.
     loinc_table_path: Path = Path("loinc/LoincTableCore/LoincTableCore.csv")
 
+    # --- GBIF biodiversity crosswalk -------------------------------------
+    # Suggests a GBIF Backbone taxon for an organism named in a source label.
+    # There is no key to configure: GBIF read calls are unauthenticated, so
+    # `gbif_enabled` is a plain switch, kept so this source can be turned off
+    # the way every other external dependency can.
+    gbif_enabled: bool = True
+    gbif_api_base: str = "https://api.gbif.org/v1"
+    gbif_timeout_seconds: float = 15.0
+    gbif_max_retries: int = 2
+
     @property
     def umls_enabled(self) -> bool:
         return bool(self.umls_api_key.strip())

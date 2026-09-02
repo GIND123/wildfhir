@@ -585,6 +585,8 @@ code, .mono { font-family: var(--mono); font-size: 12px; }
 .chipbtn:hover { border-color: var(--brand); color: var(--brand-ink); }
 .chipbtn.is-on { background: var(--brand-soft); border-color: var(--brand); color: var(--brand-ink); font-weight: 600; }
 .chipbtn .mono { font-size: 11.5px; }
+/* A scientific name can be long; let the chip grow rather than overflow. */
+.chipbtn.wrap { height: auto; min-height: 28px; padding: 5px 10px; text-align: left; }
 pre.json {
   margin: 0; padding: 12px; background: var(--n10); border-radius: var(--r); font-family: var(--mono); font-size: 11.5px;
   line-height: 1.5; overflow: auto; max-height: 480px; color: var(--n80); white-space: pre;

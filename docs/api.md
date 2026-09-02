@@ -15,6 +15,7 @@ Interactive documentation is available at `/docs`; the OpenAPI document is `/ope
 | `GET` | `/api/v1/proposals` | List recent proposals | no | no |
 | `GET` | `/api/v1/proposals/{id}` | Read one proposal | no | no |
 | `GET` | `/api/v1/proposals/{id}/terminology-suggestions` | Suggest real LOINC/SNOMED CT candidates for the proposal's OAH code | no | optional |
+| `GET` | `/api/v1/proposals/{id}/taxon-suggestions` | Suggest a GBIF Backbone taxon for the organism named in the source label | no | no |
 | `POST` | `/api/v1/replay` | Load `data/oder-replay.csv` as pending proposals | optional | no |
 | `POST` | `/api/v1/intake` | Extract readings from an unstructured note | **yes** | no |
 | `POST` | `/api/v1/proposals/{id}/approve` | Publish reviewed resources and evaluate policy; accepts an optional `secondary_coding` | no | no |
@@ -41,6 +42,11 @@ it returns `503` only when the LOINC table is *also* missing.
 - Approval needs a non-empty reviewer, coding, numeric normalized value, and UCUM unit.
 - A reviewer can replace the proposed `Coding`. Quantity corrections require both
   `normalized_value` and `normalized_unit`, so a unit cannot be changed without an explicit value.
+- A reviewer may also supply `taxon` (typically a GBIF candidate from
+  `GET .../taxon-suggestions`), which becomes an `Observation.component` carrying
+  LOINC `41852-5` as the component code and the taxon as `valueCodeableConcept`.
+  It never touches `Observation.code.coding`, so it cannot influence the alert
+  policy, and it is never inferred.
 - A reviewer may also supply `secondary_coding` (typically a crosswalk-suggested LOINC/SNOMED CT
   candidate from `GET .../terminology-suggestions`), which becomes a second entry in
   `Observation.code.coding`. It is never inferred or attached automatically.
