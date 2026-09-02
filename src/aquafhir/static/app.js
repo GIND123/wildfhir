@@ -275,7 +275,8 @@
     svg.innerHTML = out;
   }
 
-  // Hovering or focusing a node lights only the wires touching it.
+  // Hovering or focusing a node lights only the wires touching it, and lifts
+  // that node above its neighbours so its tooltip is never painted behind them.
   function litWires(id) {
     $$("#flow-wires path").forEach((p) => {
       const on = Boolean(id) && (p.dataset.from === id || p.dataset.to === id);
@@ -283,6 +284,12 @@
       const head = $(`#flow-wires polygon[data-i="${p.dataset.i}"]`);
       if (head) head.classList.toggle("is-lit", on);
     });
+    $$("#flow-canvas .is-hot").forEach((el) => el.classList.remove("is-hot"));
+    const node = id && document.getElementById(id);
+    if (!node) return;
+    node.classList.add("is-hot");
+    const group = node.closest(".fout");        // audience chips share one wrapper
+    if (group) group.classList.add("is-hot");
   }
 
   function renderFlow() {
@@ -313,9 +320,16 @@
 
     const badge = $("#flow-ledger-status");
     if (badge) {
-      if (!state.chain) { badge.className = "flow-ledger-status idle"; badge.textContent = "checking"; }
-      else if (state.chain.valid) { badge.className = "flow-ledger-status"; badge.textContent = `verified · ${state.chain.entries_checked}`; }
-      else { badge.className = "flow-ledger-status bad"; badge.textContent = `broken at #${state.chain.first_invalid_sequence}`; }
+      if (!state.chain) {
+        badge.className = "flow-ledger-status idle";
+        badge.textContent = "Not verified yet";
+      } else if (state.chain.valid) {
+        badge.className = "flow-ledger-status";
+        badge.textContent = `${state.chain.entries_checked} ${state.chain.entries_checked === 1 ? "entry" : "entries"} verified`;
+      } else {
+        badge.className = "flow-ledger-status bad";
+        badge.textContent = `Broken at entry ${state.chain.first_invalid_sequence}`;
+      }
     }
     requestAnimationFrame(drawWires);
   }
@@ -726,7 +740,7 @@
     }
     $("#catalog-count").textContent = `${cat.codes.length} codes`;
     $("#catalog-body").innerHTML = cat.codes.length ? `<dl class="dl" style="margin-bottom:12px"><dt>System</dt><dd>${tagm(cat.system)}</dd><dt>Review threshold</dt><dd>${state.integrations ? `${Math.round(state.integrations.coding.review_confidence_threshold * 100)}% (informational; every proposal still requires review)` : "-"}</dd></dl>
-      <div class="tablewrap" style="box-shadow:none"><table class="tbl"><thead><tr><th>Code</th><th>Display</th><th>Aliases</th><th>Plausible</th><th>Units</th></tr></thead><tbody>${cat.codes.map((c) => `<tr style="cursor:default"><td><code>${esc(c.code)}</code></td><td>${esc(c.display)}</td><td class="dim">${c.aliases.map(esc).join(", ")}</td><td class="nowrap dim">${c.plausible_range ? `${fnum(c.plausible_range.min)} – ${fnum(c.plausible_range.max)}` : "-"}</td><td>${c.accepted_units.map((u) => `<span class="lz lc green">${esc(u)}</span>`).join(" ")} ${Object.entries(c.unit_conversions || {}).map(([from, cv]) => `<span class="lz lc" title="factor ${cv.factor}">${esc(from)} → ${esc(cv.target)}</span>`).join(" ")}</td></tr>`).join("")}</tbody></table></div>` : '<p class="quote">Catalog unavailable.</p>';
+      <div class="tablewrap" style="box-shadow:none"><table class="tbl"><thead><tr><th>Code</th><th>Display</th><th>Aliases</th><th>Plausible</th><th>Units</th></tr></thead><tbody>${cat.codes.map((c) => `<tr style="cursor:default"><td><code>${esc(c.code)}</code></td><td>${esc(c.display)}</td><td class="dim">${c.aliases.map(esc).join(", ")}</td><td class="nowrap dim">${c.plausible_range ? `${fnum(c.plausible_range.min)} – ${fnum(c.plausible_range.max)}` : "-"}</td><td>${c.accepted_units.map((u) => `<span class="lz lc">${esc(u)}</span>`).join(" ")} ${Object.entries(c.unit_conversions || {}).map(([from, cv]) => `<span class="lz lc" title="factor ${cv.factor}">${esc(from)} → ${esc(cv.target)}</span>`).join(" ")}</td></tr>`).join("")}</tbody></table></div>` : '<p class="quote">Catalog unavailable.</p>';
   }
 
   /* ── integrations ─────────────────────────────────────────────────────── */
@@ -734,7 +748,8 @@
   function renderIntegrations() {
     const i = state.integrations;
     if (!i) { $("#integrations").innerHTML = '<div class="empty"><b>Loading</b></div>'; return; }
-    const yes = (b, on = "Configured", off = "Not configured") => `<span class="lz ${b ? "green" : ""}">${b ? on : off}</span>`;
+    const stat = (tone, label) => `<span class="status ${tone}"><i></i>${esc(label)}</span>`;
+    const yes = (b, on = "Configured", off = "Not configured") => stat(b ? "ok" : "off", b ? on : off);
     const ping = (name) => {
       const r = state.pingResults[name];
       return `<span class="result ${r ? (r.ok ? "ok" : "bad") : ""}">${r ? esc(r.text) : ""}</span>`;
@@ -750,7 +765,7 @@
           ["Assist mode", `<span class="lz lc">${esc(i.gemini.assist_mode)}</span> <span class="dim">below ${Math.round(i.gemini.assist_below_confidence * 100)}% rule confidence</span>`],
           ["Confidence ceiling", `${Math.round(i.gemini.confidence_ceiling * 100)}% <span class="dim">no AI proposal can read as auto-publishable</span>`],
           ["Limits", `<span class="dim">${i.gemini.timeout_seconds}s timeout · ${i.gemini.max_retries} retries · ${i.gemini.max_output_tokens} tokens · thinking ${i.gemini.thinking_budget}</span>`],
-          ["Features", (state.ai.features || []).length ? state.ai.features.map((f) => `<span class="lz lc purple">${esc(f)}</span>`).join(" ") : '<span class="dim">none</span>'],
+          ["Features", (state.ai.features || []).length ? state.ai.features.map((f) => `<span class="lz lc">${esc(f)}</span>`).join(" ") : '<span class="dim">none</span>'],
         ],
         actions: `<button class="btn sm" data-ping="gemini" type="button">Check status</button><a class="btn sm subtle" href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">Get a key ${icon("external")}</a>`,
       },
@@ -774,13 +789,13 @@
         rows: [
           ["Path", tagm(i.loinc_table.path)],
           ["Role", '<span class="dim">Finds terms scoped to Water/Air specimens and rejects UMLS results that are LOINC Parts or Metathesaurus ids.</span>'],
-          ["Crosswalk sources", (state.umls.sources || []).length ? state.umls.sources.map((s) => `<span class="lz lc green">${esc(s)}</span>`).join(" ") : '<span class="lz">none</span>'],
+          ["Crosswalk sources", (state.umls.sources || []).length ? state.umls.sources.map((s) => `<span class="lz lc">${esc(s)}</span>`).join(" ") : '<span class="lz">none</span>'],
         ],
         actions: `<button class="btn sm" data-ping="terminology" type="button">Check crosswalk</button>`,
       },
       {
         name: "fhir", logo: "F", color: "#c9372c", title: "HAPI FHIR R4", sub: "Publication target for OneAquaHealth resources",
-        status: `<span class="lz ${i.fhir.write_enabled ? "green" : "amber"}">${i.fhir.write_enabled ? "Writes enabled" : "Dry run"}</span>`,
+        status: stat(i.fhir.write_enabled ? "ok" : "warn", i.fhir.write_enabled ? "Writes enabled" : "Dry run"),
         rows: [
           ["Base URL", tagm(i.fhir.base_url)],
           ["Write mode", `<span class="dim">${i.fhir.write_enabled ? "Transaction bundles are POSTed to the server." : "Bundles are built and validated but not sent. Set FHIR_WRITE_ENABLED=true to publish."}</span>`],
@@ -792,7 +807,7 @@
       },
       {
         name: "webhook", logo: "W", color: "#6e5dc6", title: "Subscription webhook", sub: "R4 rest-hook receiver for Observation notifications",
-        status: `<span class="lz ${i.webhook.using_default_secret ? "amber" : "green"}">${i.webhook.using_default_secret ? "Default secret" : "Secret set"}</span>`,
+        status: stat(i.webhook.using_default_secret ? "warn" : "ok", i.webhook.using_default_secret ? "Default secret" : "Secret set"),
         rows: [
           ["Endpoint", tagm(`POST ${i.webhook.endpoint}`)],
           ["Header", tagm(i.webhook.header)],
@@ -803,7 +818,7 @@
       },
       {
         name: "app", logo: "A", color: "#0c66e4", title: "Bridge process", sub: "Runtime, storage, and policy wiring",
-        status: `<span class="lz ${i.app.env === "production" ? "green" : "blue"}">${esc(i.app.env)}</span>`,
+        status: stat(i.app.env === "production" ? "ok" : "off", i.app.env.charAt(0).toUpperCase() + i.app.env.slice(1)),
         rows: [
           ["Version", tagm(`aquafhir-bridge ${i.app.version}`)],
           ["Database", tagm(i.app.database_path)],
@@ -950,7 +965,7 @@
       if (!p.coding) return `<div class="note">${icon("alert")}<span>Choose a curated code first; the crosswalk searches by the curated display term.</span></div>`;
       const found = state.suggestions[p.id];
       const pick = state.picks[p.id];
-      return `<div class="sec"><p class="quote">Searches <b>${esc(p.coding.display)}</b> in ${(state.umls.sources || []).map((s) => `<span class="lz lc green">${esc(s)}</span>`).join(" ")} for a real ${(state.umls.vocabularies || []).join(" / ")} concept a downstream EHR already understands. Nothing is attached until you approve.</p></div>
+      return `<div class="sec"><p class="quote">Searches <b>${esc(p.coding.display)}</b> in ${(state.umls.sources || []).map((s) => `<span class="lz lc">${esc(s)}</span>`).join(" ")} for a real ${(state.umls.vocabularies || []).join(" / ")} concept a downstream EHR already understands. Nothing is attached until you approve.</p></div>
       <div class="sec"><div class="sec-head"><h4>Candidates</h4><button class="btn sm" data-suggest="${p.id}" type="button">${found ? "Search again" : "Suggest LOINC / SNOMED"}</button></div>
         ${!found ? '<p class="quote dim">Not searched yet.</p>' : found.length ? `<div class="chips">${found.map((m) => `<button class="chipbtn ${pick && pick.code === m.code && pick.system === m.system ? "is-on" : ""}" data-pick="${p.id}" data-system="${esc(m.system)}" data-code="${esc(m.code)}" data-display="${esc(m.display)}" title="${esc(m.display)}" type="button"><span class="lz lc teal">${esc(m.vocabulary)}</span><span class="mono">${esc(m.code)}</span><span>${esc(m.display)}</span><span class="dim">${Math.round(m.score * 100)}%</span></button>`).join("")}</div>` : `<div class="note info">${icon("info")}<span>No publishable candidate. Environmental LOINC genuinely has no term for some OAH concepts (dissolved oxygen, water temperature, NDCI). That is a real answer, not a lookup failure.</span></div>`}
       </div>

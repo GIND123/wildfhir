@@ -182,19 +182,24 @@ code, .mono { font-family: var(--mono); font-size: 12px; }
 .avatar-btn { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border: 0; background: transparent; border-radius: var(--r); cursor: pointer; }
 .avatar-btn:hover { background: var(--band-hover); }
 
-/* status pills in top nav */
-.sys-pills { display: flex; gap: 4px; margin-right: 6px; }
+/* Runtime status in the top band. These are readouts, not calls to action, so
+   they stay neutral outlined chips and let a single status dot carry the colour.
+   Filling three chips with saturated green reads as decoration rather than
+   instrumentation. */
+.sys-pills { display: flex; gap: 6px; margin-right: 8px; }
 .pill {
-  display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px;
-  border-radius: 12px; font-size: 11px; font-weight: 600; letter-spacing: .01em;
-  background: rgba(255, 255, 255, .08); color: var(--band-fg-dim); text-decoration: none; cursor: pointer; border: 0; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 7px; height: 26px; padding: 0 10px;
+  border-radius: var(--r); font-size: 11.5px; font-weight: 500; letter-spacing: 0;
+  background: transparent; border: 1px solid rgba(255, 255, 255, .16);
+  color: var(--band-fg-dim); text-decoration: none; cursor: pointer; white-space: nowrap;
 }
-.pill i { width: 6px; height: 6px; border-radius: 50%; background: var(--band-fg-dim); }
-.pill.on { background: rgba(76, 214, 158, .16); color: #8ff0c8; }
+.pill:hover { background: var(--band-hover); color: var(--band-fg); }
+.pill i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, .3); flex: none; }
+.pill.on { color: var(--band-fg); }
 .pill.on i { background: #4bce97; }
-.pill.warn { background: rgba(226, 178, 3, .18); color: #f5cd47; }
+.pill.warn { color: var(--band-fg); }
 .pill.warn i { background: #e2b203; }
-.pill.off { background: rgba(255, 255, 255, .07); color: var(--band-fg-dim); }
+.pill.off i { background: rgba(255, 255, 255, .26); }
 
 /* ── shell ────────────────────────────────────────────────────────────── */
 .shell {
@@ -343,6 +348,19 @@ code, .mono { font-family: var(--mono); font-size: 12px; }
 .lz.bold.red { background: var(--red); color: #fff; }
 .lz.bold.amber { background: var(--amber); color: #fff; }
 .lz.lc { text-transform: none; letter-spacing: 0; font-weight: 500; }
+/* Status readout: a dot carries the state, the text stays neutral. Used wherever
+   a value is "how is this thing doing" rather than a label worth colouring in.
+   A wall of filled green badges reads as decoration and hides the one amber. */
+.status {
+  display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+  font-size: 12px; font-weight: 500; color: var(--n70);
+}
+.status i { width: 6px; height: 6px; border-radius: 50%; background: var(--n40); flex: none; }
+.status.ok i { background: var(--green); }
+.status.warn i { background: var(--amber); }
+.status.bad i { background: var(--red); }
+.status.off { color: var(--n60); }
+
 .tagm {
   display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 3px;
   font-family: var(--mono); font-size: 11px; background: var(--n20); color: var(--n70); cursor: copy;
@@ -682,12 +700,6 @@ pre.json {
 .report .site { display: grid; grid-template-columns: 140px 1fr; gap: 12px; font-size: 13px; padding: 6px 0; border-top: 1px solid var(--n20); }
 .report .site b { color: var(--n80); font-weight: 600; }
 
-/* ── page eyebrow ─────────────────────────────────────────────────────── */
-.page-eyebrow {
-  display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
-  color: var(--brand-ink); margin-bottom: 4px;
-}
-
 /* ── data-bus pipeline (wire diagram) ─────────────────────────────────── */
 /* Nodes are laid out on a named grid; the connector wires are drawn into an
    overlay SVG from the real measured DOM rects, so the diagram stays correct
@@ -738,8 +750,8 @@ pre.json {
   color: var(--n50); letter-spacing: .04em;
 }
 .fnode-tag {
-  margin-left: auto; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
-  color: var(--purple-ink); background: var(--purple-soft); border-radius: 3px; padding: 2px 6px;
+  margin-left: auto; font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--n50);
 }
 .fnode h3 { font-size: 13.5px; font-weight: 600; color: var(--n90); letter-spacing: -.005em; }
 .fnode p { font-size: 11.5px; line-height: 1.42; color: var(--n60); min-height: 33px; }
@@ -798,6 +810,12 @@ pre.json {
 [data-tip].tip-right::after { left: auto; right: 0; }
 [data-tip].tip-up::after { top: auto; bottom: calc(100% + 10px); }
 
+/* A node sets z-index to sit above the wires, which also traps its tooltip in
+   that stacking context. `is-hot` (applied on hover and focus by app.js) lifts
+   the whole node so its tooltip paints over the rows below instead of behind
+   them. */
+.fnode.is-hot, .fout.is-hot, .faud.is-hot { z-index: 30; }
+
 .flow-legend {
   display: flex; align-items: center; gap: 22px; flex-wrap: wrap; margin-top: 2px;
   padding-top: 14px; border-top: 1px solid var(--n30); font-size: 12px; color: var(--n60);
@@ -818,12 +836,18 @@ pre.json {
 .flow-ledger > .ic.sm { color: var(--band-fg-dim); }
 .flow-ledger b { color: #fff; font-weight: 600; }
 .flow-ledger span:first-of-type { flex: 1; }
+/* A verification readout, not an award badge: a status dot and plain sentence
+   case, so a broken chain is what draws the eye rather than a green pill. */
 .flow-ledger-status {
-  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
-  padding: 3px 9px; border-radius: 10px; background: rgba(76, 214, 158, .18); color: #8ff0c8; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
+  font-size: 12px; font-weight: 500; letter-spacing: 0; color: var(--band-fg-dim);
 }
-.flow-ledger-status.bad { background: rgba(248, 113, 104, .2); color: #ffb4ae; }
-.flow-ledger-status.idle { background: rgba(255, 255, 255, .1); color: var(--band-fg-dim); }
+.flow-ledger-status::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%; background: #4bce97; flex: none;
+}
+.flow-ledger-status.bad { color: #ffb4ae; font-weight: 600; }
+.flow-ledger-status.bad::before { background: #f87168; }
+.flow-ledger-status.idle::before { background: rgba(255, 255, 255, .3); }
 
 /* ── site map ─────────────────────────────────────────────────────────── */
 .mapcard { background: var(--n0); border-radius: var(--r); box-shadow: var(--shadow-1); overflow: hidden; margin-bottom: 12px; }
