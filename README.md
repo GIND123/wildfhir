@@ -19,7 +19,7 @@ This repository contains only the first concept from the source brief: **the One
 - HAPI FHIR R4 publication against the real `hl7.eu.fhir.oah` profiles, transaction bundles, Subscription install and rest-hook processing ([fhir.py](src/aquafhir/fhir.py))
 - Versioned, unit-aware threshold policy with audience routing ([thresholds.py](src/aquafhir/thresholds.py))
 - SQLite-backed, hash-chained provenance for every proposal, decision, alert, and model/terminology call
-- A dependency-free reviewer console — queue, ingest, alerts, and audit trail — including a UMLS suggestion picker on each pending proposal
+- A dependency-free review console in the shape of a work-management tool: a Kanban board (drag a card to Approved or Rejected), a sortable queue with bulk sign-off, an issue-style detail panel with Details / Co-pilot / Crosswalk / FHIR / History tabs, incidents with per-audience advisory drafting, a hash-chain audit log, a policy & catalog page, an integrations page that shows every credential as a fingerprint, a command palette (⌘K), and keyboard shortcuts
 - **Defensive ingestion boundaries.** The rest-hook Subscription surface accepts whatever a FHIR server sends: null or non-numeric quantities, absent ids, FHIR partial dates (`2022-07`), and wrong-typed `code.coding` are skipped with a log line instead of raising. Non-finite quantities are rejected at the model boundary rather than published as a JSON-null `valueQuantity.value` ([test_robustness.py](tests/test_robustness.py))
 - **A failed sensor cannot raise an alert.** Each indicator carries a reviewed `plausible_range` in [coding-rules.yaml](config/coding-rules.yaml), enforced in the single place both proposers compute a published number. A dissolved-oxygen probe reporting `-5.0 mg/L`, a `pH` of `130.0`, or a temperature below absolute zero is coded but its *quantity is withheld* — no publication, no alert, approval blocked until a person corrects it (see [§ The incident catalogue](#the-incident-catalogue))
 - **An executable incident catalogue.** Twelve real water-and-health incidents — Oder 2022, Milwaukee 1993, Walkerton 2000, Toledo 2014, Havelock North 2016, Flint 2014, Baia Mare 2000, Ajka 2010, Mar Menor 2021, Akerselva 2011, Seine 2024, Brixham 2024 — replayed as fixtures with their expected coding, refusal, and audience-routing outcomes enforced in CI ([incidents.md](docs/incidents.md), [test_incidents.py](tests/test_incidents.py), [simulate.py](scripts/simulate.py))
@@ -50,7 +50,7 @@ Built for the **IEEE OneAquaHealth Global Hackathon 2026**, an EU Horizon Europe
 | **Impact & Alignment with the OneAquaHealth mission** | Every environmental reading is normalized into the *same* FHIR resource model the OneAquaHealth project already publishes, and a crossed threshold routes an alert to human-health, veterinary, *and* water-authority audiences in one step — the ecosystem→health link is the product, not a bolt-on chart. The claim is tested against twelve real incidents rather than asserted: the [incident catalogue](docs/incidents.md) includes an urban stream in an OAH pilot city (Oslo's Akerselva), a citizen-signal-first outbreak (Brixham 2024), and an animal→water→human pathway routed to veterinary and public-health audiences from one reading (Havelock North 2016). |
 | **Innovation & Creativity** | A working Gemini co-pilot that maps multilingual, abbreviated, and free-text source data onto OAH terminology under enum-constrained grounding, and drafts audience-specific advisories — with a hash-chained ledger recording the model id and the exact prompt hash behind every proposal (§ [The Gemini co-pilot](#the-gemini-co-pilot)). Layered on top, a **terminology crosswalk** finds the real LOINC code for the same curated OAH concept — searching the published LOINC table scoped to environmental specimens, which surfaces `9481-3` pH of Water where a generic clinical UMLS search returns *Peliosis hepatis* — so a reviewer can publish both the project-specific code and a standard one a downstream EHR already understands (§ [The terminology crosswalk](#the-terminology-crosswalk)). FHIR-for-environment bridges with reviewer gating are rare; ones that also close the "temporary code system → real terminology" gap are rarer still. |
 | **Architecture** | HAPI FHIR R4 loaded with the real `hl7.eu.fhir.oah` package, R4 rest-hook Subscriptions, a versioned/unit-aware alert policy, a swappable `CodingProposer` contract the model plugs into without touching the FHIR or alerting layers, a two-source `TerminologyCrosswalk` that validates every LOINC candidate against the published term table and degrades source-by-source, and documented sequence diagrams (see [architecture.md](docs/architecture.md)). 251 tests, all offline, including a malformed-input suite covering every shape a FHIR server or a source can push at it, and **an executable incident catalogue** — twelve real water-and-health incidents replayed as fixtures with their expected coding, refusal, and audience-routing outcomes enforced in CI ([incidents.md](docs/incidents.md)). |
-| **UX** | A dependency-free reviewer console, not a dashboard of charts. Each queue row reads *as received → OneAquaHealth FHIR*, with the model's quoted evidence, competing candidates, and a visible flag when the AI disagrees with the curated rules. Alerts carry one-click advisory drafting; the audit trail is a real table. The reviewer sees what the model saw. See the [demo script](docs/demo-script.md). |
+| **UX** | A dependency-free review console built like a work-management tool, not a dashboard of charts. Every proposal is a card that reads *as received → OneAquaHealth FHIR*; opening it shows the model's quoted evidence, the competing candidates, a visible flag when the AI disagrees with the curated rules, the LOINC/SNOMED crosswalk, the exact FHIR Observation once approved, and its own hash-chain history. Reviewers can drag a card to a decision, bulk-approve inspected rows, or use ⌘K and keyboard shortcuts. Incidents carry one-click advisory drafting per audience; the audit log is a real table with verification. The reviewer sees what the model saw. See the [demo script](docs/demo-script.md). |
 | **Scale** | Config-driven terminology ([coding-rules.yaml](config/coding-rules.yaml)) and policy ([thresholds.yaml](config/thresholds.yaml)) — adding an indicator is a YAML edit, and the model's vocabulary widens with it automatically. `auto` assist mode spends a model call only where rules are weak, so cost scales with novelty rather than volume. Gap analysis in § [Implemented versus production work](#implemented-versus-production-work). |
 
 ### Submission checklist
@@ -154,14 +154,14 @@ baked into a layer.
 
 Open:
 
-- Dashboard: <http://localhost:8000>
+- Review console: <http://localhost:8000> (Board, Queue, Incidents, Advisories, Reports, Audit log, Policy & catalog, Integrations)
 - OpenAPI: <http://localhost:8000/docs>
 - HAPI FHIR UI: <http://localhost:8080>
 - HAPI FHIR base: <http://localhost:8080/fhir>
 
 HAPI can take a minute or two on its first start while PostgreSQL initializes and the `hl7.eu.fhir.oah#0.1.0-ci-build` package is installed. The Compose image is pinned to HAPI `v8.10.0-3`; pin it by digest as well before a controlled deployment.
 
-In the console's **Review queue**, choose **Load Oder replay**, inspect each terminology proposal, and approve it (or use **Approve all pending**). Three of the five readings cross the demonstration policy and create audience-specific alert cards; open **Alerts** and press **Draft for veterinary** on one to see Gemini write the advisory. The top bar shows the FHIR write mode (`enabled` vs `dry-run`), the AI mode (`gemini-2.5-flash · auto` vs `AI off`), and the terminology-crosswalk mode (`UMLS LNC/SNOMEDCT_US` vs `UMLS off`).
+Set your reviewer identity from the avatar in the top right, then on the **Board** press **Load Oder replay**. Open a card to inspect the proposal, press **Suggest LOINC / SNOMED** on its Crosswalk tab, and approve it, or drag cards straight to the Approved column, or use **Approve all pending**. Three of the five readings cross the demonstration policy and appear under **Incidents**; open one and press **Draft · Veterinary** to see Gemini write the advisory. The top bar shows the FHIR write mode (`enabled` vs `dry-run`), the AI model (`gemini-3.1-pro-preview` vs `AI off`), and the crosswalk sources (`loinc-table+umls`); each pill opens **Integrations**, which lists every external dependency with a masked credential fingerprint. Press `?` for keyboard shortcuts and `⌘K` for the command palette.
 
 With `UMLS_API_KEY` set, a pending proposal also shows **Suggest LOINC/SNOMED (UMLS)**. Click it, then click a candidate chip to mark it "will attach on approval" — the next **Approve** on that card publishes an Observation with two codings: the curated OAH one and the reviewer-picked LOINC/SNOMED CT one.
 
@@ -571,7 +571,7 @@ statement are in **[docs/incidents.md](docs/incidents.md)**.
 │   ├── service.py            # review-gated orchestration
 │   ├── thresholds.py         # unit-aware versioned policy evaluation
 │   ├── main.py               # FastAPI surface
-│   └── static/               # dependency-free reviewer console (no build step)
+│   └── static/               # dependency-free review console: board, queue, incidents, audit, integrations (no build step)
 ├── tests/                    # coding, AI guardrail, terminology, transport, policy, audit,
 │                             # robustness, and incident-catalogue tests
 ├── compose.yaml              # bridge + HAPI + PostgreSQL
@@ -609,7 +609,7 @@ The detailed hardening gates are in [production-checklist.md](docs/production-ch
 | `THRESHOLDS_PATH` | `config/thresholds.yaml` | Versioned alert policy |
 | `REPLAY_DATA_PATH` | `data/oder-replay.csv` | Synthetic replay dataset |
 | `GEMINI_API_KEY` | *(empty)* | Enables the co-pilot. Empty is a supported, tested mode |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | Pin explicitly; recorded on every proposal |
+| `GEMINI_MODEL` | `gemini-3.1-pro-preview` | Pin explicitly; recorded on every proposal |
 | `GEMINI_ASSIST_MODE` | `auto` | `off`, `auto` (only where rules are weak), or `always` |
 | `GEMINI_ASSIST_BELOW_CONFIDENCE` | `0.95` | `auto` consults the model below this curated confidence |
 | `GEMINI_CONFIDENCE_CEILING` | `0.95` | Hard cap on any AI-influenced confidence |
@@ -623,6 +623,7 @@ The detailed hardening gates are in [production-checklist.md](docs/production-ch
 | `UMLS_TIMEOUT_SECONDS` | `15` | Per-call timeout |
 | `UMLS_MAX_RETRIES` | `2` | Retries only 408/429/5xx and network errors |
 | `UMLS_VOCABULARIES` | `LNC,SNOMEDCT_US` | Comma-separated UMLS source-vocabulary abbreviations searched and allowlist-checked |
+| `UMLS_CLIENT_ID` / `UMLS_CLIENT_SECRET` | *(empty)* | The client credentials NLM issues during the license request. Shown on the Integrations page for reference (id in full, secret as a fingerprint); never sent to the UTS API, which does not accept them |
 
 ## Source standards
 

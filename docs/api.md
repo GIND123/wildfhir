@@ -9,6 +9,8 @@ Interactive documentation is available at `/docs`; the OpenAPI document is `/ope
 | `GET` | `/api/v1/health` | Process, policy, FHIR write mode, AI mode, and terminology-crosswalk mode | no | no |
 | `GET` | `/api/v1/ai/status` | Which AI features are wired and what bounds them | no | no |
 | `GET` | `/api/v1/terminology/status` | Which crosswalk sources are live (`loinc-table`, `umls`) and which vocabularies they search | no | no |
+| `GET` | `/api/v1/integrations` | Every external dependency as the process sees it: model, endpoints, modes, policy rules, and masked credential fingerprints (first and last four characters; never the key) | no | no |
+| `GET` | `/api/v1/coding/catalog` | The curated OAH catalog (codes, displays, aliases, accepted UCUM units, conversions) a reviewer may choose from when overriding a coding | no | no |
 | `POST` | `/api/v1/proposals` | Validate a raw reading and create a pending mapping | optional | no |
 | `GET` | `/api/v1/proposals` | List recent proposals | no | no |
 | `GET` | `/api/v1/proposals/{id}` | Read one proposal | no | no |
@@ -59,7 +61,7 @@ A proposal that consulted Gemini carries an `ai` object and `proposer = "gemini-
   "normalized_unit": "mS/cm",
   "ai": {
     "provider": "google-gemini",
-    "model": "gemini-2.5-flash",
+    "model": "gemini-3.1-pro-preview",
     "template_id": "coding-proposer/v1",
     "prompt_hash": "960ceef7b312f4e8...",
     "response_hash": "…",

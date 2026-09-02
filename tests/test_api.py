@@ -47,3 +47,36 @@ def test_quantity_override_must_be_complete(service):
     finally:
         app.dependency_overrides.clear()
 
+
+
+def test_integrations_masks_secrets_and_reports_wiring(service):
+    app.dependency_overrides[get_service] = lambda: service
+    client = TestClient(app)
+    try:
+        body = client.get("/api/v1/integrations").json()
+        assert set(body) >= {"gemini", "umls", "loinc_table", "fhir", "webhook", "policy", "coding"}
+        # A fingerprint is never the key: either absent or first/last four only.
+        for block in (body["gemini"], body["umls"]):
+            fingerprint = block["key_fingerprint"]
+            assert fingerprint is None or ("\u2026" in fingerprint and len(fingerprint) == 9)
+        assert body["fhir"]["write_mode"] in {"enabled", "dry-run"}
+        assert body["policy"]["id"] == service.thresholds.policy_id
+        assert body["coding"]["codes"] > 0
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_coding_catalog_lists_curated_codes(service):
+    app.dependency_overrides[get_service] = lambda: service
+    client = TestClient(app)
+    try:
+        body = client.get("/api/v1/coding/catalog").json()
+        codes = {item["code"] for item in body["codes"]}
+        assert {"electrical-conductivity", "dissolved-oxygen", "ph"} <= codes
+        conductivity = next(
+            item for item in body["codes"] if item["code"] == "electrical-conductivity"
+        )
+        assert "mS/cm" in conductivity["accepted_units"]
+        assert "uS/cm" in conductivity["unit_conversions"]
+    finally:
+        app.dependency_overrides.clear()

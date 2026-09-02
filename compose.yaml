@@ -9,7 +9,7 @@ services:
       FHIR_WRITE_ENABLED: "true"
       WEBHOOK_SHARED_SECRET: ${WEBHOOK_SHARED_SECRET:-local-demo-secret}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.1-pro-preview}
       GEMINI_ASSIST_MODE: ${GEMINI_ASSIST_MODE:-auto}
       GEMINI_THINKING_BUDGET: ${GEMINI_THINKING_BUDGET:-0}
       UMLS_API_KEY: ${UMLS_API_KEY:-}

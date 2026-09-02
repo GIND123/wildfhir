@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     # The key is read from GEMINI_API_KEY. An absent key disables every AI
     # feature; the deterministic pipeline keeps working unchanged.
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-3.1-pro-preview"
     gemini_api_base: str = "https://generativelanguage.googleapis.com/v1beta"
     gemini_timeout_seconds: float = 30.0
     gemini_max_output_tokens: int = 2048
@@ -63,6 +63,11 @@ class Settings(BaseSettings):
     umls_timeout_seconds: float = 15.0
     umls_max_retries: int = 2
     umls_vocabularies: str = "LNC,SNOMEDCT_US"
+    # Issued by NLM during the UMLS *license request* flow. The UTS REST API
+    # does not accept them (it wants `apiKey` above), so they are recorded for
+    # the integrations page only and never sent anywhere.
+    umls_client_id: str = ""
+    umls_client_secret: str = ""
     # Published LOINC term table used to reject UMLS results that are LOINC
     # Parts or Metathesaurus-internal ids rather than real LOINC codes. A
     # missing file disables the check with a warning; it never blocks startup.

@@ -14,8 +14,11 @@ data **and cannot publish anything**. Land that and the standards story lands wi
    own, and the key only adds SNOMED CT breadth.
 4. Run `docker compose up --build` and wait for all three services to become healthy.
 5. Open the console (<http://localhost:8000>) and the HAPI UI in separate tabs.
-6. Confirm the header shows `AI gemini-2.5-flash · always`, `FHIR enabled`, an audit chain of
-   `VALID`, and the crosswalk sources.
+6. Confirm the top-bar pills read `AI gemini-3.1-pro-preview`, `FHIR enabled`, and
+   `Crosswalk loinc-table+umls`, and that the sidebar footer shows the chain as `valid`.
+   Set your reviewer identity from the avatar (top right) so approvals carry a name.
+   Note: 3.1 Pro needs a billed Gemini project; on a free-tier key set
+   `GEMINI_MODEL=gemini-3.1-flash-lite` instead.
 
 Rehearse once, then **stop rebuilding**. Repeated `docker compose up --build` re-pulls
 `hapiproject/hapi` and `postgres` and can hit Docker Hub's anonymous pull limit on shared
@@ -28,8 +31,8 @@ conference Wi-Fi. `docker login` with a free account before you travel.
 A public-health or veterinary consumer cannot act on any of it. In 2022 that fragmentation
 was part of why the Oder fish kill outran the warning.
 
-**0:35–1:20 — The hard case first.** In the structured ingest form the parameter is already
-`Leitfähigkeit`, unit `uS/cm`. Submit it. Say plainly: string matching scores this at 0.31
+**0:35–1:20 — The hard case first.** Press **Create** (or `C`). The parameter is already
+`Leitfähigkeit`, unit `uS/cm`. Submit it, then open the new card. Say plainly: string matching scores this at 0.31
 and gives up. The card comes back mapped to `electrical-conductivity` with the OAH code, a
 `GEMINI` chip, the evidence fragment the model quoted, the prompt hash, and the latency.
 
@@ -39,14 +42,14 @@ that. It named the unit; the conversion factor comes from the reviewed
 from a closed enum of catalog codes. Confidence is capped at 0.95 and the card is still
 `pending`. There is no confidence value that publishes anything.
 
-**2:00–2:50 — Unstructured intake.** Paste the German bulletin in the right-hand panel and
-press **Extract readings**. Readings appear in the same review queue, with the
+**2:00–2:50 — Unstructured intake.** Press **Create**, switch to the **Bulletin** tab, and
+press **Extract readings**. Readings appear on the same board, with the
 original labels preserved and a warning that the anglers' dead-fish report carried no
 measurement and was not extracted. Two AI stages, both landing in the same place: a human's
 work queue.
 
-**2:50–3:30 — Standards, not a chart.** Click **Suggest a code** on a pending card and pick
-the top candidate — for pH that is `9481-3` *pH of Water*. Say plainly what this closes: the
+**2:50–3:30 — Standards, not a chart.** Open a pending card, go to its **Crosswalk** tab,
+press **Suggest LOINC / SNOMED**, and pick the top candidate — for pH that is `9481-3` *pH of Water*. Say plainly what this closes: the
 OAH temporary project code system is what the IG uses today, LOINC is what a hospital already
 has loaded, and a reviewer decides whether to publish both. Approve the proposal. Show the
 Observation in HAPI: the OAH profile URL in `meta.profile`, a `Location` subject, an
@@ -56,15 +59,15 @@ Observation in HAPI: the OAH profile URL in `meta.profile`, a `Location` subject
 If you have 20 spare seconds, this is the strongest technical beat in the demo — see the
 question below.
 
-**3:30–4:20 — Alert and advisory.** In **Review queue**, press **Load Oder replay**, then
-**Approve all pending**. Three readings cross the demonstration policy. Note that the *policy engine*
+**3:30–4:20 — Alert and advisory.** On the **Board**, press **Load Oder replay**, then
+**Approve all pending** (or drag the cards to the Approved column). Three readings cross the demonstration policy. Note that the *policy engine*
 decided severity and audience — deterministic, versioned, in a separate file from the
-terminology. Now press **Draft veterinary** on the low-oxygen alert. Gemini writes the
+terminology. Now open **Incidents**, open the low-oxygen incident, and press **Draft · Veterinary**. Gemini writes the
 advisory the phone call would have carried, marked `draft`, with its uncertainty stated and
 a disclaimer that an accountable authority must review it.
 
-**4:20–5:00 — Trust.** Open **Audit trail** and press **Draft situation report** for a grounded cross-site summary, then
-scroll the provenance timeline: `mapping-proposed`, `unstructured-intake`,
+**4:20–5:00 — Trust.** Open **Reports** and press **Generate situation report** for a grounded
+cross-site summary, then open **Audit log**, press **Verify chain**, and scroll the entries: `mapping-proposed`, `unstructured-intake`,
 `mapping-approved`, `alert-created`, `briefing-drafted`, `situation-report` — each carrying
 the model id and prompt hash, each hash-chained, verification `VALID`. Close on the
 boundary: the bridge gives earlier machine-readable decision support; accountable
@@ -75,7 +78,8 @@ authorities review and communicate the warning.
 *"What if the model is wrong?"* Have the answer ready and demonstrate it if there is time:
 
 - Wrong code → the reviewer sees the disagreement flag, the competing candidates, and the
-  quoted evidence, and overrides with `coding` in the approve body.
+  quoted evidence, and overrides the coding and quantity in the approve dialog
+  (**Correct the proposal before publishing**).
 - No safe code → the model returns `NO_MATCH`, confidence drops to zero, and approval is
   blocked until a human supplies one.
 - Unknown unit → the quantity stays empty and approval is blocked. A code without a

@@ -15,7 +15,7 @@ from aquafhir.briefing import KNOWN_AUDIENCES, BriefingWriter
 from aquafhir.coding import CodingProposer, ReviewedCodingAgent
 from aquafhir.coding_llm import GeminiCodingAgent
 from aquafhir.config import Settings, get_settings
-from aquafhir.fhir import FhirClient
+from aquafhir.fhir import OAH_LOCATION_PROFILE, OAH_OBSERVATION_PROFILE, FhirClient
 from aquafhir.gemini import GeminiClient, GeminiError
 from aquafhir.intake import UnstructuredIntake
 from aquafhir.loinc_table import LoincTable
@@ -276,6 +276,131 @@ def terminology_status(service: Service) -> UmlsStatus:
         vocabularies=settings.umls_vocabulary_list if enabled else [],
         detail=detail,
     )
+
+
+def _mask_secret(secret: str) -> str | None:
+    """A fingerprint a reviewer can recognise, never the credential itself."""
+    value = secret.strip()
+    if not value:
+        return None
+    if len(value) <= 8:
+        return "\u2022" * len(value)
+    return f"{value[:4]}\u2026{value[-4:]}"
+
+
+def _curated_agent(agent: CodingProposer) -> ReviewedCodingAgent | None:
+    if isinstance(agent, ReviewedCodingAgent):
+        return agent
+    base = getattr(agent, "base", None)
+    return base if isinstance(base, ReviewedCodingAgent) else None
+
+
+@app.get(
+    "/api/v1/integrations",
+    summary="Every external dependency, its wiring, and a masked credential fingerprint",
+)
+def integrations(service: Service) -> dict[str, Any]:
+    """Configuration as the running process actually sees it.
+
+    Secrets are fingerprinted (first and last four characters) so a reviewer can
+    tell *which* key is loaded without the console ever holding the key itself.
+    """
+    settings = get_settings()
+    crosswalk = service.terminology
+    sources = crosswalk.sources() if crosswalk else []
+    loinc = crosswalk.loinc_table if crosswalk else None
+    curated = _curated_agent(service.coding_agent)
+    return {
+        "app": {
+            "env": settings.app_env,
+            "version": app.version,
+            "database_path": str(settings.database_path),
+            "replay_data_path": str(settings.replay_data_path),
+        },
+        "gemini": {
+            "configured": settings.gemini_enabled,
+            "key_fingerprint": _mask_secret(settings.gemini_api_key),
+            "key_env": "GEMINI_API_KEY",
+            "model": settings.gemini_model,
+            "api_base": settings.gemini_api_base,
+            "assist_mode": settings.gemini_assist_mode.value,
+            "assist_below_confidence": settings.gemini_assist_below_confidence,
+            "confidence_ceiling": settings.gemini_confidence_ceiling,
+            "timeout_seconds": settings.gemini_timeout_seconds,
+            "max_retries": settings.gemini_max_retries,
+            "max_output_tokens": settings.gemini_max_output_tokens,
+            "thinking_budget": settings.gemini_thinking_budget,
+        },
+        "umls": {
+            "configured": settings.umls_enabled,
+            "key_fingerprint": _mask_secret(settings.umls_api_key),
+            "key_env": "UMLS_API_KEY",
+            "auth_scheme": "apiKey query parameter (not OAuth2 client credentials)",
+            "client_id": settings.umls_client_id.strip() or None,
+            "client_secret_fingerprint": _mask_secret(settings.umls_client_secret),
+            "api_base": settings.umls_api_base,
+            "vocabularies": settings.umls_vocabulary_list,
+            "timeout_seconds": settings.umls_timeout_seconds,
+            "max_retries": settings.umls_max_retries,
+            "active": "umls" in sources,
+        },
+        "loinc_table": {
+            "path": str(settings.loinc_table_path),
+            "available": bool(loinc and loinc.available),
+            "active": "loinc-table" in sources,
+        },
+        "fhir": {
+            "base_url": settings.fhir_base_url,
+            "write_enabled": settings.fhir_write_enabled,
+            "write_mode": "enabled" if settings.fhir_write_enabled else "dry-run",
+            "timeout_seconds": settings.fhir_timeout_seconds,
+            "observation_profile": OAH_OBSERVATION_PROFILE,
+            "location_profile": OAH_LOCATION_PROFILE,
+        },
+        "webhook": {
+            "header": "X-AquaFHIR-Secret",
+            "secret_fingerprint": _mask_secret(settings.webhook_shared_secret),
+            "using_default_secret": settings.webhook_shared_secret
+            in {"local-demo-secret", "change-me-before-deployment"},
+            "endpoint": "/api/v1/webhooks/fhir",
+        },
+        "policy": {
+            "id": service.thresholds.policy_id,
+            "status": service.thresholds.status,
+            "path": str(settings.thresholds_path),
+            "rules": service.thresholds.rules,
+        },
+        "coding": {
+            "system": curated.system if curated else None,
+            "path": str(settings.coding_rules_path),
+            "review_confidence_threshold": settings.review_confidence_threshold,
+            "codes": len(curated.rules) if curated else 0,
+        },
+    }
+
+
+@app.get(
+    "/api/v1/coding/catalog",
+    summary="The curated OAH catalog a reviewer may choose from when overriding a coding",
+)
+def coding_catalog(service: Service) -> dict[str, Any]:
+    curated = _curated_agent(service.coding_agent)
+    if curated is None:
+        return {"system": None, "codes": []}
+    return {
+        "system": curated.system,
+        "codes": [
+            {
+                "code": rule["code"],
+                "display": rule["display"],
+                "aliases": list(rule.get("aliases", [])),
+                "accepted_units": list(rule.get("accepted_units", [])),
+                "unit_conversions": rule.get("unit_conversions", {}),
+                "plausible_range": rule.get("plausible_range"),
+            }
+            for rule in curated.rules
+        ],
+    }
 
 
 # -- ingestion and review --------------------------------------------------
