@@ -128,7 +128,12 @@ code, .mono { font-family: var(--mono); font-size: 12px; }
   border-bottom: 2px solid var(--band-accent);
   color: var(--band-fg);
 }
-.topnav-left { display: flex; align-items: center; gap: 2px; min-width: 0; }
+/* `flex: none` on both end groups, not `min-width: 0`: their children are
+   nowrap, so letting either group shrink below its content made the children
+   spill out and overlap the search box. The search absorbs the squeeze
+   instead, which is safe because it is only a launcher for the command
+   palette and never holds typed text. */
+.topnav-left { display: flex; align-items: center; gap: 2px; flex: none; }
 .brand {
   display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--r);
   text-decoration: none; color: var(--band-fg); font-weight: 600; letter-spacing: -.01em;
@@ -146,12 +151,13 @@ code, .mono { font-family: var(--mono); font-size: 12px; }
 .topnav-item:hover { background: var(--band-hover); color: var(--band-fg); }
 .topnav-item.is-active { color: #fff; box-shadow: inset 0 -2px 0 var(--band-accent); border-radius: 0; }
 .topnav-item .ic { width: 14px; height: 14px; }
-.btn-create { margin-left: 6px; }
+.btn-create { margin-left: 6px; margin-right: 12px; }
 .btn-create.btn.primary { background: var(--band-accent); color: var(--band-accent-ink); }
 .btn-create.btn.primary:hover:not(:disabled) { background: #6fb1ff; }
 
 .topnav-search {
-  margin-left: auto; position: relative; width: 320px; max-width: 30vw;
+  margin-left: auto; position: relative;
+  flex: 1 1 320px; min-width: 150px; max-width: 320px;
 }
 .topnav-search input {
   width: 100%; height: 32px; padding: 0 60px 0 32px;
@@ -165,7 +171,7 @@ code, .mono { font-family: var(--mono); font-size: 12px; }
   position: absolute; right: 8px; top: 7px; font: 11px var(--sans); color: var(--band-fg-dim);
   border: 1px solid rgba(255, 255, 255, .18); border-radius: 3px; padding: 1px 5px; background: rgba(255, 255, 255, .06);
 }
-.topnav-right { display: flex; align-items: center; gap: 2px; margin-left: 8px; }
+.topnav-right { display: flex; align-items: center; gap: 2px; margin-left: 8px; flex: none; }
 .icon-btn {
   width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: var(--r);
   background: transparent; color: var(--band-fg-dim); cursor: pointer; position: relative;
@@ -891,9 +897,8 @@ pre.json {
 [data-theme="dark"] .leaflet-control-attribution { background: rgba(29, 33, 37, .82); color: var(--n70); }
 [data-theme="dark"] .leaflet-control-attribution a { color: var(--n80); }
 
-@media (max-width: 1180px) {
+@media (max-width: 1350px) {
   .sys-pills { display: none; }
-  .topnav-search { width: 220px; }
 }
 @media (max-width: 960px) {
   .shell { grid-template-columns: 1fr; }
