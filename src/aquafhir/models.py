@@ -103,13 +103,35 @@ class MappingProposal(BaseModel):
     proposer: ProposerKind = ProposerKind.CURATED
     candidates: list[CandidateCoding] = Field(default_factory=list)
     ai: AiAttribution | None = None
+    # The audit record for the model call behind this proposal, successful or
+    # not. Present even when `ai` is None, which is how the console can tell
+    # "rules resolved it" apart from "the model was tried and failed".
+    ai_audit: dict[str, Any] | None = None
+    # Set only when a reviewer overrode the deterministic conversion.
+    correction_reason: str | None = None
+    # Id of an earlier proposal carrying an identical reading, if any.
+    duplicate_of: str | None = None
 
 
 class ReviewDecision(BaseModel):
+    """What a reviewer decided. Note what it deliberately cannot carry.
+
+    `coding` selects which catalog concept to publish, and **only its `code` is
+    read**. The published system and display text always come from the reviewed
+    catalog, so a client cannot mint a coding of its own.
+
+    Supplying a quantity is an *expert correction*, not a routine field. It
+    means "the deterministic conversion is wrong or impossible, and here is the
+    number to publish instead", so it requires a written reason and is still
+    checked against the selected rule's accepted units and plausible range.
+    Ordinary approvals send no quantity at all: the server derives it.
+    """
+
     reviewer: str = Field(min_length=1, max_length=120)
     coding: Coding | None = None
     normalized_value: float | None = Field(default=None, allow_inf_nan=False)
     normalized_unit: str | None = None
+    correction_reason: str | None = Field(default=None, max_length=500)
     secondary_coding: Coding | None = None
     # A GBIF Backbone taxon the reviewer chose from the biodiversity crosswalk.
     # Like `secondary_coding`, it is never inferred: no taxon reaches FHIR
@@ -117,9 +139,24 @@ class ReviewDecision(BaseModel):
     taxon: Coding | None = None
 
     @model_validator(mode="after")
-    def quantity_override_is_complete(self) -> "ReviewDecision":
-        if (self.normalized_value is None) != (self.normalized_unit is None):
-            raise ValueError("normalized_value and normalized_unit must be supplied together")
+    def expert_correction_is_complete(self) -> "ReviewDecision":
+        """A correction is value, unit and reason together, or none of them.
+
+        Allowing a value without a reason is how an unexplained number reaches
+        FHIR; allowing a reason without a value records an intent that never
+        happened.
+        """
+        supplied = {
+            "normalized_value": self.normalized_value is not None,
+            "normalized_unit": self.normalized_unit is not None,
+            "correction_reason": bool((self.correction_reason or "").strip()),
+        }
+        if any(supplied.values()) and not all(supplied.values()):
+            missing = sorted(name for name, present in supplied.items() if not present)
+            raise ValueError(
+                "An expert correction needs normalized_value, normalized_unit and "
+                f"correction_reason together; missing: {', '.join(missing)}"
+            )
         return self
 
 
@@ -171,6 +208,7 @@ class AlertBriefing(BaseModel):
         "veterinary advice. An accountable authority must review before any use."
     )
     ai: AiAttribution | None = None
+    ai_audit: dict[str, Any] | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -193,6 +231,7 @@ class SituationReport(BaseModel):
         "no prediction, no regulatory determination."
     )
     ai: AiAttribution | None = None
+    ai_audit: dict[str, Any] | None = None
     generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -212,6 +251,29 @@ class IntakeResult(BaseModel):
     extracted_count: int = 0
     rejected_count: int = 0
     ai: AiAttribution | None = None
+    ai_audit: dict[str, Any] | None = None
+
+
+class NormalizationPreview(BaseModel):
+    """What the server would publish for one proposal under one catalog code.
+
+    Display-only. The reviewer never sends these numbers back: approval
+    recomputes them, so the dialog and the published resource cannot drift.
+    """
+
+    code: str
+    display: str
+    system: str
+    source_value: float
+    source_unit: str
+    accepted_units: list[str] = Field(default_factory=list)
+    plausible_range: dict[str, float] | None = None
+    status: str                       # ok | unit-unresolved | out-of-range
+    normalized_value: float | None = None
+    normalized_unit: str | None = None
+    factor: float | None = None
+    formula: str | None = None
+    message: str
 
 
 class ApprovalResult(BaseModel):
@@ -243,7 +305,18 @@ class ChainVerification(BaseModel):
 
 
 class AiStatus(BaseModel):
+    """Whether the AI layer is configured, and whether it is actually working.
+
+    `configured` means only that a key is present. `health` reports what the
+    last real call did, because a present key says nothing about quota,
+    credentials or reachability.
+    """
+
     enabled: bool
+    configured: bool = False
+    # unknown (no call yet) | ok | quota-exceeded | auth-failed | timeout | upstream-error
+    health: str = "unknown"
+    last_call: dict[str, Any] | None = None
     provider: str = "google-gemini"
     model: str
     assist_mode: str

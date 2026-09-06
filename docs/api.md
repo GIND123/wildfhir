@@ -18,6 +18,8 @@ Interactive documentation is available at `/docs`; the OpenAPI document is `/ope
 | `GET` | `/api/v1/proposals/{id}/taxon-suggestions` | Suggest a GBIF Backbone taxon for the organism named in the source label | no | no |
 | `POST` | `/api/v1/replay` | Load `data/oder-replay.csv` as pending proposals | optional | no |
 | `POST` | `/api/v1/intake` | Extract readings from an unstructured note | **yes** | no |
+| `GET` | `/api/v1/proposals/{id}/normalization?code=` | What approving under a given catalog code would publish, with the formula | no | no |
+| `GET` | `/api/v1/proposals/{id}/observation` | The stored Observation and FHIR receipt for an approved proposal | no | no |
 | `POST` | `/api/v1/proposals/{id}/approve` | Publish reviewed resources and evaluate policy; accepts an optional `secondary_coding` | no | no |
 | `POST` | `/api/v1/proposals/{id}/reject` | Reject a proposal with a reason | no | no |
 | `POST` | `/api/v1/proposals/approve-batch` | Sign off several inspected proposals at once | no | no |
@@ -40,8 +42,16 @@ it returns `503` only when the LOINC table is *also* missing.
 
 - All new proposals are `pending` and `requires_review=true`, whether a model was consulted or not.
 - Approval needs a non-empty reviewer, coding, numeric normalized value, and UCUM unit.
-- A reviewer can replace the proposed `Coding`. Quantity corrections require both
-  `normalized_value` and `normalized_unit`, so a unit cannot be changed without an explicit value.
+- **Approval is resolved on the server, not by the client.** Only `coding.code` is
+  read from the request; the published `system` and `display` always come from the
+  curated catalog. An unknown code is a `422`.
+- By default the server *derives* the quantity with `ReviewedCodingAgent.normalize_unit`,
+  so an ordinary approval sends no numbers at all. Use
+  `GET .../normalization?code=` to show the reviewer what that will be.
+- Supplying `normalized_value` is an **expert correction** and requires
+  `normalized_unit` and `correction_reason` together. It is still checked: the unit
+  must be in the selected rule's `accepted_units`, and the value must pass its
+  `plausible_range`. Either failure is a `422` and nothing is published or alerted.
 - A reviewer may also supply `taxon` (typically a GBIF candidate from
   `GET .../taxon-suggestions`), which becomes an `Observation.component` carrying
   LOINC `41852-5` as the component code and the taxon as `valueCodeableConcept`.
@@ -124,7 +134,7 @@ failure; a lookup that actually broke returns `502`.
 | `400` | Unknown or unrouted advisory audience |
 | `404` | Proposal, alert, or replay dataset does not exist |
 | `409` | Proposal state or mapping is incompatible with the requested decision |
-| `422` | Request body failed validation (for example a half-specified quantity override) |
+| `422` | Request body failed validation, or the decision cannot be published: unknown code, a unit the rule does not accept, a value outside the plausible range, or a half-specified expert correction |
 | `502` | Gemini or UMLS was reachable but returned an error, a block, or unparseable content |
 | `503` | An AI-only endpoint was called without `GEMINI_API_KEY`, or the crosswalk has no source at all (no LOINC table *and* no `UMLS_API_KEY`) |
 

@@ -15,7 +15,7 @@ import logging
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
-from aquafhir.gemini import GeminiClient, GeminiError
+from aquafhir.gemini import GeminiClient, GeminiError, mark_degraded
 from aquafhir.models import (
     AiAttribution,
     Alert,
@@ -80,9 +80,14 @@ class BriefingWriter:
         )
         payload = result.data
         if not isinstance(payload, dict):
-            raise GeminiError("Gemini briefing response was not a JSON object")
+            raise GeminiError(
+                "Gemini briefing response was not a JSON object",
+                category="invalid-response",
+                audit=mark_degraded(result.audit, "invalid-response"),
+            )
 
         return AlertBriefing(
+            ai_audit=result.audit,
             id=str(uuid5(NAMESPACE_URL, f"briefing|{alert.id}|{audience}")),
             alert_id=alert.id,
             audience=audience,
@@ -128,9 +133,14 @@ class BriefingWriter:
         )
         payload = result.data
         if not isinstance(payload, dict):
-            raise GeminiError("Gemini situation response was not a JSON object")
+            raise GeminiError(
+                "Gemini situation response was not a JSON object",
+                category="invalid-response",
+                audit=mark_degraded(result.audit, "invalid-response"),
+            )
 
         return SituationReport(
+            ai_audit=result.audit,
             headline=str(payload.get("headline", "")).strip(),
             situation=str(payload.get("situation", "")).strip(),
             by_site=[

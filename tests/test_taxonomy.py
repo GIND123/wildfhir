@@ -129,7 +129,13 @@ def test_a_reviewer_attached_taxon_is_published_and_hash_chained(taxon_service) 
     entry = next(
         e for e in service.repository.list_provenance(50) if e.event_type == "mapping-approved"
     )
-    assert entry.payload["reviewer_attached_taxon"] is True
+    # The chain records the exact taxon, not a boolean saying one was attached.
+    assert entry.payload["taxon"]["code"] == "2401664"
+    assert entry.payload["taxon"]["system"] == GBIF_SYSTEM
+    assert entry.payload["published_coding"]["code"] == "fishes"
+    assert entry.payload["published_value"] == 12
+    assert entry.payload["published_unit"] == "{count}"
+    assert entry.payload["observation_hash"]
 
 
 def test_an_observation_without_a_taxon_grows_no_component(taxon_service) -> None:

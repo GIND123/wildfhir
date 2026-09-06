@@ -321,7 +321,12 @@ def main() -> int:
     print(paint("Summary", BOLD))
     print(f"  scenarios      {passed}/{len(results)} matched the documented outcome")
     print(f"  alerts raised  {sum(len(item.alerts) for item in results)}")
-    print(f"  approved       {sum(item.approved for item in results)}")
+    built = sum(item.approved for item in results)
+    sent = health["fhir_write_mode"] == "enabled"
+    print(
+        f"  approved       {built}"
+        f" ({'published to FHIR' if sent else 'built locally, not sent: dry run'})"
+    )
     print(f"  refused        {sum(item.refused for item in results)}")
     print(
         f"  audit chain    {paint('VALID', GREEN) if chain['valid'] else paint('INVALID', RED)}"

@@ -18,6 +18,7 @@ from aquafhir.config import Settings, get_settings
 from aquafhir.fhir import OAH_LOCATION_PROFILE, OAH_OBSERVATION_PROFILE, FhirClient
 from aquafhir.gbif import GbifClient, GbifError
 from aquafhir.gemini import GeminiClient, GeminiError
+from aquafhir.gemini import safe_message as gemini_safe_message
 from aquafhir.intake import UnstructuredIntake
 from aquafhir.loinc_table import LoincTable
 from aquafhir.models import (
@@ -31,6 +32,7 @@ from aquafhir.models import (
     IntakeRequest,
     IntakeResult,
     MappingProposal,
+    NormalizationPreview,
     ProvenanceEntry,
     RawReading,
     RejectDecision,
@@ -43,6 +45,7 @@ from aquafhir.repository import Repository
 from aquafhir.service import (
     AiUnavailableError,
     AlertNotFoundError,
+    ApprovalValidationError,
     BridgeService,
     InvalidReviewStateError,
     ProposalNotFoundError,
@@ -130,6 +133,7 @@ def build_service(settings: Settings) -> BridgeService:
             gbif=build_gbif_client(settings),
         ),
         replay_path=settings.replay_data_path,
+        gemini=gemini,
     )
 
 
@@ -178,6 +182,14 @@ async def validation_error_handler(_: Request, error: RequestValidationError) ->
     )
 
 
+@app.exception_handler(ApprovalValidationError)
+async def approval_validation_handler(
+    _: Request, error: ApprovalValidationError
+) -> JSONResponse:
+    """422: the decision itself cannot be published. Nothing was written."""
+    return JSONResponse(status_code=422, content={"detail": str(error)})
+
+
 @app.exception_handler(AiUnavailableError)
 async def ai_unavailable_handler(_: Request, error: AiUnavailableError) -> JSONResponse:
     return JSONResponse(status_code=503, content={"detail": str(error)})
@@ -185,25 +197,42 @@ async def ai_unavailable_handler(_: Request, error: AiUnavailableError) -> JSONR
 
 @app.exception_handler(GeminiError)
 async def gemini_error_handler(_: Request, error: GeminiError) -> JSONResponse:
+    """502 with a short category, never the provider's response body.
+
+    The exception text carries up to 300 characters of whatever Gemini
+    returned. That is useful in a log and unsafe in an HTTP response.
+    """
+    logger.warning("Gemini call failed: %s", error, exc_info=True)
     return JSONResponse(
         status_code=502,
-        content={"detail": f"Gemini upstream failure: {error}"},
+        content={
+            "detail": gemini_safe_message(error),
+            "error_code": getattr(error, "category", "upstream-error"),
+        },
     )
 
 
 @app.exception_handler(GbifError)
 async def gbif_error_handler(_: Request, error: GbifError) -> JSONResponse:
+    logger.warning("GBIF call failed: %s", error, exc_info=True)
     return JSONResponse(
         status_code=502,
-        content={"detail": f"GBIF upstream failure: {error}"},
+        content={
+            "detail": "The GBIF taxonomy service could not be reached.",
+            "error_code": "gbif-upstream-error",
+        },
     )
 
 
 @app.exception_handler(UMLSError)
 async def umls_error_handler(_: Request, error: UMLSError) -> JSONResponse:
+    logger.warning("UMLS call failed: %s", error, exc_info=True)
     return JSONResponse(
         status_code=502,
-        content={"detail": f"UMLS upstream failure: {error}"},
+        content={
+            "detail": "The UMLS terminology service could not be reached.",
+            "error_code": "umls-upstream-error",
+        },
     )
 
 
@@ -237,8 +266,20 @@ def health(service: Service) -> dict[str, Any]:
 def ai_status(service: Service) -> AiStatus:
     settings = get_settings()
     enabled = settings.gemini_enabled
+    last = getattr(service.gemini, "last_call", None) if service.gemini else None
+    if not enabled:
+        health = "disabled"
+    elif last is None:
+        health = "unknown"
+    elif last["outcome"] == "ok":
+        health = "ok"
+    else:
+        health = last.get("category") or "upstream-error"
     return AiStatus(
         enabled=enabled,
+        configured=enabled,
+        health=health,
+        last_call=last,
         model=settings.gemini_model,
         assist_mode=settings.gemini_assist_mode.value if enabled else "off",
         assist_below_confidence=settings.gemini_assist_below_confidence,
@@ -253,13 +294,41 @@ def ai_status(service: Service) -> AiStatus:
             if enabled
             else []
         ),
-        detail=(
-            "Gemini proposes; a human reviewer approves. No model output is published "
-            "to FHIR, and no model output changes an alert decision."
-            if enabled
-            else "GEMINI_API_KEY is not set. The deterministic pipeline is fully functional."
-        ),
+        detail=_ai_detail(enabled, health, last),
     )
+
+
+_AI_HEALTH_DETAIL = {
+    "unknown": (
+        "A key is configured. No call has been made yet, so whether it works is unknown."
+    ),
+    "ok": "The last call succeeded.",
+    "quota-exceeded": (
+        "Gemini quota exceeded on the last call. Proposals are still saved using the "
+        "rules fallback."
+    ),
+    "auth-failed": (
+        "Gemini rejected the credentials on the last call. Check GEMINI_API_KEY."
+    ),
+    "timeout": "The last call timed out. Proposals fall back to the curated rules.",
+    "upstream-error": (
+        "The last call failed upstream. Proposals fall back to the curated rules."
+    ),
+}
+
+
+def _ai_detail(enabled: bool, health: str, last: dict[str, Any] | None) -> str:
+    """Say what is configured and, separately, what actually happened."""
+    if not enabled:
+        return "GEMINI_API_KEY is not set. The deterministic pipeline is fully functional."
+    base = (
+        "Gemini proposes; a human reviewer approves. No model output is published to "
+        "FHIR, and no model output changes an alert decision."
+    )
+    note = _AI_HEALTH_DETAIL.get(health, _AI_HEALTH_DETAIL["upstream-error"])
+    if last and last.get("at"):
+        note = f"{note} Last call {last['at']}."
+    return f"{base} {note}"
 
 
 @app.get("/api/v1/terminology/status", response_model=UmlsStatus)
@@ -505,6 +574,38 @@ def taxon_suggestions(proposal_id: str, service: Service) -> list[TerminologyMat
         return service.suggest_taxa(proposal_id)
     except ProposalNotFoundError as error:
         raise HTTPException(status_code=404, detail="Proposal not found") from error
+
+
+@app.get(
+    "/api/v1/proposals/{proposal_id}/normalization",
+    response_model=NormalizationPreview,
+    summary="What approving this proposal under a given catalog code would produce",
+)
+def normalization_preview(
+    proposal_id: str,
+    service: Service,
+    code: Annotated[str, Query(description="A code from the curated OAH catalog")],
+) -> NormalizationPreview:
+    try:
+        return service.normalization_preview(proposal_id, code)
+    except ProposalNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Proposal not found") from error
+
+
+@app.get(
+    "/api/v1/proposals/{proposal_id}/observation",
+    summary="The stored Observation and the receipt from the approval that built it",
+)
+def published_observation(proposal_id: str, service: Service) -> dict[str, Any]:
+    try:
+        stored = service.published_observation(proposal_id)
+    except ProposalNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Proposal not found") from error
+    if stored is None:
+        raise HTTPException(
+            status_code=404, detail="This proposal has no published Observation"
+        )
+    return stored
 
 
 @app.post("/api/v1/proposals/{proposal_id}/approve", response_model=ApprovalResult)

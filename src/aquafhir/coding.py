@@ -31,6 +31,15 @@ class CodingProposer(Protocol):
 
     def propose(self, reading: RawReading) -> MappingProposal: ...
 
+    @property
+    def catalog(self) -> "ReviewedCodingAgent":
+        """The reviewed rules behind this proposer.
+
+        Approval validation resolves the reviewer's chosen code against this,
+        so it must be reachable whether or not a model wrapped the proposer.
+        """
+        ...
+
 
 class ReviewedCodingAgent:
     """Deterministic, auditable baseline coding proposer.
@@ -50,6 +59,19 @@ class ReviewedCodingAgent:
         self._by_code = {rule["code"]: rule for rule in self.rules}
 
     # -- catalog access ----------------------------------------------------
+
+    @property
+    def catalog(self) -> "ReviewedCodingAgent":
+        return self
+
+    def accepted_units_for_rule(self, rule: dict[str, Any]) -> list[str]:
+        """Units a *published* quantity may carry for this rule.
+
+        Narrower than `known_units_for_rule`, which also lists the source units
+        a conversion accepts as input. A reviewer may say the source was in
+        `uS/cm`, but the published quantity has to land on `mS/cm`.
+        """
+        return list(rule.get("accepted_units", []))
 
     def rule_for_code(self, code: str) -> dict[str, Any] | None:
         return self._by_code.get(code)
@@ -177,13 +199,13 @@ class ReviewedCodingAgent:
             target = conversion["target"]
             note = f"Converted from {unit}."
 
-        implausible = _range_violation(converted, target, rule)
+        implausible = range_violation(converted, target, rule)
         if implausible:
             return None, None, f"{note} {implausible}"
         return converted, target, note
 
 
-def _range_violation(value: float, unit: str, rule: dict[str, Any]) -> str | None:
+def range_violation(value: float, unit: str, rule: dict[str, Any]) -> str | None:
     """Describe why a normalized quantity is outside its reviewed bounds, or None."""
     limits = rule.get("plausible_range")
     if not limits:

@@ -17,14 +17,46 @@ Two invariants hold everywhere this client is used:
 import hashlib
 import json
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 
 
 class GeminiError(RuntimeError):
-    """Any failure to obtain a usable structured response from Gemini."""
+    """Any failure to obtain a usable structured response from Gemini.
+
+    Carries a short, safe `category` and the HTTP status where one is known,
+    so the console can say *why* the AI is degraded without ever showing a
+    reviewer the provider's raw error body.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        category: str = "upstream-error",
+        status: int | None = None,
+        audit: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.category = category
+        self.status = status
+        # Set when the failure happened during a call this client made, so the
+        # caller can chain it against the right entity.
+        self.audit = audit
+
+
+def error_category(status: int) -> str:
+    """Map an upstream HTTP status onto a category a reviewer can act on."""
+    if status == 429:
+        return "quota-exceeded"
+    if status in {401, 403}:
+        return "auth-failed"
+    if status == 408:
+        return "timeout"
+    return "upstream-error"
 
 
 class GeminiDisabledError(GeminiError):
@@ -56,6 +88,10 @@ class GeminiResult:
     response_hash: str
     latency_ms: int
     raw_text: str
+    # The audit record for exactly this call. Carried with the result rather
+    # than parked on the client, so concurrent requests cannot claim each
+    # other's records.
+    audit: dict[str, Any] = field(default_factory=dict)
 
 
 class GeminiClient:
@@ -77,6 +113,12 @@ class GeminiClient:
         self.max_output_tokens = max_output_tokens
         self.max_retries = max(0, max_retries)
         self.thinking_budget = thinking_budget
+        # Outcome of the last real call, or None if none has been made.
+        # Most-recent-call summary for the status endpoint only. Deliberately
+        # last-writer-wins: it answers "is the AI working right now", not
+        # "what happened in my request". Per-request attribution travels with
+        # the result or the error instead.
+        self.last_call: dict[str, Any] | None = None
 
     @property
     def enabled(self) -> bool:
@@ -120,13 +162,40 @@ class GeminiClient:
 
         prompt_hash = _sha256(f"{template_id}\n{system}\n{prompt}")
         started = time.perf_counter()
-        text = self._post_with_retries(body)
+        try:
+            text = self._post_with_retries(body)
+        except GeminiError as error:
+            # A key being present says nothing about whether calls succeed.
+            # Record what actually happened so status can be honest about it.
+            error.audit = self._note(
+                outcome="error",
+                template_id=template_id,
+                prompt_hash=prompt_hash,
+                latency_ms=int((time.perf_counter() - started) * 1000),
+                category=getattr(error, "category", "upstream-error"),
+                status=getattr(error, "status", None),
+            )
+            raise
         latency_ms = int((time.perf_counter() - started) * 1000)
 
+        # Recorded only once the payload is usable. Marking the call "ok" the
+        # moment bytes arrived counted unparseable and out-of-catalog answers as
+        # successes, which is precisely the failure mode status is meant to show.
         try:
             data = json.loads(_strip_code_fence(text))
         except json.JSONDecodeError as error:
-            raise GeminiError(f"Gemini returned non-JSON content: {error}") from error
+            raise GeminiError(
+                f"Gemini returned non-JSON content: {error}",
+                category="invalid-json",
+                audit=self._note(
+                    outcome="error", template_id=template_id, prompt_hash=prompt_hash,
+                    latency_ms=latency_ms, category="invalid-json",
+                ),
+            ) from error
+        audit = self._note(
+            outcome="ok", template_id=template_id, prompt_hash=prompt_hash,
+            latency_ms=latency_ms,
+        )
 
         return GeminiResult(
             data=data,
@@ -136,7 +205,40 @@ class GeminiClient:
             response_hash=_sha256(text),
             latency_ms=latency_ms,
             raw_text=text,
+            audit=audit,
         )
+
+    def _note(
+        self,
+        *,
+        outcome: str,
+        template_id: str,
+        latency_ms: int,
+        prompt_hash: str | None = None,
+        category: str | None = None,
+        status: int | None = None,
+    ) -> dict[str, Any]:
+        """Build the audit record for one call and return it to the caller.
+
+        Deliberately holds no key, no prompt text and no provider error body:
+        only the prompt *hash*, a short category, and the HTTP status. That is
+        enough for an auditor to correlate a call with its inputs without the
+        audit trail becoming a place secrets accumulate.
+        """
+        record = {
+            "operation": template_id.split("/")[0],
+            "outcome": outcome,
+            "category": category,
+            "http_status": status,
+            "provider": "google-gemini",
+            "model": self.model,
+            "template_id": template_id,
+            "prompt_hash": prompt_hash,
+            "latency_ms": latency_ms,
+            "at": datetime.now(UTC).isoformat(),
+        }
+        self.last_call = record
+        return record
 
     # -- transport ---------------------------------------------------------
 
@@ -162,11 +264,15 @@ class GeminiClient:
                         continue
                 if response.status_code in {408, 429, 500, 502, 503, 504}:
                     raise GeminiError(
-                        f"Gemini transient error {response.status_code}: {response.text[:300]}"
+                        f"Gemini transient error {response.status_code}: {response.text[:300]}",
+                        category=error_category(response.status_code),
+                        status=response.status_code,
                     )
                 if response.status_code >= 400:
                     raise GeminiError(
-                        f"Gemini request failed {response.status_code}: {response.text[:300]}"
+                        f"Gemini request failed {response.status_code}: {response.text[:300]}",
+                        category=error_category(response.status_code),
+                        status=response.status_code,
                     )
                 return self._extract_text(response.json())
             except (httpx.HTTPError, GeminiError) as error:
@@ -177,7 +283,14 @@ class GeminiClient:
                     break
                 time.sleep(0.6 * (2**attempt))
 
-        raise GeminiError(f"Gemini call failed after retries: {last_error}")
+        # Carry the cause forward. Re-raising a bare GeminiError here discarded
+        # the category, so an exhausted quota surfaced as a generic upstream
+        # error and the console could not tell a reviewer what to do about it.
+        raise GeminiError(
+            f"Gemini call failed after retries: {last_error}",
+            category=getattr(last_error, "category", "upstream-error"),
+            status=getattr(last_error, "status", None),
+        )
 
     @staticmethod
     def _without_thinking_config(body: dict[str, Any]) -> dict[str, Any]:
@@ -191,18 +304,68 @@ class GeminiClient:
     def _extract_text(payload: dict[str, Any]) -> str:
         feedback = payload.get("promptFeedback", {})
         if feedback.get("blockReason"):
-            raise GeminiError(f"Gemini blocked the prompt: {feedback['blockReason']}")
+            raise GeminiError(
+                f"Gemini blocked the prompt: {feedback['blockReason']}", category="blocked"
+            )
 
         candidates = payload.get("candidates") or []
         if not candidates:
-            raise GeminiError("Gemini returned no candidates")
+            raise GeminiError("Gemini returned no candidates", category="empty-response")
 
         candidate = candidates[0]
         finish_reason = candidate.get("finishReason")
         parts = candidate.get("content", {}).get("parts") or []
         text = "".join(part.get("text", "") for part in parts).strip()
         if not text:
-            raise GeminiError(f"Gemini returned an empty candidate (finish: {finish_reason})")
+            raise GeminiError(
+                f"Gemini returned an empty candidate (finish: {finish_reason})",
+                category="empty-response",
+            )
         if finish_reason == "MAX_TOKENS":
-            raise GeminiError("Gemini response was truncated; raise GEMINI_MAX_OUTPUT_TOKENS")
+            raise GeminiError(
+                "Gemini response was truncated; raise GEMINI_MAX_OUTPUT_TOKENS",
+                category="truncated",
+            )
         return text
+
+
+SAFE_MESSAGES = {
+    "quota-exceeded": "Gemini quota exceeded. The deterministic pipeline is unaffected.",
+    "auth-failed": "Gemini rejected the configured credentials.",
+    "timeout": "Gemini did not respond in time.",
+    "blocked": "Gemini declined to answer this prompt.",
+    "truncated": "Gemini's answer was cut off before it was complete.",
+    "empty-response": "Gemini returned no usable answer.",
+    "invalid-json": "Gemini returned a malformed answer.",
+    "invalid-response": "Gemini's answer did not match the expected shape.",
+    "out-of-catalog": "Gemini proposed a code outside the curated catalog.",
+    "upstream-error": "Gemini could not be reached.",
+}
+
+
+def safe_message(error: GeminiError) -> str:
+    """A message fit to leave the process.
+
+    The exception text carries up to 300 characters of the provider's own
+    response body. That belongs in the server log, not in an HTTP response or
+    a reviewer's toast.
+    """
+    category = getattr(error, "category", "upstream-error")
+    message = SAFE_MESSAGES.get(category, SAFE_MESSAGES["upstream-error"])
+    status = getattr(error, "status", None)
+    return f"{message} (category: {category}{f', HTTP {status}' if status else ''})"
+
+
+def mark_degraded(record: dict[str, Any] | None, category: str) -> dict[str, Any] | None:
+    """Downgrade one call's record after a feature rejected its answer.
+
+    A response can parse and still be unusable: a code outside the curated
+    catalog, or a payload that is not the object the feature expected. The
+    transport succeeded, so only the feature layer knows this happened. Takes
+    the record explicitly, because mutating "the last call" would corrupt a
+    concurrent request's record.
+    """
+    if record is not None and record.get("outcome") == "ok":
+        record["outcome"] = "rejected"
+        record["category"] = category
+    return record

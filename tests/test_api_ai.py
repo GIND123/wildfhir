@@ -76,7 +76,10 @@ def test_an_upstream_gemini_failure_returns_502(ai_service, fake_gemini, setting
     response = client_for(ai_service).post("/api/v1/intake", json={"text": "conductivity 2350"})
 
     assert response.status_code == 502
-    assert "Gemini upstream failure" in response.json()["detail"]
+    body = response.json()
+    # A short category, never the provider's own response body.
+    assert body["error_code"] == "upstream-error"
+    assert "could not be reached" in body["detail"]
 
 
 def test_replay_loads_the_synthetic_timeline_as_pending_work(service, settings_without_key):

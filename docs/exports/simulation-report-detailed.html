@@ -62,7 +62,7 @@ li { margin: 0.2em 0; }
 <p><strong>Run timestamp (UTC):</strong> 2026-09-02T00:21:39Z
 <strong>Wall-clock duration:</strong> 57.183 s (89 rows across 13 scenarios; ~640 ms per row)
 <strong>Bridge revision:</strong> local working tree, uvicorn 0.35 + FastAPI on Python 3.12
-<strong>FHIR write mode:</strong> dry-run (validation only; no external POST)
+<strong>FHIR write mode:</strong> dry-run (resources built locally: nothing is sent, and profile validation is skipped because it runs on the FHIR server)
 <strong>AI mode:</strong> Gemini <code>gemini-3.1-pro-preview</code>, assist=<code>auto</code>, ceiling 0.95, below-confidence 0.95
 <strong>Terminology crosswalk:</strong> LOINC table + UMLS (empty key → LOINC-only)
 <strong>Threshold policy:</strong> <code>oder-replay-demo-v1</code> (status <code>demo-not-for-operational-use</code>)
@@ -227,7 +227,7 @@ lie about ambiguous input.</p>
 <li><strong>Live</strong> (<code>scripts/simulate.py</code>) drives the same scenarios through the HTTP
   surface of a running uvicorn instance. It exercises FastAPI request
   validation, the SQLite repository (WAL), the hash chain, FHIR profile
-  validation, transaction-bundle publication (dry-run), the threshold policy
+  validation, transaction-bundle construction (dry run, not sent), the threshold policy
   evaluator, the Gemini co-pilot when consulted, the audience router, and the
   terminology crosswalk. This is what this report measures.</li>
 </ul>
@@ -313,7 +313,7 @@ newer model at server start. §8 compares the two.</p>
 <td>89</td>
 </tr>
 <tr>
-<td>Approved (dry-run FHIR publish)</td>
+<td>Approved (built locally, not sent: dry run)</td>
 <td>67</td>
 </tr>
 <tr>

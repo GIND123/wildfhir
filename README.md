@@ -10,7 +10,7 @@ This repository contains only the first concept from the source brief: **the One
 
 ## Current status: done vs. pending
 
-**Done and tested (286 offline tests, no live Gemini or UMLS call ever runs in CI):**
+**Done and tested (332 offline tests, no live Gemini or UMLS call ever runs in CI):**
 
 - Curated OAH terminology coding and reviewed unit conversion ([coding.py](src/aquafhir/coding.py))
 - Gemini coding co-pilot, unstructured-bulletin intake, audience advisory drafting, grounded situation reports — all human-reviewed, all degrade cleanly with no key ([coding_llm.py](src/aquafhir/coding_llm.py), [intake.py](src/aquafhir/intake.py), [briefing.py](src/aquafhir/briefing.py))
@@ -50,7 +50,7 @@ Built for the **IEEE OneAquaHealth Global Hackathon 2026**, an EU Horizon Europe
 |---|---|
 | **Impact & Alignment with the OneAquaHealth mission** | Every environmental reading is normalized into the *same* FHIR resource model the OneAquaHealth project already publishes, and a crossed threshold routes an alert to human-health, veterinary, *and* water-authority audiences in one step — the ecosystem→health link is the product, not a bolt-on chart. The claim is tested against twelve real incidents rather than asserted: the [incident catalogue](docs/incidents.md) includes an urban stream in an OAH pilot city (Oslo's Akerselva), a citizen-signal-first outbreak (Brixham 2024), and an animal→water→human pathway routed to veterinary and public-health audiences from one reading (Havelock North 2016). |
 | **Innovation & Creativity** | A working Gemini co-pilot that maps multilingual, abbreviated, and free-text source data onto OAH terminology under enum-constrained grounding, and drafts audience-specific advisories — with a hash-chained ledger recording the model id and the exact prompt hash behind every proposal (§ [The Gemini co-pilot](#the-gemini-co-pilot)). Layered on top, a **terminology crosswalk** finds the real LOINC code for the same curated OAH concept — searching the published LOINC table scoped to environmental specimens, which surfaces `9481-3` pH of Water where a generic clinical UMLS search returns *Peliosis hepatis* — so a reviewer can publish both the project-specific code and a standard one a downstream EHR already understands (§ [The terminology crosswalk](#the-terminology-crosswalk)). FHIR-for-environment bridges with reviewer gating are rare; ones that also close the "temporary code system → real terminology" gap are rarer still. On top of that, a **biodiversity crosswalk** names the organism a source label mentions, filling a white space the official IG itself leaves open: it defines ten biological indicators and binds none of them to a taxonomy (§ [The biodiversity crosswalk](#the-biodiversity-crosswalk)). |
-| **Architecture** | HAPI FHIR R4 loaded with the real `hl7.eu.fhir.oah` package, R4 rest-hook Subscriptions, a versioned/unit-aware alert policy, a swappable `CodingProposer` contract the model plugs into without touching the FHIR or alerting layers, a two-source `TerminologyCrosswalk` that validates every LOINC candidate against the published term table and degrades source-by-source, and documented sequence diagrams (see [architecture.md](docs/architecture.md)). 286 tests, all offline, including a malformed-input suite covering every shape a FHIR server or a source can push at it, and **an executable incident catalogue** — twelve real water-and-health incidents replayed as fixtures with their expected coding, refusal, and audience-routing outcomes enforced in CI ([incidents.md](docs/incidents.md)). |
+| **Architecture** | HAPI FHIR R4 loaded with the real `hl7.eu.fhir.oah` package, R4 rest-hook Subscriptions, a versioned/unit-aware alert policy, a swappable `CodingProposer` contract the model plugs into without touching the FHIR or alerting layers, a two-source `TerminologyCrosswalk` that validates every LOINC candidate against the published term table and degrades source-by-source, and documented sequence diagrams (see [architecture.md](docs/architecture.md)). 332 tests, all offline, including a malformed-input suite covering every shape a FHIR server or a source can push at it, and **an executable incident catalogue** — twelve real water-and-health incidents replayed as fixtures with their expected coding, refusal, and audience-routing outcomes enforced in CI ([incidents.md](docs/incidents.md)). |
 | **UX** | A dependency-free review console built like a work-management tool, not a dashboard of charts. Every proposal is a card that reads *as received → OneAquaHealth FHIR*; opening it shows the model's quoted evidence, the competing candidates, a visible flag when the AI disagrees with the curated rules, the LOINC/SNOMED crosswalk, the exact FHIR Observation once approved, and its own hash-chain history. Reviewers can drag a card to a decision, bulk-approve inspected rows, or use ⌘K and keyboard shortcuts. Incidents carry one-click advisory drafting per audience; the audit log is a real table with verification. The reviewer sees what the model saw. See the [demo script](docs/demo-script.md). |
 | **Scale** | Config-driven terminology ([coding-rules.yaml](config/coding-rules.yaml)) and policy ([thresholds.yaml](config/thresholds.yaml)) — adding an indicator is a YAML edit, and the model's vocabulary widens with it automatically. `auto` assist mode spends a model call only where rules are weak, so cost scales with novelty rather than volume. Gap analysis in § [Implemented versus production work](#implemented-versus-production-work). |
 
@@ -197,7 +197,7 @@ Then start and test:
 
 ```bash
 uvicorn aquafhir.main:app --reload
-pytest          # 286 tests, fully offline — no keys needed, no network touched
+pytest          # 332 tests, fully offline — no keys needed, no network touched
 ruff check .
 ```
 
@@ -273,19 +273,43 @@ curl -X POST http://localhost:8000/api/v1/ai/situation-report
 curl http://localhost:8000/api/v1/provenance/verify
 ```
 
-A reviewer who disagrees with the model overrides it in the approve body:
+Approval is resolved on the server. Ask it what a given code would publish before
+deciding:
+
+```bash
+curl "http://localhost:8000/api/v1/proposals/PROPOSAL_ID/normalization?code=electrical-conductivity"
+# -> {"status":"ok","formula":"2444 uS/cm × 0.001 = 2.444 mS/cm","normalized_value":2.444, ...}
+```
+
+A reviewer who disagrees with the model selects a different catalog code. Only the
+`code` is read; the published system and display text come from the catalog, and the
+quantity is re-derived for the code actually chosen:
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/proposals/PROPOSAL_ID/approve \
   -H "Content-Type: application/json" \
   -d '{
     "reviewer":"reviewer@example.org",
-    "coding":{"system":"http://hl7.eu/fhir/ig/oah/CodeSystem/temporarySystem-oah-eu",
-              "code":"chloride","display":"Chloride"},
-    "normalized_value":120.0,
-    "normalized_unit":"mg/L"
+    "coding":{"system":"ignored","code":"chloride","display":"ignored"}
   }'
 ```
+
+Replacing the *number* is a separate, heavier action. It requires a written reason,
+and it is still held to the selected rule's accepted units and plausible range:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/proposals/PROPOSAL_ID/approve \
+  -H "Content-Type: application/json" \
+  -d '{
+    "reviewer":"reviewer@example.org",
+    "normalized_value":120.0,
+    "normalized_unit":"mg/L",
+    "correction_reason":"Probe recalibrated after the reading was filed"
+  }'
+```
+
+An unknown code, a unit the rule does not accept, or a value outside its plausible
+range is a `422`: nothing is published and no incident is raised.
 
 The override is recorded in the provenance payload alongside the model's prompt hash, so
 the disagreement itself is auditable.

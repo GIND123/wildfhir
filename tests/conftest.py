@@ -43,6 +43,7 @@ def _build(
             umls or UMLSClient(api_key=""), loinc_table=loinc_table, gbif=gbif
         ),
         replay_path=REPLAY,
+        gemini=gemini,
     )
 
 

@@ -188,7 +188,14 @@ class FhirClient:
 
     def publish(self, bundle: dict[str, Any]) -> dict[str, Any]:
         if not self.write_enabled:
-            return {"mode": "dry-run", "resource_count": len(bundle["entry"])}
+            # "built", not "published": the bundle exists but no server has
+            # seen it. Only a real transaction response earns the word.
+            return {
+                "mode": "dry-run",
+                "published": False,
+                "detail": "Bundle built locally. FHIR_WRITE_ENABLED is false, so nothing was sent.",
+                "resource_count": len(bundle["entry"]),
+            }
         with httpx.Client(timeout=self.timeout) as client:
             response = client.post(
                 self.base_url,
@@ -200,7 +207,18 @@ class FhirClient:
 
     def validate(self, resource: dict[str, Any], profile: str) -> dict[str, Any]:
         if not self.write_enabled:
-            return {"mode": "dry-run", "profile": profile}
+            # No validator ran. Saying "dry-run" alongside a profile URL read
+            # as "validated against this profile", which was never true: this
+            # branch only ever returned a placeholder.
+            return {
+                "mode": "skipped",
+                "validated": False,
+                "profile": profile,
+                "detail": (
+                    "Profile validation skipped: it runs on the FHIR server, and "
+                    "FHIR_WRITE_ENABLED is false."
+                ),
+            }
         resource_type = resource["resourceType"]
         with httpx.Client(timeout=self.timeout) as client:
             response = client.post(
@@ -211,6 +229,7 @@ class FhirClient:
             )
             response.raise_for_status()
             outcome = response.json()
+        outcome.setdefault("validated", True)
         failures = [
             issue
             for issue in outcome.get("issue", [])
@@ -246,7 +265,7 @@ class FhirClient:
             },
         }
         if not self.write_enabled:
-            return {"mode": "dry-run", "resource": resource}
+            return {"mode": "dry-run", "installed": False, "resource": resource}
         with httpx.Client(timeout=self.timeout) as client:
             response = client.post(
                 f"{self.base_url}/Subscription",

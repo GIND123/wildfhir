@@ -27,8 +27,11 @@ def test_approval_builds_oah_resources_and_alert(service):
     proposal = service.propose(high_conductivity_reading())
     result = service.approve(proposal.id, ReviewDecision(reviewer="reviewer@example.org"))
 
+    # Dry run states plainly that nothing was published and nothing validated.
     assert result.fhir_response["transaction"]["mode"] == "dry-run"
-    assert result.fhir_response["validation"]["observation"]["mode"] == "dry-run"
+    assert result.fhir_response["transaction"]["published"] is False
+    assert result.fhir_response["validation"]["observation"]["mode"] == "skipped"
+    assert result.fhir_response["validation"]["observation"]["validated"] is False
     assert result.observation["meta"]["profile"] == [OAH_OBSERVATION_PROFILE]
     assert result.observation["subject"]["reference"] == "Location/oder-kostrzyn"
     assert result.observation["performer"]

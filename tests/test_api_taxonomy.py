@@ -97,7 +97,10 @@ def test_an_upstream_gbif_failure_returns_502(tmp_path, curated_agent, settings)
     response = client_for(service).get(f"/api/v1/proposals/{proposal.id}/taxon-suggestions")
 
     assert response.status_code == 502
-    assert "GBIF upstream failure" in response.json()["detail"]
+    body = response.json()
+    assert body["error_code"] == "gbif-upstream-error"
+    assert "could not be reached" in body["detail"]
+    assert "simulated upstream outage" not in body["detail"]
 
 
 def test_terminology_status_reports_the_biodiversity_source(taxon_service, settings):

@@ -15,7 +15,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from aquafhir.gemini import GeminiClient, GeminiError
+from aquafhir.gemini import GeminiClient, GeminiError, mark_degraded
 from aquafhir.models import (
     AiAttribution,
     IntakeRequest,
@@ -31,7 +31,7 @@ from aquafhir.prompts import (
 
 logger = logging.getLogger(__name__)
 
-ExtractionOutcome = tuple[list[RawReading], list[str], AiAttribution | None]
+ExtractionOutcome = tuple[list[RawReading], list[str], AiAttribution | None, dict | None]
 
 
 class UnstructuredIntake:
@@ -55,7 +55,11 @@ class UnstructuredIntake:
         )
         payload = result.data
         if not isinstance(payload, dict):
-            raise GeminiError("Gemini intake response was not a JSON object")
+            raise GeminiError(
+                "Gemini intake response was not a JSON object",
+                category="invalid-response",
+                audit=mark_degraded(result.audit, "invalid-response"),
+            )
 
         warnings = [str(item) for item in payload.get("warnings", []) if str(item).strip()]
         readings: list[RawReading] = []
@@ -85,7 +89,7 @@ class UnstructuredIntake:
                 if isinstance(row, dict) and row.get("quoted_span")
             ][:5],
         )
-        return readings, warnings, attribution
+        return readings, warnings, attribution, result.audit
 
     @staticmethod
     def _to_reading(

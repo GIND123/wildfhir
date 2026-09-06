@@ -22,6 +22,7 @@
     "mapping-proposed": "Proposed", "mapping-approved": "Approved", "mapping-rejected": "Rejected",
     "alert-created": "Incident raised", "briefing-drafted": "Advisory drafted",
     "situation-report": "Situation report", "unstructured-intake": "Bulletin intake",
+    "ai-call": "AI call",
   };
 
   const state = {
@@ -36,6 +37,7 @@
     taxonPicks: {},          // proposal id -> chosen taxon Coding
     keys: new Map(),         // proposal id -> AQF-n
     situation: null,
+    fetching: new Set(),   // proposal ids whose stored Observation is being fetched
     lastRefresh: null,
     drawer: null,            // {kind:'proposal'|'alert'|'entry', id, tab}
     focus: null,             // focused proposal/alert id for j/k
@@ -47,7 +49,7 @@
       briefs: { q: "", audience: "" },
       audit: { q: "", events: new Set(), limit: 50 },
     },
-    pending: { rejectIds: [], approveId: null, dragId: null },
+    pending: { rejectIds: [], approveId: null, dragId: null, preview: null },
     pingResults: {},
   };
 
@@ -77,6 +79,18 @@
   }
   const icon = (name, cls = "ic sm") => `<svg class="${cls}"><use href="#i-${name}"/></svg>`;
 
+  // Upstream errors can carry a JSON body. A reviewer needs the cause, not the
+  // provider's payload, and the full text stays in the server log.
+  function safeMessage(text) {
+    const raw = String(text || "");
+    if (/quota|RESOURCE_EXHAUSTED|\b429\b/i.test(raw)) {
+      return "Gemini quota exceeded. The proposal was saved using the rules fallback.";
+    }
+    const brace = raw.search(/[{[]/);
+    const trimmed = brace > 12 ? raw.slice(0, brace).trim().replace(/[:,-]\s*$/, "") : raw;
+    return trimmed.length > 180 ? `${trimmed.slice(0, 177)}…` : trimmed;
+  }
+
   function toast(message, kind = "ok", action = null) {
     const host = $("#toasts");
     const node = document.createElement("div");
@@ -93,7 +107,7 @@
     try {
       return await work();
     } catch (error) {
-      toast(error.message, "bad");
+      toast(safeMessage(error.message), "bad");
       return undefined;
     } finally {
       if (button) { button.classList.remove("busy"); button.disabled = false; }
@@ -301,12 +315,14 @@
     const approved = state.proposals.filter((p) => p.status === "approved").length;
     const coded = state.proposals.filter((p) => p.coding).length;
     const secondary = state.provenance.filter(
-      (e) => e.event_type === "mapping-approved" && e.payload.reviewer_attached_secondary_coding).length;
+      (e) => e.event_type === "mapping-approved" && e.payload.secondary_coding).length;
 
     set("#flow-c-ingest", state.proposals.length);
     set("#flow-c-coding", coded);
     set("#flow-c-review", pending);
     set("#flow-c-fhir", approved);
+    set("#flow-c-fhir-label",
+      state.health.fhir_write_mode === "enabled" ? "observations published" : "built, not sent");
     set("#flow-c-policy", state.alerts.length);
     set("#flow-c-alerts", state.briefings.length);
     set("#flow-c-gemini", state.proposals.filter((p) => p.ai).length);
@@ -360,7 +376,11 @@
     const shown = applyProposalFilters(state.proposals, f);
     const cols = [
       { s: "pending", title: "Pending review", hint: "Drag a card to Approved or Rejected, or open it." },
-      { s: "approved", title: "Approved · published", hint: "Approved mappings become OAH Observations." },
+      { s: "approved",
+        title: state.health.fhir_write_mode === "enabled" ? "Approved · published" : "Approved · built (dry run)",
+        hint: state.health.fhir_write_mode === "enabled"
+          ? "Approved mappings are sent to HAPI as OAH Observations."
+          : "Approved mappings are built and stored locally. Nothing is sent while FHIR_WRITE_ENABLED is false." },
       { s: "rejected", title: "Rejected", hint: "Decisions are immutable and hash-chained." },
     ];
     $("#board").innerHTML = cols.map((c) => {
@@ -546,7 +566,7 @@
   function siteTone(row) {
     if (row.alerts.some((a) => a.severity === "critical")) return { color: "#c9372c", rank: "Critical incident" };
     if (row.alerts.length) return { color: "#e56910", rank: "High incident" };
-    if (row.approved) return { color: "#0c66e4", rank: "Observations published" };
+    if (row.approved) return { color: "#0c66e4", rank: `Observations ${builtWord()}` };
     return { color: "#8590a2", rank: "Pending review only" };
   }
 
@@ -650,8 +670,8 @@
     state.proposals.forEach((p) => { c[p.status] += 1; });
     const decided = c.approved + c.rejected;
     const aiShare = n ? Math.round(100 * state.proposals.filter((p) => p.ai).length / n) : 0;
-    const overrides = state.provenance.filter((e) => e.event_type === "mapping-approved" && (e.payload.reviewer_overrode_coding || e.payload.reviewer_overrode_quantity)).length;
-    const secondary = state.provenance.filter((e) => e.event_type === "mapping-approved" && e.payload.reviewer_attached_secondary_coding).length;
+    const overrides = state.provenance.filter((e) => e.event_type === "mapping-approved" && (e.payload.reviewer_overrode_coding || e.payload.expert_correction)).length;
+    const secondary = state.provenance.filter((e) => e.event_type === "mapping-approved" && e.payload.secondary_coding).length;
     $("#report-tiles").innerHTML = [
       ["Proposals", n, `${c.pending} pending`],
       ["Approval rate", decided ? `${Math.round(100 * c.approved / decided)}%` : "-", `${c.approved} approved · ${c.rejected} rejected`],
@@ -694,12 +714,16 @@
 
   function actorOf(e) {
     const p = e.payload || {};
-    if (p.reviewer) return `${p.reviewer}${p.reason ? ` · ${p.reason}` : ""}${p.reviewer_attached_secondary_coding ? " · +2nd coding" : ""}${p.reviewer_overrode_coding ? " · coding overridden" : ""}${p.reviewer_overrode_quantity ? " · quantity overridden" : ""}`;
+    if (p.reviewer) return `${p.reviewer}${p.reason ? ` · ${p.reason}` : ""}${p.secondary_coding ? ` · +${p.secondary_coding.code}` : ""}${p.taxon ? ` · taxon ${p.taxon.code}` : ""}${p.reviewer_overrode_coding ? " · coding overridden" : ""}${p.expert_correction ? ` · expert correction: ${p.correction_reason || ""}` : ""}`;
     if (e.event_type === "mapping-proposed") return `${p.proposer || "curated-rules"} · ${Math.round((p.confidence || 0) * 100)}%`;
     if (e.event_type === "alert-created") return `${p.severity} · ${p.rule_code} · ${(p.audiences || []).join(", ")}`;
     if (e.event_type === "briefing-drafted") return `${p.audience} · ${p.ai?.model || ""}`;
     if (e.event_type === "unstructured-intake") return `${p.extracted} extracted · ${(p.warnings || []).length} warnings`;
     if (e.event_type === "situation-report") return `${p.observations_considered} obs · ${p.alerts_considered} alerts`;
+    if (e.event_type === "ai-call") {
+      const how = p.outcome === "ok" ? "succeeded" : `${p.outcome}${p.category ? ` · ${p.category}` : ""}`;
+      return `${p.operation} · ${how}${p.http_status ? ` · HTTP ${p.http_status}` : ""} · ${p.latency_ms} ms`;
+    }
     return "";
   }
   function renderAudit() {
@@ -760,7 +784,15 @@
     const cards = [
       {
         name: "gemini", logo: "G", color: "#1a73e8", title: "Google Gemini", sub: "Coding co-pilot, bulletin intake, advisories, situation reports",
-        status: yes(i.gemini.configured, "Live", "Off · deterministic only"),
+        // "Configured" says a key exists. Health says whether calls work.
+        status: !i.gemini.configured
+          ? stat("off", "Not configured")
+          : state.ai.health === "ok" ? stat("ok", "Configured · last call OK")
+          : state.ai.health === "quota-exceeded" ? stat("warn", "Configured · quota exceeded")
+          : state.ai.health === "auth-failed" ? stat("bad", "Configured · auth failed")
+          : state.ai.health === "timeout" ? stat("warn", "Configured · timing out")
+          : state.ai.health === "upstream-error" ? stat("warn", "Configured · last call failed")
+          : stat("off", "Configured · not yet called"),
         rows: [
           ["Credential", i.gemini.key_fingerprint ? `<span class="secret">${esc(i.gemini.key_fingerprint)}</span> <span class="dim">via ${esc(i.gemini.key_env)}</span>` : `<span class="dim">${esc(i.gemini.key_env)} unset</span>`],
           ["Model", tagm(i.gemini.model)],
@@ -768,9 +800,12 @@
           ["Assist mode", `<span class="lz lc">${esc(i.gemini.assist_mode)}</span> <span class="dim">below ${Math.round(i.gemini.assist_below_confidence * 100)}% rule confidence</span>`],
           ["Confidence ceiling", `${Math.round(i.gemini.confidence_ceiling * 100)}% <span class="dim">no AI proposal can read as auto-publishable</span>`],
           ["Limits", `<span class="dim">${i.gemini.timeout_seconds}s timeout · ${i.gemini.max_retries} retries · ${i.gemini.max_output_tokens} tokens · thinking ${i.gemini.thinking_budget}</span>`],
+          ["Last call", state.ai.last_call
+            ? `${state.ai.last_call.outcome === "ok" ? "Succeeded" : `Failed (${esc(state.ai.last_call.category || "upstream error")}${state.ai.last_call.http_status ? ` · HTTP ${state.ai.last_call.http_status}` : ""})`} · ${esc(state.ai.last_call.template_id || "")} · ${state.ai.last_call.latency_ms} ms<br><span class="dim">${esc(fdate(state.ai.last_call.at))}</span>`
+            : '<span class="dim">No call has been made in this process yet</span>'],
           ["Features", (state.ai.features || []).length ? state.ai.features.map((f) => `<span class="lz lc">${esc(f)}</span>`).join(" ") : '<span class="dim">none</span>'],
         ],
-        actions: `<button class="btn sm" data-ping="gemini" type="button">Check status</button><a class="btn sm subtle" href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">Get a key ${icon("external")}</a>`,
+        actions: `<button class="btn sm" data-ping="gemini" type="button">Check configuration</button><a class="btn sm subtle" href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">Get a key ${icon("external")}</a>`,
       },
       {
         name: "umls", logo: "U", color: "#20558a", title: "NLM UMLS UTS", sub: "SNOMED CT and LOINC top-up for the terminology crosswalk",
@@ -801,7 +836,7 @@
         status: stat(i.fhir.write_enabled ? "ok" : "warn", i.fhir.write_enabled ? "Writes enabled" : "Dry run"),
         rows: [
           ["Base URL", tagm(i.fhir.base_url)],
-          ["Write mode", `<span class="dim">${i.fhir.write_enabled ? "Transaction bundles are POSTed to the server." : "Bundles are built and validated but not sent. Set FHIR_WRITE_ENABLED=true to publish."}</span>`],
+          ["Write mode", `<span class="dim">${i.fhir.write_enabled ? "Transaction bundles are validated against the profile and POSTed to the server." : "Bundles are built and stored locally. Nothing is sent, and profile validation is skipped because it runs on the server. Set FHIR_WRITE_ENABLED=true to publish."}</span>`],
           ["Observation profile", tagm(i.fhir.observation_profile)],
           ["Location profile", tagm(i.fhir.location_profile)],
           ["Timeout", `<span class="dim">${i.fhir.timeout_seconds}s</span>`],
@@ -847,7 +882,10 @@
       try {
         const body = await api(path);
         const ms = Math.round(performance.now() - started);
-        const text = name === "gemini" ? (body.enabled ? `OK · ${body.model} · ${ms} ms` : `Disabled · ${ms} ms`)
+        const text = name === "gemini"
+          ? (body.enabled
+              ? `Configured · ${body.model} · last call ${body.health} · ${ms} ms`
+              : `Not configured · ${ms} ms`)
           : name === "health" || name === "fhir" ? `OK · ${body.fhir_write_mode} · ${body.terminology_crosswalk} · ${ms} ms`
           : (body.enabled ? `OK · ${body.sources.join("+")} · ${ms} ms` : `No source · ${ms} ms`);
         state.pingResults[name] = { ok: true, text };
@@ -942,11 +980,27 @@
       ${unres && p.status === "pending" ? `<div class="sec"><div class="note">${icon("alert")}<span>Approval needs a normalized value and a UCUM unit. Use <b>Approve</b> and tick <i>Correct the proposal</i> to supply them.</span></div></div>` : ""}
       <div class="sec"><h4>Rationale</h4><p class="quote">${esc(p.rationale)}</p></div>
       ${p.candidates?.length ? `<div class="sec"><h4>Candidates considered</h4><div class="chips">${p.candidates.map((c) => `<span class="chipbtn ${p.coding?.code === c.code ? "is-on" : ""}" title="${esc(c.origin)}"><span class="mono">${esc(c.code)}</span><span class="dim">${Math.round(c.score * 100)}%</span></span>`).join("")}</div></div>` : ""}
-      ${p.secondary_coding ? `<div class="sec"><h4>Second coding published</h4><p>${tagm(p.secondary_coding.code)} ${esc(p.secondary_coding.display)} <span class="dim mono">${esc(p.secondary_coding.system)}</span></p></div>` : ""}
+      ${p.secondary_coding ? `<div class="sec"><h4>Second coding ${builtWord()}</h4><p>${tagm(p.secondary_coding.code)} ${esc(p.secondary_coding.display)} <span class="dim mono">${esc(p.secondary_coding.system)}</span></p></div>` : ""}
       <div class="sec"><div class="sec-head"><h4>Raw reading</h4><button class="btn sm subtle" data-copy-text="${esc(JSON.stringify(r, null, 2))}" type="button">${icon("copy")}Copy</button></div><pre class="json">${esc(JSON.stringify(r, null, 2))}</pre></div>`;
     }
     function copilotTab() {
-      if (!p.ai) return `<div class="note info">${icon("info")}<span>Curated alias matching resolved this proposal on its own. ${state.ai.enabled ? `Gemini is consulted in <b>${esc(state.ai.assist_mode)}</b> mode only when rules are weak.` : "Gemini is not configured."}</span></div>`;
+      if (!p.ai) {
+        // Four different things produce "no AI attribution", and saying "rules
+        // resolved this" for all of them was wrong in three of them.
+        const failed = /AI assist unavailable/i.test(p.rationale || "");
+        if (failed) {
+          const quota = /quota|429|resource_exhausted/i.test(p.rationale || "")
+            || state.ai.health === "quota-exceeded";
+          return `<div class="note">${icon("alert")}<span><b>${quota ? "Gemini quota exceeded." : "The Gemini call failed."}</b> The proposal was saved using the rules fallback${p.coding ? "" : ", which found no curated match"}. ${quota ? "Quota resets on the provider's schedule; the deterministic pipeline is unaffected." : "See the server log for the provider error."}</span></div>`;
+        }
+        if (!p.coding) {
+          return `<div class="note">${icon("alert")}<span>Curated alias matching found no code for this label, and no model proposal was recorded. ${state.ai.enabled ? "Gemini was not consulted, or its answer was discarded as out-of-catalog." : "Gemini is not configured, so nothing else was tried."}</span></div>`;
+        }
+        if (!state.ai.enabled) {
+          return `<div class="note info">${icon("info")}<span>Curated alias matching resolved this proposal on its own. Gemini is not configured, so no model was consulted.</span></div>`;
+        }
+        return `<div class="note info">${icon("info")}<span>Curated alias matching resolved this proposal on its own, so no model was consulted. Gemini runs in <b>${esc(state.ai.assist_mode)}</b> mode, which only consults it where rules are weak.</span></div>`;
+      }
       const a = p.ai;
       return `<div class="sec">${a.disagreed_with_rules ? `<div class="note">${icon("alert")}<span>The model chose a different code than curated alias matching. Confidence was capped at 80%. Read the quoted evidence before approving.</span></div>` : ""}${a.needs_expert_review ? `<div class="note" style="margin-top:8px">${icon("flag")}<span>The model flagged this reading for expert review.</span></div>` : ""}</div>
       <div class="sec"><h4>Quoted evidence</h4>${a.evidence?.length ? `<p class="quote">${a.evidence.map((x) => `<q>${esc(x)}</q>`).join(" · ")}</p>` : '<p class="quote dim">No spans quoted.</p>'}</div>
@@ -972,11 +1026,11 @@
       return `<div class="sec"><div class="sec-head"><h4>Organism (GBIF Backbone)</h4><button class="btn sm" data-suggest-taxon="${p.id}" type="button">${found ? "Search again" : "Identify organism"}</button></div>
         <p class="quote">Reads the source label <b>${esc(p.reading.parameter)}</b>. The OneAquaHealth code system has no taxonomy, so a species name would otherwise be lost. GBIF refuses anything that is not an organism, so a chemical label returns nothing.</p>
         ${!found ? '<p class="quote dim">Not searched yet.</p>' : found.length ? `<div class="chips">${found.map((m) => `<button class="chipbtn wrap ${pick && pick.code === m.code ? "is-on" : ""}" data-pick-taxon="${p.id}" data-system="${esc(m.system)}" data-code="${esc(m.code)}" data-display="${esc(m.display)}" title="${esc(m.display)}" type="button"><span class="lz lc">GBIF</span><span class="mono">${esc(m.code)}</span><span>${esc(m.display)}</span></button>`).join("")}</div>` : `<div class="note info">${icon("info")}<span>No organism named in this label. That is the expected answer for a chemical or physical reading.</span></div>`}
-        ${pick ? `<div class="note ok" style="margin-top:8px">${icon("check")}<span><b>${esc(pick.code)}</b> ${esc(pick.display)} will be published as an <code>Observation.component</code>, leaving the indicator coding untouched. <button class="btn link sm" data-unpick-taxon="${p.id}" type="button">Remove</button></span></div>` : ""}
+        ${pick ? `<div class="note ok" style="margin-top:8px">${icon("check")}<span><b>${esc(pick.code)}</b> ${esc(pick.display)} will be ${willVerb()} as an <code>Observation.component</code>, leaving the indicator coding untouched. <button class="btn link sm" data-unpick-taxon="${p.id}" type="button">Remove</button></span></div>` : ""}
       </div>`;
     }
     function crosswalkTab() {
-      if (p.status !== "pending") return `<div class="note info">${icon("info")}<span>${p.secondary_coding ? `Published with second coding ${esc(p.secondary_coding.code)} (${esc(p.secondary_coding.display)}).` : "This proposal was decided without a second coding."}</span></div>${p.taxon ? `<div class="note info" style="margin-top:8px">${icon("info")}<span>Published with organism ${esc(p.taxon.code)} (${esc(p.taxon.display)}).</span></div>` : ""}`;
+      if (p.status !== "pending") return `<div class="note info">${icon("info")}<span>${p.secondary_coding ? `${builtWord() === "published" ? "Published" : "Built"} with second coding <b>${esc(p.secondary_coding.code)}</b> (${esc(p.secondary_coding.display)}).` : `This proposal was ${esc(p.status)} without a second coding, and that cannot be changed: decisions are immutable once made.`}</span></div>${p.taxon ? `<div class="note info" style="margin-top:8px">${icon("info")}<span>${builtWord() === "published" ? "Published" : "Built"} with organism ${esc(p.taxon.code)} (${esc(p.taxon.display)}).</span></div>` : ""}`;
       if (!state.umls.enabled && !(state.umls.sources || []).includes("gbif")) return `<div class="note">${icon("alert")}<span>No terminology source is configured. Approvals carry the OAH coding alone. See Integrations.</span></div>`;
       if (!p.coding) return `<div class="note">${icon("alert")}<span>No curated code, so there is nothing to crosswalk to LOINC or SNOMED. The organism lookup below reads the source label directly and still works.</span></div>${taxonSection()}`;
       const found = state.suggestions[p.id];
@@ -985,25 +1039,52 @@
       <div class="sec"><div class="sec-head"><h4>Candidates</h4><button class="btn sm" data-suggest="${p.id}" type="button">${found ? "Search again" : "Suggest LOINC / SNOMED"}</button></div>
         ${!found ? '<p class="quote dim">Not searched yet.</p>' : found.length ? `<div class="chips">${found.map((m) => `<button class="chipbtn ${pick && pick.code === m.code && pick.system === m.system ? "is-on" : ""}" data-pick="${p.id}" data-system="${esc(m.system)}" data-code="${esc(m.code)}" data-display="${esc(m.display)}" title="${esc(m.display)}" type="button"><span class="lz lc teal">${esc(m.vocabulary)}</span><span class="mono">${esc(m.code)}</span><span>${esc(m.display)}</span><span class="dim">${Math.round(m.score * 100)}%</span></button>`).join("")}</div>` : `<div class="note info">${icon("info")}<span>No publishable candidate. Environmental LOINC genuinely has no term for some OAH concepts (dissolved oxygen, water temperature, NDCI). That is a real answer, not a lookup failure.</span></div>`}
       </div>
-      ${pick ? `<div class="note ok">${icon("check")}<span><b>${esc(pick.code)}</b> ${esc(pick.display)} will be published as a second <code>Observation.code.coding</code> when you approve. <button class="btn link sm" data-unpick="${p.id}" type="button">Remove</button></span></div>` : ""}
+      ${pick ? `<div class="note ok">${icon("check")}<span><b>${esc(pick.code)}</b> ${esc(pick.display)} will be ${willVerb()} as a second <code>Observation.code.coding</code> when you approve. <button class="btn link sm" data-unpick="${p.id}" type="button">Remove</button></span></div>` : ""}
       ${taxonSection()}`;
+    }
+    function fhirPendingReason(p) {
+      if (p.status === "approved") {
+        return "Loading the stored Observation and receipt from the bridge…";
+      }
+      if (p.status === "rejected") {
+        return "This proposal was rejected, so no FHIR resource was ever built.";
+      }
+      if (!p.coding) {
+        return "No FHIR resource can be built yet: an Observation requires a code, and the curated catalog has not matched one. Choose a code when you approve.";
+      }
+      if (isUnresolved(p)) {
+        return "No FHIR resource can be built yet: the quantity is withheld because the unit could not be resolved or the value is outside its plausible range. A published Observation must carry a real UCUM quantity.";
+      }
+      return state.health.fhir_write_mode === "enabled"
+        ? "The Location, Organization, and Observation are built at approval time, validated against the OAH profile, and sent as one transaction bundle."
+        : "The Location, Organization, and Observation are built at approval time as one transaction bundle. In dry run they are stored locally: nothing is sent, and profile validation is skipped because it runs on the server.";
     }
     function fhirTab() {
       const got = state.observations[p.id];
+      // Approved in an earlier session: fetch what was actually stored rather
+      // than showing nothing after a reload.
+      if (!got && p.status === "approved" && !state.fetching.has(p.id)) {
+        state.fetching.add(p.id);
+        api(`/proposals/${p.id}/observation`)
+          .then((stored) => { state.observations[p.id] = stored; renderDrawer(); })
+          .catch(() => { /* nothing stored; the note below explains */ })
+          .finally(() => state.fetching.delete(p.id));
+      }
       const system = state.catalog.system || p.coding?.system || "";
       const codings = [p.coding ? { system, code: p.coding.code, display: p.coding.display } : null, p.secondary_coding || state.picks[p.id] || null].filter(Boolean);
       return `<div class="sec"><h4>Codings to publish</h4>${codings.length ? `<dl class="dl">${codings.map((c, i) => `<dt>${i === 0 ? "Primary" : "Secondary"}</dt><dd>${tagm(c.code)} ${esc(c.display)}<br><span class="dim mono">${esc(c.system)}</span></dd>`).join("")}</dl>` : '<p class="quote dim">No coding yet.</p>'}</div>
       ${(p.taxon || state.taxonPicks[p.id]) ? `<div class="sec"><h4>Organism component</h4><dl class="dl"><dt>Taxon</dt><dd>${tagm((p.taxon || state.taxonPicks[p.id]).code)} ${esc((p.taxon || state.taxonPicks[p.id]).display)}<br><span class="dim mono">${esc((p.taxon || state.taxonPicks[p.id]).system)}</span></dd></dl><p class="quote dim">Published as <code>Observation.component</code>, not as a second <code>code.coding</code>: the indicator axis drives the alert policy and must stay untouched.</p></div>` : ""}
       <div class="sec"><h4>Profiles</h4><dl class="dl"><dt>Observation</dt><dd>${tagm(state.integrations?.fhir?.observation_profile || "-")}</dd><dt>Location</dt><dd>${tagm(state.integrations?.fhir?.location_profile || "-")}</dd><dt>Target</dt><dd>${tagm(state.integrations?.fhir?.base_url || "-")} <span class="lz lc ${state.health.fhir_write_mode === "enabled" ? "green" : "amber"}">${esc(state.health.fhir_write_mode || "-")}</span></dd></dl></div>
-      ${got ? `<div class="sec"><div class="sec-head"><h4>Observation as published</h4><button class="btn sm subtle" data-copy-text="${esc(JSON.stringify(got.observation, null, 2))}" type="button">${icon("copy")}Copy</button></div><pre class="json">${esc(JSON.stringify(got.observation, null, 2))}</pre></div>
-      <div class="sec"><div class="sec-head"><h4>Server response</h4><button class="btn sm subtle" data-copy-text="${esc(JSON.stringify(got.fhir_response, null, 2))}" type="button">${icon("copy")}Copy</button></div><pre class="json">${esc(JSON.stringify(got.fhir_response, null, 2))}</pre></div>`
-      : `<div class="note info">${icon("info")}<span>${p.status === "approved" ? "The Observation was built when this proposal was approved. Approve from this session to see the exact resource and the server's validation response here." : "The Location, Organization, and Observation are built and validated at approval time, then sent as one transaction bundle."}</span></div>`}`;
+      ${got ? `<div class="sec"><div class="sec-head"><h4>${state.health.fhir_write_mode === "enabled" ? "Observation as published" : "Observation as built (dry run)"}</h4><button class="btn sm subtle" data-copy-text="${esc(JSON.stringify(got.observation, null, 2))}" type="button">${icon("copy")}Copy</button></div><pre class="json">${esc(JSON.stringify(got.observation, null, 2))}</pre></div>
+      <div class="sec"><div class="sec-head"><h4>${state.health.fhir_write_mode === "enabled" ? "Server response" : "Local build receipt"}</h4><button class="btn sm subtle" data-copy-text="${esc(JSON.stringify(got.fhir_response, null, 2))}" type="button">${icon("copy")}Copy</button></div><pre class="json">${esc(JSON.stringify(got.fhir_response, null, 2))}</pre></div>`
+      : `<div class="note ${p.status === "pending" && (isUnresolved(p) || !p.coding) ? "" : "info"}">${icon(p.status === "pending" && (isUnresolved(p) || !p.coding) ? "alert" : "info")}<span>${fhirPendingReason(p)}</span></div>`}`;
     }
     function historyTab() {
       const entries = state.provenance.filter((e) => e.entity_id === p.id).sort((a, b) => a.sequence - b.sequence);
       const obsId = observationIdFor(p);
       const related = obsId ? state.alerts.filter((a) => a.observation_id === obsId) : [];
-      return `<div class="sec"><h4>Provenance</h4>${entries.length ? `<div class="hist">${entries.map((e) => `<div class="hist-item" data-open-entry="${e.sequence}" style="cursor:pointer"><div class="hist-dot"><i class="evt ${esc(e.event_type)}" style="display:block"></i></div><div><div class="b"><b>${esc(EVENT_LABEL[e.event_type] || e.event_type)}</b> <span class="dim">#${e.sequence}</span> ${esc(actorOf(e))}</div><div class="t">${esc(fdate(e.created_at))} · ${esc(e.hash.slice(0, 16))}</div></div></div>`).join("")}</div>` : `<p class="quote dim">No chain entries loaded for this id. Raise the audit limit or refresh.</p>`}</div>
+      return `<div class="sec"><h4>Provenance</h4>${entries.length ? `<div class="hist">${entries.map((e) => `<div class="hist-item" data-open-entry="${e.sequence}" style="cursor:pointer"><div class="hist-dot"><i class="evt ${esc(e.event_type)}" style="display:block"></i></div><div><div class="b"><b>${esc(EVENT_LABEL[e.event_type] || e.event_type)}</b> <span class="dim">#${e.sequence}</span> ${esc(actorOf(e))}</div><div class="t">${esc(fdate(e.created_at))} · ${esc(e.hash.slice(0, 16))}</div></div></div>`).join("")}</div>` : `<p class="quote dim">No chain entries loaded for this id. Raise the audit limit or refresh.</p>`}
+      ${entries.length === 1 && entries[0].event_type === "mapping-proposed" ? `<p class="quote">This proposal is still waiting for a decision. Approving or rejecting it appends the next entry, with your reviewer identity and the exact published facts.</p>` : ""}</div>
       ${related.length ? `<div class="sec"><h4>Incidents raised</h4><div class="stack">${related.map((a) => `<div class="note bad" data-open-alert="${a.id}" style="cursor:pointer">${icon("alert")}<span><b>${esc(a.rule_code)}</b> ${esc(a.severity)} · ${fnum(a.value)} ${esc(a.unit)} · ${a.audiences.map((x) => AUDIENCE_LABEL[x] || x).join(", ")}</span></div>`).join("")}</div></div>` : ""}`;
     }
   }
@@ -1071,40 +1152,131 @@
     openModal("modal-reject");
   }
 
+  // "published" is only true once a server accepted the bundle. In dry-run the
+  // resource is built and stored locally, and the wording has to say so.
+  function builtWord() {
+    return state.health.fhir_write_mode === "enabled" ? "published" : "built, not sent";
+  }
+  function willVerb() {
+    return state.health.fhir_write_mode === "enabled" ? "published" : "built";
+  }
+
+  function approveVerb() {
+    // Dry run builds a bundle and sends nothing. Saying "publish" there was a
+    // claim the system could not back up.
+    return state.health.fhir_write_mode === "enabled" ? "publish" : "build";
+  }
+
   function openApprove(id) {
     if (!requireReviewer()) return;
     const p = byId(id); if (!p) return;
     state.pending.approveId = id;
+    state.pending.preview = null;
     const unres = isUnresolved(p);
-    $("#approve-summary").innerHTML = `<div class="mapping"><div class="side"><div class="lbl">As received</div><div class="val">${fnum(p.reading.value)} ${esc(p.reading.unit)}</div><div class="term">${esc(p.reading.parameter)}</div></div><div class="arrow">${icon("chevr", "ic lg")}</div><div class="side out ${unres ? "unres" : ""}"><div class="lbl">Will publish</div><div class="val">${unres ? "needs value + unit" : `${fnum(p.normalized_value)} ${esc(p.normalized_unit)}`}</div><div class="term">${p.coding ? esc(p.coding.code) : "needs a curated code"}</div></div></div>`;
+    const needsWork = unres || !p.coding;
+    $("#approve-title").textContent = needsWork
+      ? "Resolve and approve"
+      : `Approve and ${approveVerb()}`;
+    $("#approve-submit").textContent = needsWork
+      ? "Resolve and approve"
+      : `Approve and ${approveVerb()}`;
+
+    $("#approve-summary").innerHTML = `<div class="mapping"><div class="side"><div class="lbl">As received</div><div class="val">${fnum(p.reading.value)} ${esc(p.reading.unit)}</div><div class="term">${esc(p.reading.parameter)}</div></div><div class="arrow">${icon("chevr", "ic lg")}</div><div class="side out ${unres ? "unres" : ""}"><div class="lbl">Will ${esc(approveVerb())}</div><div class="val" id="approve-target">${unres ? "select a code" : `${fnum(p.normalized_value)} ${esc(p.normalized_unit)}`}</div><div class="term">${p.coding ? esc(p.coding.code) : "needs a curated code"}</div></div></div>
+      ${p.duplicate_of ? `<div class="note" style="margin-top:10px">${icon("alert")}<span>An identical reading was already ingested as <b>${esc(keyOf(p.duplicate_of))}</b>. Approving this creates a second Observation for the same measurement.</span></div>` : ""}`;
+
+    // No silent default: an unchosen code must stay unchosen.
     const sel = $("#approve-coding");
-    sel.innerHTML = state.catalog.codes.map((c) => `<option value="${esc(c.code)}" ${p.coding?.code === c.code ? "selected" : ""}>${esc(c.code)} · ${esc(c.display)}</option>`).join("");
+    sel.innerHTML = `<option value="">Select a code</option>` +
+      state.catalog.codes.map((c) => `<option value="${esc(c.code)}" ${p.coding?.code === c.code ? "selected" : ""}>${esc(c.code)} · ${esc(c.display)}</option>`).join("");
+    sel.value = p.coding?.code || "";
     $("#unit-list").innerHTML = [...new Set(state.catalog.codes.flatMap((c) => c.accepted_units))].map((u) => `<option value="${esc(u)}">`).join("");
-    $("#approve-value").value = p.normalized_value ?? p.reading.value;
-    $("#approve-unit").value = p.normalized_unit ?? "";
-    const forced = unres || !p.coding;
-    $("#approve-override").checked = forced;
-    $("#approve-override").disabled = forced;
-    $("#approve-override-fields").hidden = !forced;
+
+    $("#approve-correct").checked = false;
+    $("#approve-correct-fields").hidden = true;
+    $("#approve-reason").value = "";
+    setCorrectionMode(false);
+
     const pick = state.picks[id];
     $("#approve-secondary").innerHTML = pick
       ? `<div class="note ok">${icon("check")}<span>Second coding <b>${esc(pick.code)}</b> ${esc(pick.display)} will be attached.</span></div>`
       : state.umls.enabled && p.coding ? `<p class="quote">No second coding chosen. <button class="btn link sm" data-goto-crosswalk="${id}" type="button">Suggest LOINC / SNOMED</button> before approving if you want one.</p>` : "";
-    $("#approve-foot").textContent = `Signing as ${reviewer()} · ${state.health.fhir_write_mode === "enabled" ? "writes to HAPI" : "dry run: bundle built, not sent"}`;
     openModal("modal-approve");
+    refreshPreview();
+  }
+
+  function setCorrectionMode(on) {
+    // Derived fields are read-only until someone explicitly takes responsibility
+    // for replacing them.
+    $("#approve-value").readOnly = !on;
+    $("#approve-unit").readOnly = !on;
+    $("#approve-correct-fields").hidden = !on;
+  }
+
+  // The conversion is computed by the server and only displayed here, so the
+  // dialog and the published resource cannot drift apart.
+  async function refreshPreview() {
+    const id = state.pending.approveId;
+    const code = $("#approve-coding").value;
+    const box = $("#approve-preview");
+    const submit = $("#approve-submit");
+    const correcting = $("#approve-correct").checked;
+    if (!code) {
+      state.pending.preview = null;
+      box.innerHTML = `<div class="note">${icon("alert")}<span>Select a code to see the conversion this would publish.</span></div>`;
+      if (!correcting) { $("#approve-value").value = ""; $("#approve-unit").value = ""; }
+      submit.disabled = true;
+      return;
+    }
+    box.innerHTML = `<p class="quote dim">Calculating…</p>`;
+    let preview;
+    try {
+      preview = await api(`/proposals/${id}/normalization?code=${encodeURIComponent(code)}`);
+    } catch (error) {
+      state.pending.preview = null;
+      box.innerHTML = `<div class="note bad">${icon("alert")}<span>${esc(error.message)}</span></div>`;
+      submit.disabled = !correcting;
+      return;
+    }
+    state.pending.preview = preview;
+    const target = $("#approve-target");
+    if (preview.status === "ok") {
+      box.innerHTML = `<div class="note ok">${icon("check")}<span><b>${esc(preview.formula)}</b><br><span class="dim">Derived by the server from the reviewed conversion factor. Not editable unless you record an expert correction.</span></span></div>`;
+      if (!correcting) {
+        $("#approve-value").value = preview.normalized_value;
+        $("#approve-unit").value = preview.normalized_unit;
+      }
+      if (target) target.textContent = `${fnum(preview.normalized_value)} ${preview.normalized_unit}`;
+      submit.disabled = false;
+    } else {
+      const why = preview.status === "out-of-range"
+        ? "The converted value is outside this indicator's reviewed plausible range."
+        : "This source unit has no reviewed conversion for the selected code.";
+      box.innerHTML = `<div class="note">${icon("alert")}<span><b>No deterministic conversion.</b> ${esc(why)} ${esc(preview.message)}<br><span class="dim">Tick “Enter an expert correction” to publish a corrected quantity with a written reason.</span></span></div>`;
+      if (!correcting) { $("#approve-value").value = ""; $("#approve-unit").value = ""; }
+      if (target) target.textContent = "needs an expert correction";
+      submit.disabled = !correcting;
+    }
   }
 
   async function submitApprove(button) {
     const id = state.pending.approveId; const p = byId(id); if (!p) return;
+    const code = $("#approve-coding").value;
+    if (!code) { toast("Select a code from the curated catalog first.", "bad"); return; }
+    const cat = state.catalog.codes.find((c) => c.code === code);
     const body = { reviewer: reviewer() };
-    if ($("#approve-override").checked) {
-      const code = $("#approve-coding").value;
-      const cat = state.catalog.codes.find((c) => c.code === code);
-      if (cat && (!p.coding || p.coding.code !== code)) body.coding = { system: state.catalog.system, code: cat.code, display: cat.display };
+    // Only the code travels. The server resolves the system and display text
+    // from the catalog, so nothing this browser sends can become a coding.
+    if (!p.coding || p.coding.code !== code) {
+      body.coding = { system: state.catalog.system, code, display: cat ? cat.display : code };
+    }
+    if ($("#approve-correct").checked) {
       const v = $("#approve-value").value, u = $("#approve-unit").value.trim();
-      if (v === "" || !u) { toast("Supply both a normalized value and a UCUM unit.", "bad"); return; }
-      if (cat && !cat.accepted_units.includes(u) && !window.confirm(`"${u}" is not an accepted unit for ${cat.code} (${cat.accepted_units.join(", ")}). Publish anyway?`)) return;
-      body.normalized_value = Number(v); body.normalized_unit = u;
+      const reason = $("#approve-reason").value.trim();
+      if (v === "" || !u) { toast("An expert correction needs both a value and a UCUM unit.", "bad"); return; }
+      if (!reason) { toast("An expert correction needs a written reason.", "bad"); return; }
+      body.normalized_value = Number(v);
+      body.normalized_unit = u;
+      body.correction_reason = reason;
     }
     if (state.picks[id]) body.secondary_coding = state.picks[id];
     if (state.taxonPicks[id]) body.taxon = state.taxonPicks[id];
@@ -1142,7 +1314,7 @@
   async function approveMany(ids, button) {
     if (!requireReviewer()) return;
     if (!ids.length) { toast("Nothing to approve."); return; }
-    if (!window.confirm(`Approve ${ids.length} proposal${ids.length > 1 ? "s" : ""} as ${reviewer()}? Each is validated, published, and hash-chained individually.`)) return;
+    if (!window.confirm(`Approve ${ids.length} proposal${ids.length > 1 ? "s" : ""} as ${reviewer()}? Each is resolved against the catalog, ${state.health.fhir_write_mode === "enabled" ? "validated and published" : "built locally without being sent"}, and hash-chained individually.`)) return;
     await busy(button, async () => {
       const result = await api("/proposals/approve-batch", { method: "POST", body: JSON.stringify({ reviewer: reviewer(), proposal_ids: ids }) });
       result.approved.forEach((r) => { state.observations[r.proposal.id] = { observation: r.observation, fhir_response: r.fhir_response }; });
@@ -1302,7 +1474,17 @@
     $("#notify-badge").hidden = !state.alerts.length;
     const pill = (id, cls, text, title) => { const n = $(id); n.className = `pill ${cls}`; n.lastChild.textContent = text; n.title = title; };
     pill("#pill-fhir", state.health.fhir_write_mode === "enabled" ? "on" : "warn", `FHIR ${state.health.fhir_write_mode || "…"}`, `FHIR write mode: ${state.health.fhir_write_mode || "unknown"}`);
-    pill("#pill-ai", state.ai.enabled ? "on" : "off", state.ai.enabled ? `AI ${state.ai.model}` : "AI off", state.ai.detail || "");
+    // A configured key is not a working one. Degraded health shows amber.
+    const aiHealth = state.ai.health || (state.ai.enabled ? "unknown" : "disabled");
+    const aiTone = !state.ai.enabled ? "off" : aiHealth === "ok" ? "on" : aiHealth === "unknown" ? "on" : "warn";
+    const aiLabel = !state.ai.enabled
+      ? "AI off"
+      : aiHealth === "quota-exceeded" ? "AI quota exceeded"
+      : aiHealth === "auth-failed" ? "AI auth failed"
+      : aiHealth === "timeout" ? "AI timing out"
+      : aiHealth === "upstream-error" ? "AI degraded"
+      : `AI ${state.ai.model}`;
+    pill("#pill-ai", aiTone, aiLabel, state.ai.detail || "");
     pill("#pill-umls", state.umls.enabled ? ((state.umls.sources || []).includes("umls") ? "on" : "warn") : "off", state.umls.enabled ? `Crosswalk ${(state.umls.sources || []).join("+")}` : "Crosswalk off", state.umls.detail || "");
     $("#foot-policy").textContent = state.health.threshold_policy || "policy";
     $("#foot-policy-status").textContent = state.health.threshold_policy_status || "";
@@ -1537,8 +1719,8 @@
   $("#create-submit").addEventListener("click", (e) => submitCreate(e.currentTarget));
   $("#form-reading").addEventListener("submit", (e) => { e.preventDefault(); submitCreate($("#create-submit")); });
   $("#form-bulletin").addEventListener("submit", (e) => { e.preventDefault(); submitCreate($("#create-submit")); });
-  $("#approve-override").addEventListener("change", (e) => { $("#approve-override-fields").hidden = !e.target.checked; });
-  $("#approve-coding").addEventListener("change", (e) => { const c = state.catalog.codes.find((x) => x.code === e.target.value); if (c && c.accepted_units.length && !c.accepted_units.includes($("#approve-unit").value)) $("#approve-unit").value = c.accepted_units[0]; });
+  $("#approve-correct").addEventListener("change", (e) => { setCorrectionMode(e.target.checked); refreshPreview(); });
+  $("#approve-coding").addEventListener("change", refreshPreview);
   $("#approve-submit").addEventListener("click", (e) => submitApprove(e.currentTarget));
   $("#reject-submit").addEventListener("click", (e) => submitReject(e.currentTarget));
   $("#reject-reason").addEventListener("keydown", (e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") $("#reject-submit").click(); });

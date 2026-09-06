@@ -61,7 +61,7 @@ li { margin: 0.2em 0; }
 <h1 id="aquafhir-bridge-incident-simulation-report">AquaFHIR Bridge — Incident Simulation Report</h1>
 <p><strong>Run timestamp (UTC):</strong> 2026-09-02T00:14:27Z
 <strong>Bridge version:</strong> local <code>main</code> branch, uvicorn 0.35 + FastAPI, SQLite (WAL)
-<strong>FHIR write mode:</strong> dry-run (validation only, no external POST)
+<strong>FHIR write mode:</strong> dry-run (resources built locally: nothing is sent, and profile validation is skipped because it runs on the FHIR server)
 <strong>AI mode:</strong> Gemini <code>gemini-3.1-flash-lite</code>, assist=<code>auto</code>, ceiling=0.95
 <strong>Terminology crosswalk:</strong> local LOINC table + UMLS (empty key, LOINC-only)
 <strong>Threshold policy:</strong> <code>oder-replay-demo-v1</code> (demo-not-for-operational-use)
@@ -204,7 +204,7 @@ provenance chain.</p>
 <td>89</td>
 </tr>
 <tr>
-<td>Approved (published to FHIR dry-run)</td>
+<td>Approved (built locally, not sent: dry run)</td>
 <td>69</td>
 </tr>
 <tr>

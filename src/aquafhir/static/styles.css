@@ -523,6 +523,9 @@ code, .mono { font-family: var(--mono); font-size: 12px; }
 .evt.mapping-rejected i { background: var(--red); }
 .evt.alert-created i { background: #e56910; }
 .evt.briefing-drafted i, .evt.situation-report i, .evt.unstructured-intake i { background: var(--purple); }
+/* An AI call that failed is the one an auditor is looking for, so it is not
+   the same neutral dot as a successful step. */
+.evt.ai-call i { background: var(--purple); }
 
 /* ── integrations ─────────────────────────────────────────────────────── */
 .integ { background: var(--n0); border-radius: var(--r); box-shadow: var(--shadow-1); padding: 14px 16px; display: grid; gap: 12px; }

@@ -43,6 +43,7 @@ class Repository:
                     id TEXT PRIMARY KEY,
                     proposal_id TEXT NOT NULL UNIQUE,
                     document TEXT NOT NULL,
+                    receipt TEXT,
                     created_at TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS alerts (
@@ -76,6 +77,15 @@ class Repository:
                 );
                 """
             )
+            # Databases created before the FHIR receipt was persisted predate
+            # the column. Adding it here keeps them readable without a manual
+            # migration step; SQLite has no IF NOT EXISTS for ADD COLUMN.
+            columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(observations)").fetchall()
+            }
+            if "receipt" not in columns:
+                connection.execute("ALTER TABLE observations ADD COLUMN receipt TEXT")
 
     def save_proposal(self, proposal: MappingProposal) -> None:
         document = proposal.model_dump(mode="json")
@@ -100,15 +110,74 @@ class Repository:
             ).fetchall()
         return [MappingProposal.model_validate_json(row["document"]) for row in rows]
 
-    def save_observation(self, proposal_id: str, observation: dict[str, Any]) -> None:
+    def save_observation(
+        self,
+        proposal_id: str,
+        observation: dict[str, Any],
+        receipt: dict[str, Any] | None = None,
+    ) -> None:
+        """Store the published resource and the server's answer to it.
+
+        The receipt is kept so the console can show what actually happened at
+        approval time after a reload, instead of only within the session that
+        performed it.
+        """
         now = datetime.now(UTC).isoformat()
         with self._connect() as connection:
             connection.execute(
-                """INSERT INTO observations(id, proposal_id, document, created_at)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET document = excluded.document""",
-                (observation["id"], proposal_id, _canonical(observation), now),
+                """INSERT INTO observations(id, proposal_id, document, receipt, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    document = excluded.document, receipt = excluded.receipt""",
+                (
+                    observation["id"],
+                    proposal_id,
+                    _canonical(observation),
+                    _canonical(receipt) if receipt is not None else None,
+                    now,
+                ),
             )
+
+    def get_observation_for_proposal(self, proposal_id: str) -> dict[str, Any] | None:
+        """The stored resource and receipt for one proposal, or None."""
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT document, receipt FROM observations WHERE proposal_id = ?",
+                (proposal_id,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "observation": json.loads(row["document"]),
+            "fhir_response": json.loads(row["receipt"]) if row["receipt"] else None,
+        }
+
+    def find_duplicate(self, proposal: MappingProposal) -> str | None:
+        """Id of an earlier proposal carrying an identical reading, if any.
+
+        Exact match on the six fields that identify a measurement event. Two
+        different values reported for the same site, parameter and instant are
+        deliberately *not* treated as duplicates: that is a conflict for a
+        reviewer to see, not something to merge away.
+        """
+        reading = proposal.reading
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT id, document FROM proposals WHERE id != ? ORDER BY created_at",
+                (proposal.id,),
+            ).fetchall()
+        for row in rows:
+            other = MappingProposal.model_validate_json(row["document"]).reading
+            if (
+                other.source_id == reading.source_id
+                and other.site_code == reading.site_code
+                and other.parameter == reading.parameter
+                and other.observed_at == reading.observed_at
+                and other.value == reading.value
+                and other.unit == reading.unit
+            ):
+                return row["id"]
+        return None
 
     def save_alert(self, alert: Alert) -> bool:
         with self._connect() as connection:

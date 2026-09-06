@@ -27,7 +27,7 @@ from typing import Any
 
 from aquafhir.coding import UNRESOLVED_UNIT_CEILING, ReviewedCodingAgent
 from aquafhir.config import AssistMode
-from aquafhir.gemini import GeminiClient, GeminiError
+from aquafhir.gemini import GeminiClient, GeminiError, mark_degraded
 from aquafhir.models import (
     AiAttribution,
     CandidateCoding,
@@ -86,6 +86,11 @@ class GeminiCodingAgent:
 
     # -- proposing ---------------------------------------------------------
 
+    @property
+    def catalog(self) -> ReviewedCodingAgent:
+        """The curated rules the model is grounded in, and the review gate checks."""
+        return self.base
+
     def propose(self, reading: RawReading) -> MappingProposal:
         proposal = self.base.propose(reading)
         if not self.should_consult(proposal):
@@ -94,6 +99,10 @@ class GeminiCodingAgent:
             return self._apply_gemini(reading, proposal)
         except GeminiError as error:
             logger.warning("Gemini coding assist unavailable: %s", error)
+            # Carried on the proposal so the failure is attributable to *this*
+            # reading, and so the console can distinguish a rules-only result
+            # from one where the model was tried and refused.
+            proposal.ai_audit = error.audit
             proposal.rationale = (
                 f"{proposal.rationale} AI assist unavailable ({type(error).__name__}); "
                 "curated result shown."
@@ -122,7 +131,11 @@ class GeminiCodingAgent:
         )
         payload = result.data
         if not isinstance(payload, dict):
-            raise GeminiError("Gemini coding response was not a JSON object")
+            raise GeminiError(
+                "Gemini coding response was not a JSON object",
+                category="invalid-response",
+                audit=mark_degraded(result.audit, "invalid-response"),
+            )
 
         chosen_code = str(payload.get("code", NO_MATCH))
         chosen_unit = str(payload.get("unit_code", NO_MATCH))
@@ -136,7 +149,11 @@ class GeminiCodingAgent:
         # because a schema is a request, not a proof.
         rule = self.base.rule_for_code(chosen_code) if chosen_code != NO_MATCH else None
         if chosen_code != NO_MATCH and rule is None:
-            raise GeminiError(f"Gemini proposed out-of-catalog code {chosen_code!r}")
+            raise GeminiError(
+                f"Gemini proposed out-of-catalog code {chosen_code!r}",
+                category="out-of-catalog",
+                audit=mark_degraded(result.audit, "out-of-catalog"),
+            )
 
         disagreed = bool(rule_candidate and chosen_code != rule_candidate)
         attribution = AiAttribution(
@@ -152,6 +169,7 @@ class GeminiCodingAgent:
             needs_expert_review=needs_expert,
         )
 
+        proposal.ai_audit = result.audit
         if rule is None:
             return self._no_match_proposal(proposal, model_rationale, attribution)
 

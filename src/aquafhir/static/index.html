@@ -189,11 +189,11 @@
                 </article>
 
                 <article class="fnode" id="fn-fhir" tabindex="0"
-                  data-tip="An approved proposal builds an OneAquaHealth Location and Observation with a UCUM-coded quantity, validates them against the profile, and publishes them as a single FHIR transaction bundle.">
+                  data-tip="An approved proposal builds an OneAquaHealth Location and Observation with a UCUM-coded quantity as one FHIR transaction bundle. Whether that bundle is validated and sent to a server, or only built locally, depends on FHIR_WRITE_ENABLED.">
                   <header class="fnode-head"><span class="fnode-icon"><svg class="ic"><use href="#i-doc"/></svg></span><span class="fnode-step">04</span></header>
                   <h3>FHIR bundle</h3>
                   <p>OAH Location and Observation, UCUM quantity</p>
-                  <div class="fnode-stat"><b id="flow-c-fhir">0</b><span>observations published</span></div>
+                  <div class="fnode-stat"><b id="flow-c-fhir">0</b><span id="flow-c-fhir-label">observations built</span></div>
                   <span class="fport fport-l"></span><span class="fport fport-r"></span>
                 </article>
 
@@ -562,18 +562,21 @@ Angler melden tote Fische flussabwärts — keine Messung vorhanden.</textarea><
 
     <div class="modal" id="modal-approve" role="dialog" aria-modal="true">
       <div class="modal-box">
-        <div class="modal-head"><h2>Approve and publish</h2><button class="icon-btn" data-close type="button"><svg class="ic"><use href="#i-x"/></svg></button></div>
+        <div class="modal-head"><h2 id="approve-title">Approve</h2><button class="icon-btn" data-close type="button"><svg class="ic"><use href="#i-x"/></svg></button></div>
         <div class="modal-body">
           <div id="approve-summary" style="margin-bottom:14px"></div>
           <div class="form">
-            <label class="fchk"><input type="checkbox" id="approve-override" /> Correct the proposal before publishing</label>
-            <div id="approve-override-fields" hidden>
+            <label class="field"><span>OAH coding <em>*</em></span><select id="approve-coding"></select><span class="help">Only codes from the curated catalog can be published. The system and display text always come from the catalog, never from this browser.</span></label>
+            <div id="approve-preview"></div>
+            <div class="frow">
+              <label class="field"><span>Normalized value</span><input id="approve-value" type="number" step="any" readonly /></label>
+              <label class="field"><span>UCUM unit</span><input id="approve-unit" list="unit-list" readonly /><datalist id="unit-list"></datalist></label>
+            </div>
+            <label class="fchk"><input type="checkbox" id="approve-correct" /> Enter an expert correction</label>
+            <div id="approve-correct-fields" hidden>
               <div class="form">
-                <label class="field"><span>OAH coding</span><select id="approve-coding"></select><span class="help">Only codes from the curated catalog can be published. Display text always comes from the catalog.</span></label>
-                <div class="frow">
-                  <label class="field"><span>Normalized value</span><input id="approve-value" type="number" step="any" /></label>
-                  <label class="field"><span>UCUM unit</span><input id="approve-unit" list="unit-list" /><datalist id="unit-list"></datalist></label>
-                </div>
+                <div class="note"><svg class="ic sm"><use href="#i-alert"/></svg><span>Use this only when the deterministic conversion is impossible or the source value itself is wrong. The unit must still be accepted for the selected code, and the value must still pass its plausible range.</span></div>
+                <label class="field"><span>Correction reason <em>*</em></span><textarea id="approve-reason" rows="2" maxlength="500" placeholder="Why the derived quantity must be replaced"></textarea><span class="help">Recorded verbatim in the hash chain alongside the exact value you publish.</span></label>
               </div>
             </div>
             <div id="approve-secondary"></div>
