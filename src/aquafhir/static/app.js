@@ -536,15 +536,16 @@
       : `<div class="empty"><b>${state.briefings.length ? "No advisories match" : "No advisories drafted"}</b>${state.ai.enabled ? "Open an incident and draft one per audience." : "Set GEMINI_API_KEY to enable drafting."}</div>`;
   }
 
-  /* ── site map (Leaflet + OpenStreetMap) ───────────────────────────────── */
-  /* Tiles come from the OSM public tile server, which is fine for a review
-     console's traffic but must be swapped for a proper provider before any
-     real deployment. Nothing here needs an API key. */
+  /* ── site map (Leaflet over a vendored Natural Earth vector basemap) ──── */
+  /* No tile server, no CDN, no API key: land polygons ship with the console
+     and are drawn to canvas in the workspace's own colours. Nominatim is still
+     used for place search and is credited in the legend. */
 
-  const OSM_TILES = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-  const OSM_ATTRIB = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors';
+  const WORLD_GEOJSON = "/assets/vendor/world/countries-50m.geojson";
   const NOMINATIM = "https://nominatim.openstreetmap.org/search";
-  const map = { instance: null, layer: null, fitted: false, searchTimer: null, lastSearch: 0 };
+  const WORLD_VIEW = [[-52, -168], [74, 178]];
+  const MAP_MAX_ZOOM = 10;
+  const map = { instance: null, layer: null, land: null, fitted: false, searchTimer: null, lastSearch: 0 };
 
   // One row per distinct site, with the counts that decide colour and radius.
   function siteRollup() {
@@ -563,11 +564,47 @@
     return [...rows.values()];
   }
 
+  // Colours come from the live theme tokens so markers and land re-tint on toggle.
+  function mapToken(name) {
+    return window.getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
   function siteTone(row) {
-    if (row.alerts.some((a) => a.severity === "critical")) return { color: "#c9372c", rank: "Critical incident" };
-    if (row.alerts.length) return { color: "#e56910", rank: "High incident" };
-    if (row.approved) return { color: "#0c66e4", rank: `Observations ${builtWord()}` };
-    return { color: "#8590a2", rank: "Pending review only" };
+    if (row.alerts.some((a) => a.severity === "critical")) return { color: mapToken("--red"), rank: "Critical incident", hot: true };
+    if (row.alerts.length) return { color: mapToken("--map-high"), rank: "High incident", hot: false };
+    if (row.approved) return { color: mapToken("--brand"), rank: `Observations ${builtWord()}`, hot: false };
+    return { color: mapToken("--n50"), rank: "Pending review only", hot: false };
+  }
+  function landStyle() {
+    return { fillColor: mapToken("--map-land"), fillOpacity: 1, color: mapToken("--map-line"), weight: .6, opacity: .9 };
+  }
+
+  // A one-button control that returns to the whole-world framing.
+  const WorldControl = window.L && window.L.Control.extend({
+    options: { position: "topright" },
+    onAdd(m) {
+      const bar = window.L.DomUtil.create("div", "leaflet-bar leaflet-control");
+      const a = window.L.DomUtil.create("a", "", bar);
+      a.href = "#"; a.title = "Whole world"; a.setAttribute("role", "button"); a.setAttribute("aria-label", "Whole world");
+      a.innerHTML = '<svg class="ic"><use href="#i-globe"/></svg>';
+      window.L.DomEvent.on(a, "click", (e) => { window.L.DomEvent.stop(e); m.fitBounds(WORLD_VIEW, { animate: true }); });
+      window.L.DomEvent.disableClickPropagation(bar);
+      return bar;
+    },
+  });
+
+  async function loadLand(host) {
+    host.classList.add("is-loading");
+    try {
+      const res = await fetch(WORLD_GEOJSON);
+      if (!res.ok) throw new Error(`basemap ${res.status}`);
+      const geo = await res.json();
+      if (!map.instance) return;
+      map.land = window.L.geoJSON(geo, { pane: "land", style: landStyle(), interactive: false, smoothFactor: 1.2 }).addTo(map.instance);
+    } catch (err) {
+      console.warn("Site map basemap did not load; markers still shown.", err);
+    } finally {
+      host.classList.remove("is-loading");
+    }
   }
 
   function renderMap() {
@@ -585,23 +622,23 @@
     }
     if (!map.instance) {
       host.classList.remove("is-dead");
-      map.instance = window.L.map(host, { scrollWheelZoom: false, worldCopyJump: true })
-        .setView([52.4, 14.5], 6);
-      const tiles = window.L.tileLayer(OSM_TILES, { maxZoom: 18, attribution: OSM_ATTRIB });
-      // The public OSM tile server throttles bursts, which leaves holes in the
-      // basemap. Retry each failed tile once rather than showing a torn map.
-      tiles.on("tileerror", (event) => {
-        const img = event.tile;
-        if (!img || img.dataset.retried) return;
-        img.dataset.retried = "1";
-        const src = img.src;
-        window.setTimeout(() => { img.src = ""; img.src = src; }, 900);
+      map.instance = window.L.map(host, {
+        preferCanvas: true, zoomControl: false, attributionControl: false,
+        scrollWheelZoom: false, worldCopyJump: false, zoomSnap: .25,
+        minZoom: 1, maxZoom: MAP_MAX_ZOOM,
+        maxBounds: [[-85, -200], [85, 200]], maxBoundsViscosity: .8,
       });
-      tiles.addTo(map.instance);
+      map.instance.createPane("land").style.zIndex = 250;
+      map.instance.fitBounds(WORLD_VIEW, { animate: false });
+      window.L.control.zoom({ position: "topright" }).addTo(map.instance);
+      new WorldControl().addTo(map.instance);
       // Scroll-to-zoom only once the reviewer has clicked in, so the page still scrolls.
       map.instance.on("click", () => map.instance.scrollWheelZoom.enable());
       map.instance.on("mouseout", () => map.instance.scrollWheelZoom.disable());
       map.layer = window.L.layerGroup().addTo(map.instance);
+      loadLand(host);
+    } else if (map.land) {
+      map.land.setStyle(landStyle());
     }
     map.layer.clearLayers();
     if (!rows.length) return;
@@ -609,9 +646,14 @@
     const max = Math.max(...rows.map((r) => r.total));
     rows.forEach((row) => {
       const tone = siteTone(row);
-      const marker = window.L.circleMarker([row.lat, row.lon], {
-        radius: 7 + Math.round(9 * Math.sqrt(row.total / max)),
-        color: tone.color, weight: 2, fillColor: tone.color, fillOpacity: .38,
+      const size = 10 + Math.round(10 * Math.sqrt(row.total / max));
+      const marker = window.L.marker([row.lat, row.lon], {
+        icon: window.L.divIcon({
+          className: "site-pin",
+          html: `<span class="site-dot${tone.hot ? " hot" : ""}" style="--c:${tone.color};--s:${size}px"></span>`,
+          iconSize: [size, size], iconAnchor: [size / 2, size / 2], popupAnchor: [0, -size / 2 - 4],
+        }),
+        title: row.name, keyboard: true, riseOnHover: true,
       });
       const worst = row.alerts.slice().sort((a, b) =>
         (b.severity === "critical") - (a.severity === "critical"))[0];
@@ -626,7 +668,7 @@
     });
 
     if (!map.fitted) {
-      map.instance.fitBounds(window.L.latLngBounds(rows.map((r) => [r.lat, r.lon])).pad(0.35), { maxZoom: 11 });
+      map.instance.fitBounds(window.L.latLngBounds(rows.map((r) => [r.lat, r.lon])).pad(0.35), { maxZoom: 8, animate: false });
       map.fitted = true;
     }
     // Leaflet needs a nudge when it was first laid out inside a hidden page.
@@ -636,7 +678,7 @@
   function fitMapToSites() {
     const rows = siteRollup();
     if (!map.instance || !rows.length) { toast("No sites with coordinates yet.", "bad"); return; }
-    map.instance.fitBounds(window.L.latLngBounds(rows.map((r) => [r.lat, r.lon])).pad(0.35), { maxZoom: 11 });
+    map.instance.fitBounds(window.L.latLngBounds(rows.map((r) => [r.lat, r.lon])).pad(0.35), { maxZoom: 8 });
   }
 
   // Nominatim asks for at most one request a second. The 700 ms debounce plus
@@ -1547,6 +1589,7 @@
     document.documentElement.dataset.theme = dark ? "dark" : "light";
     try { window.localStorage.setItem("aquafhir.theme", dark ? "dark" : "light"); } catch (_) { /* ignore */ }
     $("#btn-theme use").setAttribute("href", dark ? "#i-sun" : "#i-moon");
+    if (map.instance) renderMap();
   }
 
   /* ── events ───────────────────────────────────────────────────────────── */
@@ -1698,7 +1741,7 @@
   $("#map-suggest").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-lat]");
     if (!b || !map.instance) return;
-    map.instance.setView([Number(b.dataset.lat), Number(b.dataset.lon)], 11);
+    map.instance.setView([Number(b.dataset.lat), Number(b.dataset.lon)], 8);
     $("#map-suggest").hidden = true;
     $("#map-search").value = "";
   });
