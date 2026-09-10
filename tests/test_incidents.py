@@ -22,6 +22,7 @@ import yaml
 from aquafhir.coding import ReviewedCodingAgent
 from aquafhir.fhir import build_resources
 from aquafhir.models import Alert, MappingProposal, RawReading
+from aquafhir.service import reading_from_csv_row
 from aquafhir.thresholds import ThresholdPolicy
 
 ROOT = Path(__file__).parents[1]
@@ -35,20 +36,7 @@ SCENARIOS_BY_ID = {scenario["id"]: scenario for scenario in SCENARIOS}
 def _readings(dataset: str) -> list[RawReading]:
     with (ROOT / dataset).open(encoding="utf-8", newline="") as handle:
         return [
-            RawReading(
-                source_id=row["source_id"],
-                source_type=row["source_type"],
-                parameter=row["parameter"],
-                value=float(row["value"]),
-                unit=row["unit"],
-                observed_at=row["observed_at"],
-                site_code=row["site_code"],
-                site_name=row["site_name"],
-                latitude=float(row["latitude"]),
-                longitude=float(row["longitude"]),
-                evidence_url=(row.get("evidence_url") or "").strip() or None,
-                raw_payload={"incident_fixture": dataset, "synthetic": True},
-            )
+            reading_from_csv_row(row, {"incident_fixture": dataset, "synthetic": True})
             for row in csv.DictReader(handle)
         ]
 
@@ -62,7 +50,7 @@ def run_scenario(
     proposals = [agent.propose(reading) for reading in _readings(scenario["dataset"])]
     alerts: list[Alert] = []
     for proposal in proposals:
-        if proposal.coding and proposal.normalized_value is not None:
+        if proposal.coding and proposal.has_publishable_value:
             _location, _organization, observation = build_resources(proposal)
             alerts.extend(policy.evaluate(observation))
     return proposals, alerts
@@ -71,7 +59,7 @@ def run_scenario(
 def outcome(proposal: MappingProposal) -> str:
     if not proposal.coding:
         return "no_code"
-    if proposal.normalized_value is None:
+    if not proposal.has_publishable_value:
         return "blocked_qty"
     return "coded"
 
@@ -304,35 +292,19 @@ def test_incompatible_estimators_are_not_silently_converted(results) -> None:
 def test_every_curated_code_is_an_oah_temporary_code_system_concept(
     agent: ReviewedCodingAgent,
 ) -> None:
-    """Guards against inventing a plausible-looking code the IG does not define.
+    """No invented codes, checked against the IG itself, not a transcription.
 
-    The list is transcribed from the published OneAquaHealth temporary code
-    system. Widening it requires checking the IG first, which is the point.
+    The published code system is vendored in data/oah/ (see its README for the
+    exact package build). Widening the catalog means checking the IG first,
+    which is the point; see tests/test_oah_package.py for the profile bindings.
     """
-    published = {
-        "electrical-conductivity",
-        "ndci",
-        "mci",
-        "waterTemperature",
-        "dissolved-oxygen",
-        "ph",
-        "chloride",
-        "nitrate",
-        "nitrite",
-        "ammonium",
-        "total-phosphates",
-        "tss",
-        "coliforms",
-        "fishes",
-        "macroinvertebreates",
-        "lead-dissolved",
-        "mercury-dissolved",
-        "copper-dissolved",
-        "zinc-dissolved",
-        "arsenic-dissolved",
-        "aluminium-dissolved",
-    }
-    assert set(agent.codes()) <= published
+    import json
+
+    document = json.loads(
+        (ROOT / "data" / "oah" / "CodeSystem-temporarySystem-oah-eu.json").read_text("utf-8")
+    )
+    published = {concept["code"] for concept in document["concept"]}
+    assert set(agent.codes()) <= published, sorted(set(agent.codes()) - published)
 
 
 def test_every_policy_rule_targets_a_code_the_catalog_can_produce(
@@ -351,6 +323,14 @@ def test_every_policy_rule_uses_a_unit_the_catalog_normalises_to(
     for rule in policy.rules:
         catalog_rule = agent.rule_for_code(rule["code"])
         assert catalog_rule is not None
+        if rule["operator"] in {"in", "not-in"}:
+            # A coded rule compares value-set concepts, not units.
+            allowed = {item.code for item in agent.accepted_values_for_rule(catalog_rule)}
+            assert set(rule["values"]) <= allowed, (
+                f"policy rule {rule.get('id', rule['code'])} lists values outside the "
+                f"reviewed value set for {rule['code']}"
+            )
+            continue
         targets = set(catalog_rule.get("accepted_units", []))
         targets.update(
             conversion["target"]

@@ -153,7 +153,7 @@ def test_every_call_is_attributable():
     proposal = copilot.propose(reading("Leitfähigkeit"))
 
     assert proposal.ai.provider == "google-gemini"
-    assert proposal.ai.template_id == "coding-proposer/v1"
+    assert proposal.ai.template_id == "coding-proposer/v2"
     assert len(proposal.ai.prompt_hash) == 64
     assert "electrical-conductivity" in proposal.ai.grounded_codes
     assert proposal.ai.evidence == ["Leitfähigkeit"]
@@ -214,3 +214,39 @@ def test_a_unit_that_already_resolves_is_never_reinterpreted():
     assert proposal.normalized_value == 2.35  # not 0.00235
     assert proposal.normalized_unit == "mS/cm"
     assert "already resolves" in proposal.rationale
+
+
+# -- coded values ------------------------------------------------------------
+
+
+def coded_reading(parameter: str, word: str) -> RawReading:
+    return RawReading(
+        source_id="oah-app", source_type=SourceType.CITIZEN, parameter=parameter,
+        coded_value=word, observed_at=datetime(2026, 5, 4, 9, tzinfo=UTC),
+        site_code="coselhas", site_name="Ribeira de Coselhas", latitude=40.219, longitude=-8.423,
+    )
+
+
+def test_the_model_may_name_which_value_set_concept_a_word_means():
+    """'a bit of scum' is not in the value set; the model says it means 'present'."""
+    copilot, fake = agent([gemini_says(code="foam", unit_code="NO_MATCH", value_code="present")])
+    proposal = copilot.propose(coded_reading("scum on the surface", "a bit of scum"))
+    assert proposal.coding.code == "foam"
+    assert proposal.normalized_coding.code == "present"
+    assert "AI read coded value 'a bit of scum' as 'present'" in proposal.rationale
+    assert "present" in fake.last_schema["properties"]["value_code"]["enum"]
+    assert "a bit of scum" in fake.last_prompt
+
+
+def test_a_word_that_already_resolves_is_never_reinterpreted():
+    copilot, _ = agent([gemini_says(code="foam", unit_code="NO_MATCH", value_code="extensive")])
+    proposal = copilot.propose(coded_reading("foam", "present"))
+    assert proposal.normalized_coding.code == "present"
+
+
+def test_a_model_value_outside_the_set_is_ignored():
+    copilot, _ = agent([gemini_says(code="foam", unit_code="NO_MATCH", value_code="lots")])
+    proposal = copilot.propose(coded_reading("foam", "kinda foamy"))
+    assert proposal.normalized_coding is None
+    assert proposal.confidence <= 0.69
+    assert "not in the value set" in proposal.rationale

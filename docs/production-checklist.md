@@ -97,3 +97,29 @@ that way.
 - Test backups, point-in-time recovery, FHIR export, multi-region recovery, and degraded read-only operation.
 - Load-test transaction, subscription, and terminology behavior at expected burst rates.
 
+
+
+## Live connectors (Hub'Eau, Copernicus Sentinel-2)
+
+Both connectors are read-only and produce pending proposals only. These gates keep the
+live path honest before it is scheduled rather than pressed.
+
+- Keep every live reading on the same review gate as a fixture row. No connector may
+  approve, publish, or raise an alert on its own.
+- Schedule pulls with a per-station cursor so a routine monthly sample is not re-queued as
+  a duplicate; today the duplicate flag on the proposal is the only guard.
+- Keep the below-quantification-limit skip (`code_remarque != 1`) and extend it to the
+  other Sandre remark codes (trace, saturation) with the laboratory's own definitions.
+- Decide, with a laboratory, whether Hub'Eau's `n/(100mL)` E. coli counts are MPN or CFU
+  per method code (`code_methode`) before adding any conversion; the bridge currently
+  withholds them deliberately.
+- Record the Hub'Eau `api_version` and the Sandre parameter/unit release with each pull.
+- Copernicus: register a project OAuth client, rotate its secret, and pin the evalscript
+  by hash (already recorded on every NDCI reading). Store the scene id, cloud cover,
+  water-pixel count and resolution with the reading, and label the index as derived
+  evidence, never as a concentration.
+- Verify the NDCI request against a known-bloom scene before trusting the threshold; the
+  Statistical API call is implemented to the documented shape and offline-tested but has
+  not been run live in this repository.
+- Respect both services' rate limits and terms; add a circuit breaker so a slow upstream
+  cannot stall the review console.

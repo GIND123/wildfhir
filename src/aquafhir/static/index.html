@@ -161,10 +161,10 @@
                 </article>
 
                 <article class="fnode" id="fn-ingest" tabindex="0"
-                  data-tip="Agency rows, citizen submissions, satellite indices and free-text bulletins all enter here. The original label and unit are preserved verbatim so a reviewer can always see what the source actually said.">
+                  data-tip="Agency rows, citizen submissions, satellite indices, free-text bulletins and live pulls from Hub'Eau and Copernicus all enter here. The original label and unit are preserved verbatim so a reviewer can always see what the source actually said.">
                   <header class="fnode-head"><span class="fnode-icon"><svg class="ic"><use href="#i-plug"/></svg></span><span class="fnode-step">01</span></header>
                   <h3>Ingestion</h3>
-                  <p>Agency, citizen, satellite, bulletin</p>
+                  <p>Agency, citizen, satellite, bulletin, live pull</p>
                   <div class="fnode-stat"><b id="flow-c-ingest">0</b><span>readings received</span></div>
                   <span class="fport fport-r"></span>
                 </article>
@@ -189,10 +189,10 @@
                 </article>
 
                 <article class="fnode" id="fn-fhir" tabindex="0"
-                  data-tip="An approved proposal builds an OneAquaHealth Location and Observation with a UCUM-coded quantity as one FHIR transaction bundle. Whether that bundle is validated and sent to a server, or only built locally, depends on FHIR_WRITE_ENABLED.">
+                  data-tip="An approved proposal builds an OneAquaHealth Location and Observation as one FHIR transaction bundle: a UCUM quantity or a coded value, through the indicators profile for the environmental and animal legs or the health-measure profile for the human leg. Whether that bundle is validated and sent to a server, or only built locally, depends on FHIR_WRITE_ENABLED.">
                   <header class="fnode-head"><span class="fnode-icon"><svg class="ic"><use href="#i-doc"/></svg></span><span class="fnode-step">04</span></header>
                   <h3>FHIR bundle</h3>
-                  <p>OAH Location and Observation, UCUM quantity</p>
+                  <p>OAH Location and Observation, two profiles, three legs</p>
                   <div class="fnode-stat"><b id="flow-c-fhir">0</b><span id="flow-c-fhir-label">observations built</span></div>
                   <span class="fport fport-l"></span><span class="fport fport-r"></span>
                 </article>
@@ -396,7 +396,7 @@
               <div class="map-canvas" id="map-canvas"></div>
               <div class="map-legend">
                 <span><i style="background:var(--red)"></i>Critical incident</span>
-                <span><i style="background:#e56910"></i>High incident</span>
+                <span><i style="background:var(--orange)"></i>High incident</span>
                 <span><i style="background:var(--brand)"></i>Observations only</span>
                 <span><i style="background:var(--n50)"></i>Pending review only</span>
                 <span style="margin-left:auto">Marker size follows reading volume. Place search by Nominatim. With the cursor over the map: <kbd>+</kbd> <kbd>−</kbd> zoom, arrow keys pan.</span>
@@ -488,6 +488,7 @@
           <button class="tab is-active" data-ct="reading" type="button">Reading</button>
           <button class="tab" data-ct="bulletin" type="button">Bulletin <span class="lz purple" id="ct-ai-lz">AI</span></button>
           <button class="tab" data-ct="replay" type="button">Replay dataset</button>
+          <button class="tab" data-ct="live" type="button">Live data <span class="lz green">real</span></button>
         </div>
         <div class="modal-body">
           <form class="form" id="form-reading" data-ct="reading">
@@ -497,10 +498,12 @@
             </div>
             <label class="field"><span>Parameter, as the source names it <em>*</em></span><input name="parameter" value="Leitfähigkeit" required /><span class="help">Curated aliases match first. If they are weak, the Gemini co-pilot is consulted in `auto` mode.</span></label>
             <div class="frow3">
-              <label class="field"><span>Value <em>*</em></span><input name="value" type="number" step="any" value="2350" required /></label>
-              <label class="field"><span>Unit, as written <em>*</em></span><input name="unit" value="uS/cm" required /></label>
-              <label class="field"><span>Observed at (UTC)</span><input name="observed_at" type="datetime-local" step="60" /></label>
+              <label class="field"><span>Value kind</span><select name="value_kind" id="create-value-kind"><option value="quantity">Number with unit</option><option value="coded">Coded word (foam, macrophytes…)</option></select></label>
+              <label class="field" data-kind="quantity"><span>Value <em>*</em></span><input name="value" type="number" step="any" value="2350" /></label>
+              <label class="field" data-kind="quantity"><span>Unit, as written <em>*</em></span><input name="unit" value="uS/cm" /></label>
+              <label class="field" data-kind="coded" hidden><span>Coded value, as written <em>*</em></span><input name="coded_value" placeholder="present" /><span class="help">Published as a concept from the indicator's reviewed value set, or withheld.</span></label>
             </div>
+            <label class="field"><span>Observed at (UTC)</span><input name="observed_at" type="datetime-local" step="60" /></label>
             <div class="frow">
               <label class="field"><span>Site code <em>*</em></span><input name="site_code" value="oder-kostrzyn" required /></label>
               <label class="field"><span>Site name <em>*</em></span><input name="site_name" value="Oder at Kostrzyn" required /></label>
@@ -537,6 +540,27 @@ Angler melden tote Fische flussabwärts — keine Messung vorhanden.</textarea><
             <div class="note info"><svg class="ic sm"><use href="#i-info"/></svg><span>Loads the transparent synthetic Oder 2022 timeline from <code>data/oder-replay.csv</code> as pending proposals. Nothing is approved automatically.</span></div>
             <div class="help-list" id="replay-preview"></div>
           </div>
+
+          <div class="form" id="form-live" data-ct="live" hidden>
+            <div class="note info"><svg class="ic sm"><use href="#i-info"/></svg><span>Real measurements, not fixtures. Hub'Eau is the French national water open-data API and needs no key; its Toulouse stations sit in a OneAquaHealth pilot city. Each pulled reading keeps the laboratory's French label and unit verbatim, cites its source record, and lands in the queue as <b>pending</b>.</span></div>
+            <div class="sec-head"><h4 class="form-h">Hub'Eau · river water quality, Toulouse</h4><span id="live-hub-status"></span></div>
+            <div class="chips" id="live-stations"></div>
+            <div class="frow">
+              <label class="field"><span>Look back (days)</span><input id="live-days" type="number" min="1" max="3660" value="730" /><span class="help">Routine sampling is monthly to quarterly; two years finds every station.</span></label>
+              <label class="field"><span>Max readings</span><input id="live-limit" type="number" min="1" max="500" value="40" /></label>
+            </div>
+            <div class="sec-head" style="margin-top:6px"><h4 class="form-h">Copernicus · Sentinel-2</h4><span id="live-s2-status"></span></div>
+            <div class="frow">
+              <label class="field"><span>Site</span><select id="live-site"></select></label>
+              <label class="field"><span>Max cloud cover (%)</span><input id="live-cloud" type="number" min="0" max="100" value="40" /></label>
+            </div>
+            <div class="chips">
+              <button class="btn sm" id="live-scenes" type="button">List recent scenes</button>
+              <button class="btn sm" id="live-ndci" type="button"><svg class="ic sm"><use href="#i-sparkle"/></svg>Compute NDCI over the site</button>
+              <span class="help">Scene listing is keyless. NDCI needs a Copernicus OAuth client (see Integrations).</span>
+            </div>
+            <div id="live-result"></div>
+          </div>
         </div>
         <div class="modal-foot">
           <span class="left" id="create-foot-hint"></span>
@@ -567,16 +591,18 @@ Angler melden tote Fische flussabwärts — keine Messung vorhanden.</textarea><
           <div id="approve-summary" style="margin-bottom:14px"></div>
           <div class="form">
             <label class="field"><span>OAH coding <em>*</em></span><select id="approve-coding"></select><span class="help">Only codes from the curated catalog can be published. The system and display text always come from the catalog, never from this browser.</span></label>
-            <div id="approve-preview" aria-live="polite"></div>
-            <div id="approve-ai" class="unit-assist" aria-live="polite" hidden></div>
-            <div class="frow">
+            <div id="approve-preview"></div>
+            <div class="frow" id="approve-quantity-row">
               <label class="field"><span>Normalized value</span><input id="approve-value" type="number" step="any" readonly /></label>
               <label class="field"><span>UCUM unit</span><input id="approve-unit" list="unit-list" readonly /><datalist id="unit-list"></datalist></label>
+            </div>
+            <div id="approve-coded-row" hidden>
+              <label class="field"><span>Coded value to publish</span><select id="approve-coded-value" disabled></select><span class="help">One of the concepts in this indicator's reviewed value set, published as <code>valueCodeableConcept</code>. Words outside the set are never rounded to the nearest concept.</span></label>
             </div>
             <label class="fchk"><input type="checkbox" id="approve-correct" /> Enter an expert correction</label>
             <div id="approve-correct-fields" hidden>
               <div class="form">
-                <div class="note"><svg class="ic sm"><use href="#i-alert"/></svg><span>Use this only when the deterministic conversion is impossible or the source value itself is wrong. The unit must still be accepted for the selected code, and the value must still pass its plausible range.</span></div>
+                <div class="note"><svg class="ic sm"><use href="#i-alert"/></svg><span>Use this only when the deterministic resolution is impossible or the source value itself is wrong. A quantity must still use an accepted unit and pass its plausible range; a coded value must still be one of the reviewed concepts.</span></div>
                 <label class="field"><span>Correction reason <em>*</em></span><textarea id="approve-reason" rows="2" maxlength="500" placeholder="Why the derived quantity must be replaced"></textarea><span class="help">Recorded verbatim in the hash chain alongside the exact value you publish.</span></label>
               </div>
             </div>

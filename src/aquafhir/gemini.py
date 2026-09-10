@@ -54,9 +54,18 @@ def error_category(status: int) -> str:
         return "quota-exceeded"
     if status in {401, 403}:
         return "auth-failed"
+    if status == 404:
+        # A retired or misspelt model id. Gemini answers 404 for
+        # `models/<name>` that no longer exists for this key.
+        return "model-not-found"
     if status == 408:
         return "timeout"
     return "upstream-error"
+
+
+# Failures that mean "this model, for this key", not "Gemini is down". Only
+# these justify trying the configured fallback model.
+FALLBACK_CATEGORIES = frozenset({"quota-exceeded", "model-not-found"})
 
 
 class GeminiDisabledError(GeminiError):
@@ -105,9 +114,14 @@ class GeminiClient:
         max_output_tokens: int = 2048,
         max_retries: int = 2,
         thinking_budget: int = 0,
+        fallback_model: str = "",
     ) -> None:
         self.api_key = api_key.strip()
         self.model = model
+        # Tried once when the pinned model answers 429 or 404. A judge's
+        # free-tier key has no quota for the preview model; without this the
+        # AI layer looked configured and silently failed on every call.
+        self.fallback_model = fallback_model.strip() if fallback_model.strip() != model else ""
         self.api_base = api_base.rstrip("/")
         self.timeout = timeout
         self.max_output_tokens = max_output_tokens
@@ -162,8 +176,21 @@ class GeminiClient:
 
         prompt_hash = _sha256(f"{template_id}\n{system}\n{prompt}")
         started = time.perf_counter()
+        model_used = self.model
+        fallback_from: str | None = None
         try:
-            text = self._post_with_retries(body)
+            try:
+                text = self._post_with_retries(body)
+            except GeminiError as primary:
+                category = getattr(primary, "category", "upstream-error")
+                if not self.fallback_model or category not in FALLBACK_CATEGORIES:
+                    raise
+                # The pinned model is unusable for this key. Try the fallback
+                # once and say so in the record: the model that answered is
+                # what gets attributed, never the pinned name.
+                model_used = self.fallback_model
+                fallback_from = self.model
+                text = self._send(body, self.fallback_model)
         except GeminiError as error:
             # A key being present says nothing about whether calls succeed.
             # Record what actually happened so status can be honest about it.
@@ -174,6 +201,8 @@ class GeminiClient:
                 latency_ms=int((time.perf_counter() - started) * 1000),
                 category=getattr(error, "category", "upstream-error"),
                 status=getattr(error, "status", None),
+                model=model_used,
+                fallback_from=fallback_from,
             )
             raise
         latency_ms = int((time.perf_counter() - started) * 1000)
@@ -190,16 +219,17 @@ class GeminiClient:
                 audit=self._note(
                     outcome="error", template_id=template_id, prompt_hash=prompt_hash,
                     latency_ms=latency_ms, category="invalid-json",
+                    model=model_used, fallback_from=fallback_from,
                 ),
             ) from error
         audit = self._note(
             outcome="ok", template_id=template_id, prompt_hash=prompt_hash,
-            latency_ms=latency_ms,
+            latency_ms=latency_ms, model=model_used, fallback_from=fallback_from,
         )
 
         return GeminiResult(
             data=data,
-            model=self.model,
+            model=model_used,
             template_id=template_id,
             prompt_hash=prompt_hash,
             response_hash=_sha256(text),
@@ -217,6 +247,8 @@ class GeminiClient:
         prompt_hash: str | None = None,
         category: str | None = None,
         status: int | None = None,
+        model: str | None = None,
+        fallback_from: str | None = None,
     ) -> dict[str, Any]:
         """Build the audit record for one call and return it to the caller.
 
@@ -231,7 +263,9 @@ class GeminiClient:
             "category": category,
             "http_status": status,
             "provider": "google-gemini",
-            "model": self.model,
+            "model": model or self.model,
+            # Set when the pinned model failed and the fallback answered.
+            "fallback_from": fallback_from,
             "template_id": template_id,
             "prompt_hash": prompt_hash,
             "latency_ms": latency_ms,
@@ -243,7 +277,11 @@ class GeminiClient:
     # -- transport ---------------------------------------------------------
 
     def _post_with_retries(self, body: dict[str, Any]) -> str:
-        url = f"{self.api_base}/models/{self.model}:generateContent"
+        """The pinned model's transport. Test doubles override exactly this."""
+        return self._send(body, self.model)
+
+    def _send(self, body: dict[str, Any], model: str) -> str:
+        url = f"{self.api_base}/models/{model}:generateContent"
         headers = {
             "x-goog-api-key": self.api_key,
             "Content-Type": "application/json",
@@ -331,6 +369,7 @@ class GeminiClient:
 
 SAFE_MESSAGES = {
     "quota-exceeded": "Gemini quota exceeded. The deterministic pipeline is unaffected.",
+    "model-not-found": "The configured Gemini model is not available to this key.",
     "auth-failed": "Gemini rejected the configured credentials.",
     "timeout": "Gemini did not respond in time.",
     "blocked": "Gemini declined to answer this prompt.",

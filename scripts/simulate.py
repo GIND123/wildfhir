@@ -80,13 +80,15 @@ def read_rows(dataset: str) -> list[dict[str, str]]:
 
 
 def to_reading(row: dict[str, str], dataset: str) -> dict[str, Any]:
+    """One fixture row as the API body. A row carries a value+unit or a coded_value."""
     evidence = (row.get("evidence_url") or "").strip()
+    coded = (row.get("coded_value") or "").strip()
+    raw_value = (row.get("value") or "").strip()
     return {
         "source_id": row["source_id"],
         "source_type": row["source_type"],
         "parameter": row["parameter"],
-        "value": float(row["value"]),
-        "unit": row["unit"],
+        **({"coded_value": coded} if coded else {"value": float(raw_value), "unit": row["unit"]}),
         "observed_at": row["observed_at"],
         "site_code": row["site_code"],
         "site_name": row["site_name"],
@@ -100,7 +102,8 @@ def to_reading(row: dict[str, str], dataset: str) -> dict[str, Any]:
 def classify(proposal: dict[str, Any]) -> str:
     if not proposal.get("coding"):
         return "no_code"
-    if proposal.get("normalized_value") is None:
+    quantity = proposal.get("normalized_value") is not None and proposal.get("normalized_unit")
+    if not quantity and not proposal.get("normalized_coding"):
         return "blocked_qty"
     return "coded"
 
@@ -139,9 +142,11 @@ def run_scenario(
             code = (proposal.get("coding") or {}).get("code", "-")
             proposer = proposal["proposer"]
             label = f"{state:11}"
+            shown_value = row.get("coded_value") or row.get("value") or ""
+            shown_unit = "coded" if row.get("coded_value") else (row.get("unit") or "")
             print(
                 f"      {paint(label, mark)} {row['parameter'][:32]:32} "
-                f"{row['value']:>10} {row['unit'][:12]:12} -> {code:24} "
+                f"{shown_value:>10} {shown_unit[:12]:12} -> {code:24} "
                 f"{paint(proposer, DIM)}"
             )
 

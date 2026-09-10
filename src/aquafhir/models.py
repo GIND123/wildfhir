@@ -25,14 +25,39 @@ class ProposerKind(StrEnum):
     GEMINI_ASSISTED = "gemini-assisted"
 
 
+class OneHealthLeg(StrEnum):
+    """Which leg of One Health an indicator belongs to.
+
+    The OAH IG publishes all three in one code system but binds them to two
+    profiles: environmental and animal indicators go through
+    `observation-indicators-oah`, human health measures through
+    `observation-health-measure-oah`. The leg decides the profile.
+    """
+
+    ENVIRONMENTAL = "environmental"
+    ANIMAL = "animal"
+    HUMAN = "human"
+
+
 class RawReading(BaseModel):
+    """One measurement as the source reported it.
+
+    A reading carries either a numeric `value` with its `unit`, or a
+    `coded_value`: the word a citizen-science app or a field sheet used
+    ("present", "extensive", "none"). Never both. The OAH IG models foam,
+    macrophytes and the ordinal indicators as coded values, not quantities,
+    and forcing them through a float would invent a number the source never
+    reported.
+    """
+
     source_id: str = Field(min_length=1, max_length=120)
     source_type: SourceType
     parameter: str = Field(min_length=1, max_length=200)
     # allow_inf_nan=False: NaN/Infinity serialise to JSON null, which would
     # publish an Observation whose valueQuantity has no value at all.
-    value: float = Field(allow_inf_nan=False)
-    unit: str = Field(min_length=1, max_length=40)
+    value: float | None = Field(default=None, allow_inf_nan=False)
+    unit: str = Field(default="", max_length=40)
+    coded_value: str | None = Field(default=None, max_length=120)
     observed_at: datetime
     site_code: str = Field(min_length=1, max_length=100)
     site_name: str = Field(min_length=1, max_length=200)
@@ -40,6 +65,23 @@ class RawReading(BaseModel):
     longitude: float = Field(ge=-180, le=180)
     evidence_url: HttpUrl | None = None
     raw_payload: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def exactly_one_kind_of_value(self) -> "RawReading":
+        coded = (self.coded_value or "").strip()
+        if self.value is None and not coded:
+            raise ValueError("A reading needs either a numeric value or a coded_value")
+        if self.value is not None and coded:
+            raise ValueError("A reading carries a numeric value or a coded_value, not both")
+        if self.value is not None and not self.unit.strip():
+            raise ValueError("A numeric value needs the unit the source wrote")
+        if coded:
+            self.coded_value = coded
+        return self
+
+    @property
+    def is_coded(self) -> bool:
+        return self.coded_value is not None
 
 
 class Coding(BaseModel):
@@ -114,6 +156,11 @@ class MappingProposal(BaseModel):
     taxon: Coding | None = None
     normalized_value: float | None
     normalized_unit: str | None
+    # The reviewed value-set concept a coded reading resolved to. A coded
+    # indicator publishes this as `valueCodeableConcept` instead of a quantity.
+    normalized_coding: Coding | None = None
+    # Which One Health leg the proposed code belongs to; decides the profile.
+    leg: OneHealthLeg = OneHealthLeg.ENVIRONMENTAL
     confidence: float = Field(ge=0, le=1)
     rationale: str
     status: ReviewStatus = ReviewStatus.PENDING
@@ -134,6 +181,12 @@ class MappingProposal(BaseModel):
     duplicate_of: str | None = None
     unit_suggestions: dict[str, UnitSuggestionResult] = Field(default_factory=dict)
 
+    @property
+    def has_publishable_value(self) -> bool:
+        """A quantity with a UCUM unit, or a reviewed coded value."""
+        quantity = self.normalized_value is not None and bool(self.normalized_unit)
+        return quantity or self.normalized_coding is not None
+
 
 class ReviewDecision(BaseModel):
     """What a reviewer decided. Note what it deliberately cannot carry.
@@ -142,17 +195,21 @@ class ReviewDecision(BaseModel):
     read**. The published system and display text always come from the reviewed
     catalog, so a client cannot mint a coding of its own.
 
-    Supplying a quantity is an *expert correction*, not a routine field. It
-    means "the deterministic conversion is wrong or impossible, and here is the
-    number to publish instead", so it requires a written reason and is still
-    checked against the selected rule's accepted units and plausible range.
-    Ordinary approvals send no quantity at all: the server derives it.
+    Supplying a quantity or a coded value is an *expert correction*, not a
+    routine field. It means "the deterministic resolution is wrong or
+    impossible, and here is what to publish instead", so it requires a written
+    reason and is still checked against the selected rule's accepted units,
+    plausible range, or value set. Ordinary approvals send none of these: the
+    server derives the published value.
     """
 
     reviewer: str = Field(min_length=1, max_length=120)
     coding: Coding | None = None
     normalized_value: float | None = Field(default=None, allow_inf_nan=False)
     normalized_unit: str | None = None
+    # For a coded indicator: the value-set code to publish instead of the
+    # one the proposer resolved (or failed to resolve).
+    coded_value: str | None = Field(default=None, max_length=120)
     correction_reason: str | None = Field(default=None, max_length=500)
     unit_suggestion_id: str | None = Field(default=None, max_length=120)
     secondary_coding: Coding | None = None
@@ -161,23 +218,41 @@ class ReviewDecision(BaseModel):
     # unless a person picked it here.
     taxon: Coding | None = None
 
+    @property
+    def is_correction(self) -> bool:
+        return self.normalized_value is not None or bool((self.coded_value or "").strip())
+
     @model_validator(mode="after")
     def expert_correction_is_complete(self) -> "ReviewDecision":
-        """A correction is value, unit and reason together, or none of them.
+        """A correction is a value and a reason together, or none of them.
 
         Allowing a value without a reason is how an unexplained number reaches
         FHIR; allowing a reason without a value records an intent that never
         happened.
         """
-        supplied = {
+        coded = bool((self.coded_value or "").strip())
+        quantity = {
             "normalized_value": self.normalized_value is not None,
             "normalized_unit": self.normalized_unit is not None,
-            "correction_reason": bool((self.correction_reason or "").strip()),
         }
-        if self.unit_suggestion_id and not all(supplied.values()):
+        reason = bool((self.correction_reason or "").strip())
+        if self.unit_suggestion_id and not all({**quantity, "correction_reason": reason}.values()):
             raise ValueError(
                 "Accepting an AI unit suggestion requires a complete expert correction"
             )
+        if coded and any(quantity.values()):
+            raise ValueError(
+                "An expert correction replaces either the quantity or the coded value, not both"
+            )
+        if coded:
+            if not reason:
+                raise ValueError(
+                    "An expert correction needs coded_value and correction_reason together; "
+                    "missing: correction_reason"
+                )
+            self.coded_value = self.coded_value.strip()
+            return self
+        supplied = {**quantity, "correction_reason": reason}
         if any(supplied.values()) and not all(supplied.values()):
             missing = sorted(name for name, present in supplied.items() if not present)
             raise ValueError(
@@ -211,8 +286,10 @@ class Alert(BaseModel):
     severity: str
     message: str
     audiences: list[str]
-    value: float
-    unit: str
+    # A quantity rule fills value/unit; a coded rule fills value_code.
+    value: float | None = None
+    unit: str = ""
+    value_code: str | None = None
     site_code: str
     observed_at: datetime
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -281,6 +358,14 @@ class IntakeResult(BaseModel):
     ai_audit: dict[str, Any] | None = None
 
 
+class AcceptedValue(BaseModel):
+    """One concept a coded indicator may publish, from the IG's value set."""
+
+    code: str
+    display: str
+    aliases: list[str] = Field(default_factory=list)
+
+
 class NormalizationPreview(BaseModel):
     """What the server would publish for one proposal under one catalog code.
 
@@ -291,20 +376,27 @@ class NormalizationPreview(BaseModel):
     code: str
     display: str
     system: str
-    source_value: float
-    source_unit: str
+    leg: OneHealthLeg = OneHealthLeg.ENVIRONMENTAL
+    # quantity | coded -- what the *reading* carries.
+    value_kind: str = "quantity"
+    source_value: float | None = None
+    source_unit: str = ""
+    source_coded_value: str | None = None
     accepted_units: list[str] = Field(default_factory=list)
-    plausible_range: dict[str, float] | None = None
-    status: str                       # ok | unit-unresolved | out-of-range
-    normalized_value: float | None = None
-    normalized_unit: str | None = None
-    factor: float | None = None
-    formula: str | None = None
-    message: str
     conversion_origin: Literal["reviewed-catalog", "reviewed-alias", "none"] = "none"
     interpreted_unit: str | None = None
     ai_result: UnitSuggestionResult | None = None
     ai_available: bool = False
+    accepted_values: list[AcceptedValue] = Field(default_factory=list)
+    plausible_range: dict[str, float] | None = None
+    # ok | unit-unresolved | out-of-range | value-unresolved | kind-mismatch
+    status: str
+    normalized_value: float | None = None
+    normalized_unit: str | None = None
+    normalized_coding: Coding | None = None
+    factor: float | None = None
+    formula: str | None = None
+    message: str
 
 
 class ApprovalResult(BaseModel):
@@ -350,6 +442,8 @@ class AiStatus(BaseModel):
     last_call: dict[str, Any] | None = None
     provider: str = "google-gemini"
     model: str
+    # The model configured as the automatic stand-in for a 429/404, if any.
+    fallback_model: str | None = None
     assist_mode: str
     assist_below_confidence: float
     confidence_ceiling: float
@@ -363,3 +457,56 @@ class UmlsStatus(BaseModel):
     sources: list[str] = Field(default_factory=list)
     vocabularies: list[str] = Field(default_factory=list)
     detail: str
+
+
+# -- live connectors ---------------------------------------------------------
+
+
+class SceneCandidate(BaseModel):
+    """One Sentinel-2 product from the Copernicus catalogue covering a site."""
+
+    product_id: str
+    name: str
+    sensed_at: datetime
+    cloud_cover: float | None = None
+    tile_id: str | None = None
+    product_type: str | None = None
+    online: bool | None = None
+    catalogue_url: str
+
+
+class ConnectorPullRequest(BaseModel):
+    """Parameters for one pull from a live connector."""
+
+    # Hub'Eau: station codes from config/connectors.yaml (default: all).
+    stations: list[str] = Field(default_factory=list, max_length=20)
+    # Sentinel-2: a site code from config/connectors.yaml.
+    site_code: str | None = Field(default=None, max_length=100)
+    days: int = Field(default=365, ge=1, le=3660)
+    max_cloud: float = Field(default=40.0, ge=0, le=100)
+    limit: int = Field(default=50, ge=1, le=500)
+
+
+class ConnectorPullResult(BaseModel):
+    connector: str
+    source_id: str
+    fetched: int
+    skipped: list[str] = Field(default_factory=list)
+    proposals: list[MappingProposal] = Field(default_factory=list)
+    # SHA-256 of the exact upstream request, so the provenance chain can pin
+    # which query produced these readings.
+    request_hash: str
+    request_url: str
+    fetched_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class ConnectorStatus(BaseModel):
+    name: str
+    provider: str
+    enabled: bool
+    # keyless | credentials-required | credentials-configured
+    auth: str
+    live: bool
+    detail: str
+    api_base: str
+    sites: list[dict[str, Any]] = Field(default_factory=list)

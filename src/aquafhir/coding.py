@@ -7,9 +7,11 @@ from uuid import uuid4
 import yaml
 
 from aquafhir.models import (
+    AcceptedValue,
     CandidateCoding,
     Coding,
     MappingProposal,
+    OneHealthLeg,
     ProposerKind,
     RawReading,
 )
@@ -49,6 +51,12 @@ class ReviewedCodingAgent:
     safety net for the Gemini co-pilot in `coding_llm.py`: the catalog it loads
     is the only vocabulary a model is allowed to choose from, and unit
     arithmetic always runs here, never in the model.
+
+    A rule may describe a *quantity* indicator (`accepted_units`, optional
+    `unit_conversions` and `plausible_range`), a *coded* indicator
+    (`value_set`), or both. Coded indicators are how the OAH IG models foam,
+    macrophytes and the ordinal citizen-science assessments: the published
+    value is a concept from a reviewed value set, never a number.
     """
 
     def __init__(self, rules_path: Path | str, review_threshold: float = 0.9) -> None:
@@ -73,6 +81,30 @@ class ReviewedCodingAgent:
         """
         return list(rule.get("accepted_units", []))
 
+    @staticmethod
+    def accepted_values_for_rule(rule: dict[str, Any]) -> list[AcceptedValue]:
+        """Concepts a *published* coded value may be, from the IG's value set."""
+        return [
+            AcceptedValue(
+                code=item["code"],
+                display=item["display"],
+                aliases=list(item.get("aliases", [])),
+            )
+            for item in (rule.get("value_set") or {}).get("codes", [])
+        ]
+
+    @staticmethod
+    def leg_for_rule(rule: dict[str, Any]) -> OneHealthLeg:
+        return OneHealthLeg(rule.get("leg", OneHealthLeg.ENVIRONMENTAL.value))
+
+    @staticmethod
+    def takes_quantity(rule: dict[str, Any]) -> bool:
+        return bool(rule.get("accepted_units"))
+
+    @staticmethod
+    def takes_coded_value(rule: dict[str, Any]) -> bool:
+        return bool((rule.get("value_set") or {}).get("codes"))
+
     def rule_for_code(self, code: str) -> dict[str, Any] | None:
         return self._by_code.get(code)
 
@@ -83,6 +115,14 @@ class ReviewedCodingAgent:
         # Display always comes from the reviewed catalog, never from a model.
         return Coding(system=self.system, code=rule["code"], display=rule["display"])
 
+    def value_coding_for(self, rule: dict[str, Any], code: str) -> Coding | None:
+        """The canonical Coding for one value-set concept, or None."""
+        for item in self.accepted_values_for_rule(rule):
+            if item.code == code:
+                system = (rule.get("value_set") or {}).get("system") or self.system
+                return Coding(system=system, code=item.code, display=item.display)
+        return None
+
     def catalog_for_prompt(self) -> list[dict[str, Any]]:
         return [
             {
@@ -90,6 +130,8 @@ class ReviewedCodingAgent:
                 "display": rule["display"],
                 "aliases": list(rule.get("aliases", [])),
                 "known_units": self.known_units_for_rule(rule),
+                "known_values": [item.code for item in self.accepted_values_for_rule(rule)],
+                "leg": self.leg_for_rule(rule).value,
             }
             for rule in self.rules
         ]
@@ -105,6 +147,12 @@ class ReviewedCodingAgent:
         for rule in self.rules:
             units.extend(self.known_units_for_rule(rule))
         return sorted(dict.fromkeys(units))
+
+    def known_values(self) -> list[str]:
+        values: list[str] = []
+        for rule in self.rules:
+            values.extend(item.code for item in self.accepted_values_for_rule(rule))
+        return sorted(dict.fromkeys(values))
 
     def codes(self) -> list[str]:
         return [rule["code"] for rule in self.rules]
@@ -142,29 +190,17 @@ class ReviewedCodingAgent:
         ]
 
     def unit_candidates(self, reading: RawReading, limit: int = 1) -> list[CandidateCoding]:
-        """Return a code suggestion when the source unit points to exactly one rule.
-
-        This is deliberately only a suggestion. A bad parameter label such as
-        "where" should not become an approved Observation just because its unit
-        looks familiar, but the reviewer should not have to hunt for the one
-        plausible catalog code either.
-        """
-        matches: list[dict[str, Any]] = []
-        for rule in self.rules:
-            unit = self.canonical_unit(reading.unit, rule)
-            if unit in self.known_units_for_rule(rule):
-                matches.append(rule)
+        """Suggest a code when exactly one reviewed rule recognizes the unit."""
+        matches = [
+            rule for rule in self.rules
+            if self.canonical_unit(reading.unit, rule) in self.known_units_for_rule(rule)
+        ]
         if len(matches) != 1:
             return []
         rule = matches[0]
-        return [
-            CandidateCoding(
-                code=rule["code"],
-                display=rule["display"],
-                score=0.86,
-                origin="reviewed-unit",
-            )
-        ][:limit]
+        return [CandidateCoding(
+            code=rule["code"], display=rule["display"], score=0.86, origin="reviewed-unit"
+        )][:limit]
 
     def propose(self, reading: RawReading) -> MappingProposal:
         ranked = self.rank(reading.parameter)
@@ -174,27 +210,29 @@ class ReviewedCodingAgent:
         coding = None
         normalized_value = None
         normalized_unit = None
+        normalized_coding = None
+        leg = OneHealthLeg.ENVIRONMENTAL
         rationale = "No sufficiently close curated terminology match."
 
         if score >= MATCH_FLOOR:
             coding = self.coding_for_code(rule["code"])
-            normalized_value, normalized_unit, unit_note = self.normalize_unit(
-                reading.value, reading.unit, rule
-            )
-            if normalized_unit is None:
-                score = min(score, UNRESOLVED_UNIT_CEILING)
-            rationale = f"Matched input to curated alias '{alias}'. {unit_note}"
+            leg = self.leg_for_rule(rule)
+            if reading.is_coded:
+                normalized_coding, note = self.normalize_coded(reading.coded_value or "", rule)
+                if normalized_coding is None:
+                    score = min(score, UNRESOLVED_UNIT_CEILING)
+            else:
+                normalized_value, normalized_unit, note = self.normalize_unit(
+                    reading.value if reading.value is not None else 0.0, reading.unit, rule
+                )
+                if normalized_unit is None:
+                    score = min(score, UNRESOLVED_UNIT_CEILING)
+            rationale = f"Matched input to curated alias '{alias}'. {note}"
         elif unit_candidates:
-            unit_candidate = unit_candidates[0]
             rationale = (
                 f"{rationale} Source unit '{reading.unit}' uniquely suggests "
-                f"{unit_candidate.display}; reviewer must confirm the code."
+                f"{unit_candidates[0].display}; reviewer must confirm the code."
             )
-
-        candidates = unit_candidates + [
-            candidate for candidate in self.candidates(reading.parameter)
-            if candidate.code not in {item.code for item in unit_candidates}
-        ]
 
         return MappingProposal(
             id=str(uuid4()),
@@ -202,11 +240,16 @@ class ReviewedCodingAgent:
             coding=coding,
             normalized_value=normalized_value,
             normalized_unit=normalized_unit,
+            normalized_coding=normalized_coding,
+            leg=leg,
             confidence=round(min(score, 0.99), 2),
             rationale=rationale,
             requires_review=True,
             proposer=ProposerKind.CURATED,
-            candidates=candidates[:3],
+        candidates=(unit_candidates + [
+            candidate for candidate in self.candidates(reading.parameter)
+            if candidate.code not in {item.code for item in unit_candidates}
+        ])[:3],
         )
 
     # -- unit handling -----------------------------------------------------
@@ -215,25 +258,14 @@ class ReviewedCodingAgent:
     def canonical_unit(unit: str, rule: dict[str, Any]) -> str:
         """Resolve explicit spelling aliases without folding case-sensitive SI prefixes."""
         known = ReviewedCodingAgent.known_units_for_rule(rule)
-        if unit in known:
-            return unit
         compact = re.sub(r"\s+", "", unit).replace("\u00b5", "u").replace("\u03bc", "u")
-        if compact in known:
-            return compact
-        aliases = {
-            "us/cm": "uS/cm",
-            "\u00b0C": "Cel",
-            "Celsius": "Cel",
-            "celsius": "Cel",
-            "degC": "Cel",
-            "pH": "[pH]",
-        }
+        aliases = {"us/cm": "uS/cm", "\u00b0C": "Cel", "Celsius": "Cel", "celsius": "Cel", "degC": "Cel", "pH": "[pH]"}
         candidate = aliases.get(compact, compact)
         return candidate if candidate in known else unit
 
-    @staticmethod
+    @classmethod
     def normalize_unit(
-        value: float, unit: str, rule: dict[str, Any]
+        cls, value: float, unit: str, rule: dict[str, Any]
     ) -> tuple[float | None, str | None, str]:
         """Convert a source quantity using reviewed factors only.
 
@@ -246,8 +278,15 @@ class ReviewedCodingAgent:
         proposers route their arithmetic through here, so a failed sensor
         cannot raise an alert down either path.
         """
+        if not cls.takes_quantity(rule):
+            return (
+                None,
+                None,
+                f"'{rule['code']}' publishes a coded value from a reviewed value set, "
+                "not a quantity; a number cannot be published for it.",
+            )
         original_unit = unit
-        unit = ReviewedCodingAgent.canonical_unit(unit, rule)
+        unit = cls.canonical_unit(unit, rule)
         if unit in rule.get("accepted_units", []):
             converted, target, note = value, unit, "Unit is an accepted UCUM code."
         else:
@@ -260,11 +299,43 @@ class ReviewedCodingAgent:
 
         if unit != original_unit:
             note = f"Recognized '{original_unit}' as '{unit}' using a reviewed alias. {note}"
-
         implausible = range_violation(converted, target, rule)
         if implausible:
             return None, None, f"{note} {implausible}"
         return converted, target, note
+
+    def normalize_coded(
+        self, coded_value: str, rule: dict[str, Any]
+    ) -> tuple[Coding | None, str]:
+        """Resolve a source's word onto one concept of the rule's value set.
+
+        Exact and alias matches only, after case and punctuation folding. There
+        is deliberately no fuzzy matching here: "some foam" is not "extensive",
+        and the cost of a wrong coded value is a wrong published fact. The
+        co-pilot may *name* which concept a phrase means; this method still
+        decides whether that name is in the reviewed set.
+        """
+        if not self.takes_coded_value(rule):
+            return (
+                None,
+                f"'{rule['code']}' publishes a quantity; a coded value cannot be published "
+                "for it. Supply a numeric value with a unit instead.",
+            )
+        wanted = _normalize(coded_value)
+        for item in self.accepted_values_for_rule(rule):
+            names = [item.code, item.display, *item.aliases]
+            if any(_normalize(name) == wanted for name in names):
+                coding = self.value_coding_for(rule, item.code)
+                return (
+                    coding,
+                    f"Coded value '{coded_value}' is '{item.code}' in the reviewed value set.",
+                )
+        allowed = ", ".join(item.code for item in self.accepted_values_for_rule(rule))
+        return (
+            None,
+            f"Coded value '{coded_value}' is not in the reviewed value set ({allowed}); "
+            "needs reviewer correction.",
+        )
 
 
 def range_violation(value: float, unit: str, rule: dict[str, Any]) -> str | None:

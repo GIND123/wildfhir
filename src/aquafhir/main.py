@@ -15,7 +15,20 @@ from aquafhir.briefing import KNOWN_AUDIENCES, BriefingWriter
 from aquafhir.coding import CodingProposer, ReviewedCodingAgent
 from aquafhir.coding_llm import GeminiCodingAgent
 from aquafhir.config import Settings, get_settings
-from aquafhir.fhir import OAH_LOCATION_PROFILE, OAH_OBSERVATION_PROFILE, FhirClient
+from aquafhir.connectors import (
+    HUBEAU_PARAMETERS,
+    ConnectorError,
+    ConnectorUnavailableError,
+    CopernicusClient,
+    HubEauClient,
+    load_connector_config,
+)
+from aquafhir.fhir import (
+    OAH_HEALTH_MEASURE_PROFILE,
+    OAH_LOCATION_PROFILE,
+    OAH_OBSERVATION_PROFILE,
+    FhirClient,
+)
 from aquafhir.gbif import GbifClient, GbifError
 from aquafhir.gemini import GeminiClient, GeminiError
 from aquafhir.gemini import safe_message as gemini_safe_message
@@ -29,6 +42,9 @@ from aquafhir.models import (
     BatchApprovalResult,
     BatchReviewDecision,
     ChainVerification,
+    ConnectorPullRequest,
+    ConnectorPullResult,
+    ConnectorStatus,
     IntakeRequest,
     IntakeResult,
     MappingProposal,
@@ -37,6 +53,7 @@ from aquafhir.models import (
     RawReading,
     RejectDecision,
     ReviewDecision,
+    SceneCandidate,
     SituationReport,
     TerminologyMatch,
     UmlsStatus,
@@ -68,6 +85,7 @@ def build_gemini_client(settings: Settings) -> GeminiClient:
         max_output_tokens=settings.gemini_max_output_tokens,
         max_retries=settings.gemini_max_retries,
         thinking_budget=settings.gemini_thinking_budget,
+        fallback_model=settings.gemini_fallback_model,
     )
 
 
@@ -111,11 +129,40 @@ def build_gbif_client(settings: Settings) -> GbifClient:
     )
 
 
+def build_hubeau_client(settings: Settings, source_id: str) -> HubEauClient:
+    return HubEauClient(
+        enabled=settings.hubeau_enabled,
+        api_base=settings.hubeau_api_base,
+        timeout=settings.hubeau_timeout_seconds,
+        max_retries=settings.hubeau_max_retries,
+        source_id=source_id,
+    )
+
+
+def build_copernicus_client(settings: Settings, source_id: str) -> CopernicusClient:
+    return CopernicusClient(
+        enabled=settings.sentinel2_enabled,
+        client_id=settings.cdse_client_id,
+        client_secret=settings.cdse_client_secret,
+        catalogue_base=settings.cdse_catalogue_base,
+        statistics_url=settings.cdse_statistics_url,
+        token_url=settings.cdse_token_url,
+        timeout=settings.cdse_timeout_seconds,
+        max_retries=settings.cdse_max_retries,
+        source_id=source_id,
+    )
+
+
 def build_service(settings: Settings) -> BridgeService:
     gemini = build_gemini_client(settings)
     umls = build_umls_client(settings)
     if not umls.enabled:
         logger.info("UMLS_API_KEY not set; terminology crosswalk suggestions are disabled")
+    connectors = (
+        load_connector_config(settings.connectors_path)
+        if settings.connectors_path.exists()
+        else {"hubeau": {"stations": []}, "sentinel2": {"sites": []}}
+    )
     return BridgeService(
         repository=Repository(settings.database_path),
         coding_agent=build_coding_agent(settings, gemini),
@@ -135,6 +182,14 @@ def build_service(settings: Settings) -> BridgeService:
         ),
         replay_path=settings.replay_data_path,
         gemini=gemini,
+        hubeau=build_hubeau_client(
+            settings, connectors.get("hubeau", {}).get("source_id", "hubeau-naiades")
+        ),
+        copernicus=build_copernicus_client(
+            settings,
+            connectors.get("sentinel2", {}).get("source_id", "copernicus-sentinel2-l2a"),
+        ),
+        connector_config=connectors,
     )
 
 
@@ -194,6 +249,25 @@ async def approval_validation_handler(
 @app.exception_handler(AiUnavailableError)
 async def ai_unavailable_handler(_: Request, error: AiUnavailableError) -> JSONResponse:
     return JSONResponse(status_code=503, content={"detail": str(error)})
+
+
+@app.exception_handler(ConnectorUnavailableError)
+async def connector_unavailable_handler(
+    _: Request, error: ConnectorUnavailableError
+) -> JSONResponse:
+    return JSONResponse(status_code=503, content={"detail": str(error)})
+
+
+@app.exception_handler(ConnectorError)
+async def connector_error_handler(_: Request, error: ConnectorError) -> JSONResponse:
+    logger.warning("Connector call failed: %s", error, exc_info=True)
+    return JSONResponse(
+        status_code=502,
+        content={
+            "detail": "The upstream data service could not be reached or refused the request.",
+            "error_code": "connector-upstream-error",
+        },
+    )
 
 
 @app.exception_handler(GeminiError)
@@ -257,9 +331,11 @@ def health(service: Service) -> dict[str, Any]:
         "threshold_policy_status": service.thresholds.status,
         "ai_mode": "gemini" if settings.gemini_enabled else "deterministic-only",
         "ai_model": settings.gemini_model if settings.gemini_enabled else None,
+        "ai_fallback_model": _effective_fallback(settings),
         "terminology_crosswalk": "+".join(service.terminology.sources())
         if service.terminology and service.terminology.available
         else "off",
+        "connectors": [item.name for item in service.connector_statuses() if item.live],
     }
 
 
@@ -282,6 +358,7 @@ def ai_status(service: Service) -> AiStatus:
         health=health,
         last_call=last,
         model=settings.gemini_model,
+        fallback_model=_effective_fallback(settings),
         assist_mode=settings.gemini_assist_mode.value if enabled else "off",
         assist_below_confidence=settings.gemini_assist_below_confidence,
         confidence_ceiling=settings.gemini_confidence_ceiling,
@@ -373,6 +450,16 @@ def terminology_status(service: Service) -> UmlsStatus:
     )
 
 
+def _effective_fallback(settings: Settings) -> str | None:
+    """The fallback model that would actually be tried, or None.
+
+    A fallback equal to the pinned model is a no-op, and reporting it as
+    "falls back to itself" on the integrations page was misleading.
+    """
+    fallback = settings.gemini_fallback_model.strip()
+    return fallback if fallback and fallback != settings.gemini_model else None
+
+
 def _mask_secret(secret: str) -> str | None:
     """A fingerprint a reviewer can recognise, never the credential itself."""
     value = secret.strip()
@@ -417,6 +504,7 @@ def integrations(service: Service) -> dict[str, Any]:
             "key_fingerprint": _mask_secret(settings.gemini_api_key),
             "key_env": "GEMINI_API_KEY",
             "model": settings.gemini_model,
+            "fallback_model": _effective_fallback(settings),
             "api_base": settings.gemini_api_base,
             "assist_mode": settings.gemini_assist_mode.value,
             "assist_below_confidence": settings.gemini_assist_below_confidence,
@@ -450,7 +538,31 @@ def integrations(service: Service) -> dict[str, Any]:
             "write_mode": "enabled" if settings.fhir_write_enabled else "dry-run",
             "timeout_seconds": settings.fhir_timeout_seconds,
             "observation_profile": OAH_OBSERVATION_PROFILE,
+            "health_measure_profile": OAH_HEALTH_MEASURE_PROFILE,
             "location_profile": OAH_LOCATION_PROFILE,
+        },
+        "connectors": {
+            "path": str(settings.connectors_path),
+            "hubeau": {
+                "enabled": settings.hubeau_enabled,
+                "api_base": settings.hubeau_api_base,
+                "auth": "keyless",
+                "timeout_seconds": settings.hubeau_timeout_seconds,
+                "max_retries": settings.hubeau_max_retries,
+                "parameters": HUBEAU_PARAMETERS,
+            },
+            "sentinel2": {
+                "enabled": settings.sentinel2_enabled,
+                "catalogue_base": settings.cdse_catalogue_base,
+                "statistics_url": settings.cdse_statistics_url,
+                "token_url": settings.cdse_token_url,
+                "client_id": settings.cdse_client_id.strip() or None,
+                "client_secret_fingerprint": _mask_secret(settings.cdse_client_secret),
+                "credentialed": settings.cdse_enabled,
+                "timeout_seconds": settings.cdse_timeout_seconds,
+                "max_retries": settings.cdse_max_retries,
+            },
+            "status": [item.model_dump(mode="json") for item in service.connector_statuses()],
         },
         "webhook": {
             "header": "X-AquaFHIR-Secret",
@@ -492,10 +604,75 @@ def coding_catalog(service: Service) -> dict[str, Any]:
                 "accepted_units": list(rule.get("accepted_units", [])),
                 "unit_conversions": rule.get("unit_conversions", {}),
                 "plausible_range": rule.get("plausible_range"),
+                "leg": curated.leg_for_rule(rule).value,
+                "value_set": [
+                    item.model_dump() for item in curated.accepted_values_for_rule(rule)
+                ],
             }
             for rule in curated.rules
         ],
     }
+
+
+# -- live connectors -------------------------------------------------------
+
+
+@app.get(
+    "/api/v1/connectors",
+    response_model=list[ConnectorStatus],
+    summary="Live data connectors: what each one can do right now, and with which credentials",
+)
+def connectors(service: Service) -> list[ConnectorStatus]:
+    return service.connector_statuses()
+
+
+@app.post(
+    "/api/v1/connectors/hubeau/pull",
+    response_model=ConnectorPullResult,
+    status_code=status.HTTP_201_CREATED,
+    summary="Pull real river-quality analyses from Hub'Eau (keyless) as pending proposals",
+)
+def pull_hubeau(
+    service: Service, request_body: ConnectorPullRequest | None = None
+) -> ConnectorPullResult:
+    return service.pull_hubeau(request_body or ConnectorPullRequest())
+
+
+@app.get(
+    "/api/v1/connectors/sentinel2/scenes",
+    summary="Which Sentinel-2 L2A scenes cover a configured site (Copernicus catalogue, keyless)",
+)
+def sentinel_scenes(
+    service: Service,
+    site_code: Annotated[str, Query(description="A site_code from config/connectors.yaml")],
+    days: Annotated[int, Query(ge=1, le=3660)] = 60,
+    max_cloud: Annotated[float, Query(ge=0, le=100)] = 40.0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 10,
+) -> dict[str, Any]:
+    try:
+        site, scenes, url = service.sentinel_scenes(
+            site_code, days=days, max_cloud=max_cloud, limit=limit
+        )
+    except ProposalNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return {
+        "site": site,
+        "scenes": [SceneCandidate.model_dump(item, mode="json") for item in scenes],
+        "request_url": url,
+    }
+
+
+@app.post(
+    "/api/v1/connectors/sentinel2/pull",
+    response_model=ConnectorPullResult,
+    status_code=status.HTTP_201_CREATED,
+    summary="Compute Sentinel-2 NDCI over a configured site (needs a CDSE OAuth client)",
+)
+def pull_sentinel2(request_body: ConnectorPullRequest, service: Service) -> ConnectorPullResult:
+    try:
+        return service.pull_sentinel2(request_body)
+    except ProposalNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 # -- ingestion and review --------------------------------------------------

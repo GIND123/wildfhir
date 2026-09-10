@@ -28,13 +28,22 @@ class Settings(BaseSettings):
     webhook_shared_secret: str = "local-demo-secret"
     coding_rules_path: Path = Path("config/coding-rules.yaml")
     thresholds_path: Path = Path("config/thresholds.yaml")
+    connectors_path: Path = Path("config/connectors.yaml")
     replay_data_path: Path = Path("data/oder-replay.csv")
 
     # --- Gemini co-pilot -------------------------------------------------
     # The key is read from GEMINI_API_KEY. An absent key disables every AI
     # feature; the deterministic pipeline keeps working unchanged.
     gemini_api_key: str = ""
+    # `gemini-3.1-pro-preview` writes the best briefings but needs a billed
+    # project: a free-tier key answers HTTP 429 for it, which used to look
+    # like a silent AI failure on a judge's fresh key. The fallback below is
+    # what makes the default safe to ship.
     gemini_model: str = "gemini-3.1-pro-preview"
+    # Tried once, automatically, when the pinned model answers 429 (quota) or
+    # 404 (retired). Empty disables the fallback. The model that actually
+    # answered is what gets recorded on the proposal, never the pinned name.
+    gemini_fallback_model: str = "gemini-3.1-flash-lite"
     gemini_api_base: str = "https://generativelanguage.googleapis.com/v1beta"
     gemini_timeout_seconds: float = 30.0
     gemini_max_output_tokens: int = 2048
@@ -82,6 +91,34 @@ class Settings(BaseSettings):
     gbif_api_base: str = "https://api.gbif.org/v1"
     gbif_timeout_seconds: float = 15.0
     gbif_max_retries: int = 2
+
+    # --- Live connectors -------------------------------------------------
+    # Hub'Eau is the French national open-data API for water. Its river
+    # quality service (Naiades) is keyless and covers Toulouse, an
+    # OneAquaHealth pilot city. Readings it returns are real measurements.
+    hubeau_enabled: bool = True
+    hubeau_api_base: str = "https://hubeau.eaufrance.fr/api/v2"
+    hubeau_timeout_seconds: float = 30.0
+    hubeau_max_retries: int = 2
+    # Copernicus Data Space Ecosystem. The product catalogue is keyless and
+    # answers "which Sentinel-2 scenes cover this site, how cloudy". Computing
+    # an index over a site needs the Sentinel Hub Statistical API, which
+    # authenticates with an OAuth2 client (client credentials) from
+    # https://shapps.dataspace.copernicus.eu/dashboard/#/account/settings.
+    sentinel2_enabled: bool = True
+    cdse_client_id: str = ""
+    cdse_client_secret: str = ""
+    cdse_catalogue_base: str = "https://catalogue.dataspace.copernicus.eu/odata/v1"
+    cdse_statistics_url: str = "https://sh.dataspace.copernicus.eu/api/v1/statistics"
+    cdse_token_url: str = (
+        "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
+    )
+    cdse_timeout_seconds: float = 60.0
+    cdse_max_retries: int = 2
+
+    @property
+    def cdse_enabled(self) -> bool:
+        return bool(self.cdse_client_id.strip() and self.cdse_client_secret.strip())
 
     @property
     def umls_enabled(self) -> bool:

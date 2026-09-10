@@ -2,29 +2,51 @@
 # candidates later, but it must never bypass the review state machine.
 #
 # Every `code` below is a real concept published in the OneAquaHealth temporary
-# code system (286 concepts, https://build.fhir.org/ig/hl7-eu/oah/
-# CodeSystem-temporarySystem-oah-eu.html). Nothing here is invented. Where a
-# real incident turned on an indicator the IG does not define -- turbidity,
-# free chlorine residual, cyanide, microcystin -- there is deliberately no rule,
-# so the pipeline refuses to code it. See docs/incidents.md.
+# code system (https://build.fhir.org/ig/hl7-eu/oah/CodeSystem-temporarySystem-oah-eu.html).
+# The exact release this catalog was checked against is vendored in
+# data/oah/, and tests/test_oah_package.py fails if a code here is not in it.
+# Nothing here is invented. Where a real incident turned on an indicator the
+# IG does not define -- turbidity, free chlorine residual, cyanide, microcystin
+# -- there is deliberately no rule, so the pipeline refuses to code it. See
+# docs/incidents.md.
+#
+# `leg` names the One Health leg the indicator belongs to and decides which
+# OAH profile it is published through: `environmental` and `animal` through
+# observation-indicators-oah, `human` through observation-health-measure-oah.
+# Omitted means environmental.
+#
+# A rule with `accepted_units` publishes a UCUM quantity. A rule with a
+# `value_set` publishes a coded value (valueCodeableConcept) drawn from that
+# reviewed set, which is how the IG models foam, macrophytes and the ordinal
+# citizen-science assessments. A rule may carry both.
 #
 # `plausible_range` is a reviewed physical/instrument bound on the *normalized*
 # quantity. A value outside it is not published as a number: the quantity is
 # withheld exactly like an unresolvable unit, approval is blocked, and a person
 # corrects it. A stuck or miswired sensor must not be able to raise a critical
 # alert.
+#
+# Unit spellings: the Hub'Eau connector hands over French laboratory units
+# verbatim (µS/cm with the micro sign, °C, unité pH, mg(NO3)/L). Each one that
+# has an exact, reviewed relationship to the accepted UCUM unit is listed as a
+# conversion. Ones that do not (n/(100mL) for E. coli, which may be MPN or CFU
+# depending on method; mg(P2O5)/L, which needs a stoichiometric choice) are
+# deliberately absent, so they arrive as unresolved units for a reviewer.
 system: http://hl7.eu/fhir/ig/oah/CodeSystem/temporarySystem-oah-eu
 rules:
+  # -- environmental leg ----------------------------------------------------
   - code: electrical-conductivity
     display: Electrical conductivity
-    aliases: [conductivity, electrical conductivity, ec, salinity proxy]
+    aliases: [conductivity, electrical conductivity, ec, salinity proxy, conductivité à 25°c, conductivité]
     accepted_units: [mS/cm]
     unit_conversions:
       uS/cm: { factor: 0.001, target: mS/cm }
+      µS/cm: { factor: 0.001, target: mS/cm }   # U+00B5 micro sign, as Hub'Eau writes it
+      μS/cm: { factor: 0.001, target: mS/cm }   # U+03BC Greek mu, as some exports write it
     plausible_range: { min: 0.0, max: 200.0 }
   - code: ndci
     display: Normalized Difference Chlorophyll Index (NDCI)
-    aliases: [ndci, normalized difference chlorophyll index, sentinel chlorophyll index]
+    aliases: [ndci, normalized difference chlorophyll index, sentinel chlorophyll index, sentinel-2 ndci (red-edge chlorophyll index), water pixels]
     accepted_units: ['1']
     plausible_range: { min: -1.0, max: 1.0 }
   - code: mci
@@ -34,51 +56,65 @@ rules:
     plausible_range: { min: -1.0, max: 1.0 }
   - code: waterTemperature
     display: Water temperature
-    aliases: [water temperature, stream temperature, temp water]
+    aliases: [water temperature, stream temperature, temp water, température de l'eau]
     accepted_units: [Cel]
     unit_conversions:
       degC: { factor: 1.0, target: Cel }
+      °C: { factor: 1.0, target: Cel }
     plausible_range: { min: -5.0, max: 50.0 }
   - code: dissolved-oxygen
     display: Dissolved Oxygen
-    aliases: [dissolved oxygen, dissolved o2, do]
+    aliases: [dissolved oxygen, dissolved o2, do, oxygène dissous]
     accepted_units: [mg/L]
+    unit_conversions:
+      mg(O2)/L: { factor: 1.0, target: mg/L }
     plausible_range: { min: 0.0, max: 25.0 }
   - code: ph
     display: pH
-    aliases: [ph, pH]
+    aliases: [ph, pH, potentiel en hydrogène (ph), potentiel hydrogène]
     accepted_units: ['[pH]']
+    unit_conversions:
+      unité pH: { factor: 1.0, target: '[pH]' }
     plausible_range: { min: 0.0, max: 14.0 }
   - code: chloride
     display: Chloride
-    aliases: [chloride, cl-, chloride dissolved]
+    aliases: [chloride, cl-, chloride dissolved, chlorures]
     accepted_units: [mg/L]
     plausible_range: { min: 0.0, max: 50000.0 }
   - code: nitrate
     display: Nitrate
-    aliases: [nitrate, no3, nitrate as n, nitraat, nitrato]
+    aliases: [nitrate, no3, nitrate as n, nitraat, nitrato, nitrates]
     accepted_units: [mg/L]
     unit_conversions:
       ug/L: { factor: 0.001, target: mg/L }
+      mg(NO3)/L: { factor: 1.0, target: mg/L }   # the OAH concept is nitrate as NO3
     plausible_range: { min: 0.0, max: 2000.0 }
   - code: nitrite
     display: Nitrite
-    aliases: [nitrite, no2, nitrite as n]
+    aliases: [nitrite, no2, nitrite as n, nitrites]
     accepted_units: [mg/L]
+    unit_conversions:
+      mg(NO2)/L: { factor: 1.0, target: mg/L }
     plausible_range: { min: 0.0, max: 500.0 }
   - code: ammonium
     display: Ammonium
     aliases: [ammonium, nh4, ammonium as n, ammoniacal nitrogen]
     accepted_units: [mg/L]
+    unit_conversions:
+      mg(NH4)/L: { factor: 1.0, target: mg/L }
     plausible_range: { min: 0.0, max: 1000.0 }
   - code: total-phosphates
     display: Total phosphates
-    aliases: [total phosphates, total phosphorus, tp, phosphate total]
+    aliases: [total phosphates, total phosphorus, tp, phosphate total, phosphore total]
     accepted_units: [mg/L]
+    unit_conversions:
+      mg(P)/L: { factor: 1.0, target: mg/L }
+      # mg(P2O5)/L is deliberately absent: converting it needs a stoichiometric
+      # choice (P vs PO4 vs P2O5) that a reviewer must make explicitly.
     plausible_range: { min: 0.0, max: 500.0 }
   - code: tss
     display: Total suspended solids (TSS)
-    aliases: [total suspended solids, tss, suspended solids, suspended sediment]
+    aliases: [total suspended solids, tss, suspended solids, suspended sediment, matières en suspension]
     accepted_units: [mg/L]
     plausible_range: { min: 0.0, max: 100000.0 }
   # Coliform counts. `{cfu}/dL` is the UCUM form of the customary
@@ -86,50 +122,41 @@ rules:
   # convertible unit: MPN and CFU are different estimators, and silently
   # equating them is the class of error this bridge exists to prevent. An MPN
   # result therefore arrives as an unresolved unit for a reviewer to decide.
+  # Hub'Eau's n/(100mL) is absent for the same reason: the method decides
+  # whether it is MPN or CFU, and the connector does not guess.
   - code: coliforms
     display: Coliforms
-    aliases: [coliforms, total coliforms, faecal coliforms, fecal coliforms, e coli, escherichia coli]
+    aliases: [coliforms, total coliforms, faecal coliforms, fecal coliforms, e coli, escherichia coli, escherichia coli (e. coli)]
     accepted_units: ['{cfu}/dL']
     unit_conversions:
       '{cfu}/100mL': { factor: 1.0, target: '{cfu}/dL' }
       'CFU/100mL': { factor: 1.0, target: '{cfu}/dL' }
     plausible_range: { min: 0.0, max: 100000000.0 }
-  # Biological indicators. These are the codes the GBIF biodiversity crosswalk
-  # attaches a taxon to: the OAH code says *what kind of thing was counted*,
-  # the taxon says *which organism*. Both are real concepts in the published
-  # OAH code system. Note there is deliberately no rule for phytoplankton cell
-  # density: the IG has no code for it, so such readings stay uncoded.
-  - code: fishes
-    display: Fish
-    aliases: [fish, fishes, fish count, dead fish, fish abundance]
-    accepted_units: ['{count}']
-    plausible_range: { min: 0.0, max: 10000000.0 }
-  - code: macroinvertebreates
-    display: Benthic Macro invertebrates count
-    aliases: [macroinvertebrates, benthic macroinvertebrates, macroinvertebrate count, benthic invertebrates]
-    accepted_units: ['{count}']
-    plausible_range: { min: 0.0, max: 10000000.0 }
   - code: lead-dissolved
     display: Lead dissolved
-    aliases: [lead, lead dissolved, dissolved lead, pb]
+    aliases: [lead, lead dissolved, dissolved lead, pb, plomb]
     accepted_units: [ug/L]
     unit_conversions:
       mg/L: { factor: 1000.0, target: ug/L }
       '[ppb]': { factor: 1.0, target: ug/L }
+      µg/L: { factor: 1.0, target: ug/L }
     plausible_range: { min: 0.0, max: 100000.0 }
   - code: mercury-dissolved
     display: Mercury dissolved
-    aliases: [mercury, mercury dissolved, dissolved mercury, hg]
+    aliases: [mercury, mercury dissolved, dissolved mercury, hg, mercure]
     accepted_units: [ug/L]
     unit_conversions:
       mg/L: { factor: 1000.0, target: ug/L }
+      µg/L: { factor: 1.0, target: ug/L }
     plausible_range: { min: 0.0, max: 10000.0 }
   - code: copper-dissolved
     display: Copper dissolved
-    aliases: [copper, copper dissolved, dissolved copper, cu]
+    aliases: [copper, copper dissolved, dissolved copper, cu, cuivre]
     accepted_units: [ug/L]
     unit_conversions:
       mg/L: { factor: 1000.0, target: ug/L }
+      mg(Cu)/L: { factor: 1000.0, target: ug/L }
+      µg/L: { factor: 1.0, target: ug/L }
     plausible_range: { min: 0.0, max: 1000000.0 }
   - code: zinc-dissolved
     display: Zinc dissolved
@@ -137,6 +164,8 @@ rules:
     accepted_units: [ug/L]
     unit_conversions:
       mg/L: { factor: 1000.0, target: ug/L }
+      mg(Zn)/L: { factor: 1000.0, target: ug/L }
+      µg/L: { factor: 1.0, target: ug/L }
     plausible_range: { min: 0.0, max: 1000000.0 }
   - code: arsenic-dissolved
     display: Arsenic dissolved
@@ -144,6 +173,7 @@ rules:
     accepted_units: [ug/L]
     unit_conversions:
       mg/L: { factor: 1000.0, target: ug/L }
+      µg/L: { factor: 1.0, target: ug/L }
     plausible_range: { min: 0.0, max: 100000.0 }
   - code: aluminium-dissolved
     display: Aluminium dissolved
@@ -151,4 +181,110 @@ rules:
     accepted_units: [ug/L]
     unit_conversions:
       mg/L: { factor: 1000.0, target: ug/L }
+      µg/L: { factor: 1.0, target: ug/L }
     plausible_range: { min: 0.0, max: 1000000.0 }
+
+  # -- coded citizen-science indicators ------------------------------------
+  # The OneAquaHealth app records these as words, not numbers. The value set
+  # is the IG's own macrophytes-indicator-value-oah-vs (absent / present /
+  # extensive), whose three concepts live in the same temporary code system.
+  # A word outside it is withheld for a reviewer, never rounded to the
+  # nearest concept.
+  - code: foam
+    display: Foam/colour/smell
+    aliases: [foam, foam colour smell, foam/colour/smell, foam or scum, surface foam, colour, smell, odour]
+    value_set:
+      codes:
+        - { code: absent, display: Absent, aliases: [none, "no", nil, not observed, clear] }
+        - { code: present, display: Present, aliases: ["yes", some, observed, visible, traces] }
+        - { code: extensive, display: Extensive, aliases: [heavy, widespread, abundant, thick] }
+  - code: macrophytes
+    display: Macrophytes
+    aliases: [macrophytes, aquatic plants, macrophyte cover, water plants]
+    value_set:
+      codes:
+        - { code: absent, display: Absent, aliases: [none, "no", nil, not observed] }
+        - { code: present, display: Present, aliases: ["yes", some, observed, sparse, moderate] }
+        - { code: extensive, display: Extensive, aliases: [heavy, dense, widespread, abundant, choked] }
+
+  # -- animal leg -----------------------------------------------------------
+  # Biological indicators. These are the codes the GBIF biodiversity crosswalk
+  # attaches a taxon to: the OAH code says *what kind of thing was counted*,
+  # the taxon says *which organism*. Both are real concepts in the published
+  # OAH code system. Note there is deliberately no rule for phytoplankton cell
+  # density: the IG has no code for it, so such readings stay uncoded.
+  # The IG binds these to the same indicators profile as the environmental
+  # leg; `leg: animal` is recorded on the Observation as a tag so the legs can
+  # be split or joined in one search.
+  - code: fishes
+    display: Fish
+    leg: animal
+    aliases: [fish, fishes, fish count, dead fish, fish abundance]
+    accepted_units: ['{count}']
+    plausible_range: { min: 0.0, max: 10000000.0 }
+  # Benthic macroinvertebrates: a count from a kick sample, or the app's
+  # coded presence assessment. Both are legal for this indicator.
+  - code: macroinvertebreates
+    display: Benthic Macro invertebrates count
+    leg: animal
+    aliases: [macroinvertebrates, benthic macroinvertebrates, macroinvertebrate count, benthic invertebrates, macroinvertebreates, invertebrates]
+    accepted_units: ['{count}']
+    plausible_range: { min: 0.0, max: 10000000.0 }
+    value_set:
+      codes:
+        - { code: absent, display: Absent, aliases: [none, "no", nil, not found, not observed] }
+        - { code: present, display: Present, aliases: ["yes", some, found, observed, few] }
+        - { code: extensive, display: Extensive, aliases: [abundant, many, numerous, rich] }
+  - code: amphibians
+    display: Amphibians
+    leg: animal
+    aliases: [amphibians, amphibian count, frogs, newts, toads, dead amphibians]
+    accepted_units: ['{count}']
+    plausible_range: { min: 0.0, max: 1000000.0 }
+  - code: ticks
+    display: Ticks
+    leg: animal
+    aliases: [ticks, tick count, tick density, ixodes]
+    accepted_units: ['{count}']
+    plausible_range: { min: 0.0, max: 1000000.0 }
+
+  # -- human leg ------------------------------------------------------------
+  # The IG defines these as "cases per 100,000 inhabitants, per district".
+  # `{cases}/100000` is that rate in UCUM (an annotated count over the
+  # integer factor 100 000). A percentage of the population is the same rate
+  # times 1 000, which is the one reviewed conversion offered. A raw case
+  # count cannot be converted without the population, so it is deliberately
+  # not listed: it arrives as an unresolved unit for a reviewer who knows the
+  # denominator.
+  - code: campylobacter
+    display: '% of people with Campylobacter'
+    leg: human
+    aliases: [campylobacter, campylobacteriosis, campylobacter cases, campylobacter notifications, campylobacter notifications per 100000]
+    accepted_units: ['{cases}/100000']
+    unit_conversions:
+      '%': { factor: 1000.0, target: '{cases}/100000' }
+    plausible_range: { min: 0.0, max: 100000.0 }
+  - code: gastrointestinal
+    display: '% of people with Cases of Gastrointestinal diseases'
+    leg: human
+    aliases: [gastrointestinal, gastrointestinal illness, gastroenteritis, gi illness, acute gastrointestinal illness, gastrointestinal cases per 100000]
+    accepted_units: ['{cases}/100000']
+    unit_conversions:
+      '%': { factor: 1000.0, target: '{cases}/100000' }
+    plausible_range: { min: 0.0, max: 100000.0 }
+  - code: cryptosporidium
+    display: '% of people with Cryptosporidium'
+    leg: human
+    aliases: [cryptosporidium, cryptosporidiosis, cryptosporidiosis cases, cryptosporidium cases per 100000]
+    accepted_units: ['{cases}/100000']
+    unit_conversions:
+      '%': { factor: 1000.0, target: '{cases}/100000' }
+    plausible_range: { min: 0.0, max: 100000.0 }
+  - code: escherichia-coli
+    display: '% of people with Escherichia Coli'
+    leg: human
+    aliases: [e. coli infection, e coli infections, stec cases, escherichia coli infections per 100000, e. coli o157 cases]
+    accepted_units: ['{cases}/100000']
+    unit_conversions:
+      '%': { factor: 1000.0, target: '{cases}/100000' }
+    plausible_range: { min: 0.0, max: 100000.0 }

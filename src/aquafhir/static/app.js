@@ -22,13 +22,14 @@
     "mapping-proposed": "Proposed", "mapping-approved": "Approved", "mapping-rejected": "Rejected",
     "alert-created": "Incident raised", "briefing-drafted": "Advisory drafted",
     "situation-report": "Situation report", "unstructured-intake": "Bulletin intake",
-    "ai-call": "AI call",
+    "ai-call": "AI call", "connector-pull": "Live pull",
   };
+  const OPS = { gte: "≥", gt: ">", lte: "≤", lt: "<", in: "is", "not-in": "is not" };
 
   const state = {
     page: "board",
     health: {}, ai: { enabled: false }, umls: { enabled: false },
-    integrations: null, catalog: { system: null, codes: [] },
+    integrations: null, catalog: { system: null, codes: [] }, connectors: [],
     proposals: [], alerts: [], briefings: [], provenance: [], chain: null,
     observations: {},        // proposal id -> {observation, fhir_response} from approvals in this session
     suggestions: {},         // proposal id -> TerminologyMatch[]
@@ -164,10 +165,18 @@
   const keyOf = (id) => state.keys.get(id) || id.slice(0, 8);
   const byId = (id) => state.proposals.find((p) => p.id === id);
   const alertById = (id) => state.alerts.find((a) => a.id === id);
-  const isUnresolved = (p) => p.normalized_value === null || p.normalized_value === undefined || !p.normalized_unit;
-  const unitCodingSuggestion = (p) => !p.coding
-    ? (p.candidates || []).find((c) => c.origin === "reviewed-unit") || null
-    : null;
+  const hasQuantity = (p) => p.normalized_value !== null && p.normalized_value !== undefined && Boolean(p.normalized_unit);
+  // A proposal is resolved when it carries either a UCUM quantity or a concept
+  // from the indicator's reviewed value set (foam: present, say).
+  const isUnresolved = (p) => !hasQuantity(p) && !p.normalized_coding;
+  const isCodedReading = (r) => r.coded_value !== null && r.coded_value !== undefined;
+  const isLive = (p) => p.reading.raw_payload && p.reading.raw_payload.synthetic === false;
+  const receivedText = (r) => isCodedReading(r) ? `“${esc(r.coded_value)}”` : `${fnum(r.value)} ${esc(r.unit)}`;
+  const publishedText = (p) => p.normalized_coding ? esc(p.normalized_coding.display) : hasQuantity(p) ? `${fnum(p.normalized_value)} ${esc(p.normalized_unit)}` : `${isCodedReading(p.reading) ? "value" : "unit"} unresolved`;
+  const alertValue = (a) => a.value_code ? a.value_code : `${fnum(a.value)} ${a.unit}`;
+  const ruleText = (r) => (r.operator === "in" || r.operator === "not-in") ? `${OPS[r.operator]} ${(r.values || []).join(" / ")}` : `${OPS[r.operator] || r.operator} ${fnum(r.value)} ${r.unit}`;
+  const legLz = (p) => p.leg && p.leg !== "environmental" ? `<span class="lz lc leg ${p.leg === "human" ? "purple" : "teal"}" title="One Health leg: ${esc(p.leg)}">${esc(p.leg)}</span>` : "";
+  const cssVar = (name, fallback) => (getComputedStyle(document.documentElement).getPropertyValue(name) || fallback).trim();
   const isFlagged = (p) => Boolean(p.ai && (p.ai.disagreed_with_rules || p.ai.needs_expert_review)) || (!p.coding);
   const isLow = (p) => p.confidence < 0.8;
   const sites = () => [...new Set(state.proposals.map((p) => p.reading.site_name))].sort();
@@ -178,7 +187,8 @@
   function matchText(p, q) {
     if (!q) return true;
     const hay = [keyOf(p.id), p.id, p.reading.parameter, p.reading.site_name, p.reading.site_code, p.reading.source_id,
-      p.reading.source_type, p.coding?.code, p.coding?.display, p.proposer, p.reviewer, p.rationale].join(" ").toLowerCase();
+      p.reading.source_type, p.coding?.code, p.coding?.display, p.proposer, p.reviewer, p.rationale, p.leg,
+      p.reading.coded_value, p.normalized_coding?.code, isLive(p) ? "live" : ""].join(" ").toLowerCase();
     return q.toLowerCase().split(/\s+/).every((t) => hay.includes(t));
   }
   function applyProposalFilters(list, f) {
@@ -208,8 +218,9 @@
   function flagLzs(p) {
     const out = [];
     if (!p.coding) out.push('<span class="lz red">no code</span>');
-    if (unitCodingSuggestion(p)) out.push('<span class="lz green">unit hint</span>');
-    if (isUnresolved(p) && p.coding) out.push('<span class="lz amber">unit</span>');
+    if (isUnresolved(p) && p.coding) out.push(`<span class="lz amber">${isCodedReading(p.reading) ? "value" : "unit"}</span>`);
+    out.push(legLz(p));
+    if (isLive(p)) out.push('<span class="lz green lc" title="Pulled from a live source, not a fixture">live</span>');
     if (p.ai?.disagreed_with_rules) out.push('<span class="lz amber">disagrees</span>');
     if (p.ai?.needs_expert_review) out.push('<span class="lz amber">expert</span>');
     if (p.secondary_coding) out.push(`<span class="lz teal">${esc(p.secondary_coding.code)}</span>`);
@@ -220,12 +231,7 @@
   const audLz = (a) => `<span class="lz lc">${esc(AUDIENCE_LABEL[a] || a)}</span>`;
   const sevLz = (s) => `<span class="lz bold ${s === "critical" ? "red" : s === "high" ? "amber" : "blue"}">${esc(s)}</span>`;
   function summaryHtml(p) {
-    const suggested = unitCodingSuggestion(p);
-    const code = p.coding
-      ? `<span class="code">${esc(p.coding.code)}</span>`
-      : suggested
-        ? `<span class="code suggested">${esc(suggested.code)}</span><span class="lz green">suggested</span>`
-        : `<span class="unres">no curated match</span>`;
+    const code = p.coding ? `<span class="code">${esc(p.coding.code)}</span>` : `<span class="unres">no curated match</span>`;
     return `${esc(p.reading.parameter)}<span class="to">→</span>${code}`;
   }
 
@@ -366,7 +372,7 @@
 
   function cardHtml(p) {
     const flag = !p.coding ? "flag-bad" : (isFlagged(p) || isUnresolved(p)) ? "flag-warn" : "";
-    const val = isUnresolved(p) ? `<span class="lz amber">unit unresolved</span>` : `${fnum(p.normalized_value)} ${esc(p.normalized_unit)}`;
+    const val = isUnresolved(p) ? `<span class="lz amber">${publishedText(p)}</span>` : publishedText(p);
     return `<article class="card ${flag} ${state.focus === p.id ? "is-selected" : ""}" data-open="${p.id}" draggable="${p.status === "pending"}" data-drag="${p.id}">
       <div class="card-title">${summaryHtml(p)}</div>
       <div class="card-sub">${srcGlyph(p.reading.source_type)}<span>${esc(p.reading.site_name)}</span><span>·</span><span>${val}</span></div>
@@ -432,7 +438,7 @@
     $("#list-rows").innerHTML = shown.length ? shown.map((p) => `<tr data-open="${p.id}" class="${state.selected.has(p.id) ? "is-selected" : ""} ${state.focus === p.id ? "is-focus" : ""}">
         <td>${p.status === "pending" ? `<input type="checkbox" data-select="${p.id}" ${state.selected.has(p.id) ? "checked" : ""} aria-label="Select ${keyOf(p.id)}" />` : ""}</td>
         <td class="nowrap"><span class="key">${keyOf(p.id)}</span></td>
-        <td class="summary">${summaryHtml(p)} <span class="dim">${isUnresolved(p) ? "" : `· ${fnum(p.normalized_value)} ${esc(p.normalized_unit)}`}</span> ${flagLzs(p)}</td>
+        <td class="summary">${summaryHtml(p)} <span class="dim">${isUnresolved(p) ? "" : `· ${publishedText(p)}`}</span> ${flagLzs(p)}</td>
         <td>${statusLz(p.status)}</td>
         <td class="nowrap">${esc(p.reading.site_name)}</td>
         <td class="nowrap">${srcGlyph(p.reading.source_type)} <span class="dim">${esc(p.reading.source_id)}</span></td>
@@ -503,12 +509,12 @@
           <div class="meta">
             <span>observed <b>${esc(fdate(a.observed_at))}</b></span>
             <span>policy <b>${esc(a.policy_id)}</b></span>
-            ${rule ? `<span>rule <b>${esc(rule.operator)} ${fnum(rule.value)} ${esc(rule.unit)}</b></span>` : ""}
+            ${rule ? `<span>rule <b>${esc(ruleText(rule))}</b></span>` : ""}
             <span class="aud">${a.audiences.map((x) => `<span class="lz lc ${done.has(x) ? "green" : ""}" title="${done.has(x) ? "advisory drafted" : "no advisory yet"}">${esc(AUDIENCE_LABEL[x] || x)}</span>`).join("")}</span>
           </div>
         </div>
         <div class="incident-right">
-          <span class="value">${fnum(a.value)} ${esc(a.unit)}</span>
+          <span class="value">${esc(alertValue(a))}</span>
           <span>${esc(ago(a.created_at))}</span>
         </div>
       </article>`;
@@ -573,10 +579,11 @@
   }
 
   function siteTone(row) {
-    if (row.alerts.some((a) => a.severity === "critical")) return { color: "#c9372c", rank: "Critical incident" };
-    if (row.alerts.length) return { color: "#e56910", rank: "High incident" };
-    if (row.approved) return { color: "#0c66e4", rank: `Observations ${builtWord()}` };
-    return { color: "#8590a2", rank: "Pending review only" };
+    // Read the theme tokens at render time so markers follow light/dark.
+    if (row.alerts.some((a) => a.severity === "critical")) return { color: cssVar("--red", "#c9372c"), rank: "Critical incident" };
+    if (row.alerts.length) return { color: cssVar("--orange", "#e56910"), rank: "High incident" };
+    if (row.approved) return { color: cssVar("--brand", "#0c66e4"), rank: `Observations ${builtWord()}` };
+    return { color: cssVar("--n50", "#8590a2"), rank: "Pending review only" };
   }
 
   function renderMap() {
@@ -633,7 +640,7 @@
         `<b>${esc(row.name)}</b>` +
         `<div class="mp-meta">${esc(row.code)} · ${esc([...row.sources].join(", "))}</div>` +
         `<div class="mp-meta">${row.total} readings · ${row.approved} approved · ${row.pending} pending</div>` +
-        (worst ? `<div class="mp-meta"><b>${esc(tone.rank)}:</b> ${esc(worst.rule_code)} at ${fnum(worst.value)} ${esc(worst.unit)}</div>` : "") +
+        (worst ? `<div class="mp-meta"><b>${esc(tone.rank)}:</b> ${esc(worst.rule_code)} at ${esc(alertValue(worst))}</div>` : "") +
         `<a class="mp-link" href="#" data-map-site="${esc(row.code)}">Filter the queue to this site</a>`
       );
       marker.addTo(map.layer);
@@ -708,6 +715,8 @@
       ["Reviewer corrections", overrides, "coding or quantity overridden"],
       ["Second codings", secondary, "LOINC / SNOMED attached"],
       ["Incidents", state.alerts.length, `${state.briefings.length} advisory drafts`],
+      ["Live readings", state.proposals.filter(isLive).length, "pulled from Hub'Eau or Copernicus, not fixtures"],
+      ["Human-leg measures", state.proposals.filter((p) => p.leg === "human").length, "published through observation-health-measure-oah"],
     ].map(([l, v, s]) => `<div class="tile"><div class="lbl">${l}</div><div class="val">${v}</div><div class="sub">${s}</div></div>`).join("");
 
     const group = (fn) => {
@@ -743,7 +752,8 @@
 
   function actorOf(e) {
     const p = e.payload || {};
-    if (p.reviewer) return `${p.reviewer}${p.reason ? ` · ${p.reason}` : ""}${p.secondary_coding ? ` · +${p.secondary_coding.code}` : ""}${p.taxon ? ` · taxon ${p.taxon.code}` : ""}${p.reviewer_overrode_coding ? " · coding overridden" : ""}${p.expert_correction ? ` · expert correction: ${p.correction_reason || ""}` : ""}`;
+    if (p.reviewer) return `${p.reviewer}${p.reason ? ` · ${p.reason}` : ""}${p.one_health_leg && p.one_health_leg !== "environmental" ? ` · ${p.one_health_leg} leg` : ""}${p.published_value_coding ? ` · ${p.published_value_coding.code}` : ""}${p.secondary_coding ? ` · +${p.secondary_coding.code}` : ""}${p.taxon ? ` · taxon ${p.taxon.code}` : ""}${p.reviewer_overrode_coding ? " · coding overridden" : ""}${p.expert_correction ? ` · expert correction: ${p.correction_reason || ""}` : ""}`;
+    if (e.event_type === "connector-pull") return `${p.connector} · ${p.fetched} fetched · ${p.queued} queued · ${p.skipped} skipped`;
     if (e.event_type === "mapping-proposed") return `${p.proposer || "curated-rules"} · ${Math.round((p.confidence || 0) * 100)}%`;
     if (e.event_type === "alert-created") return `${p.severity} · ${p.rule_code} · ${(p.audiences || []).join(", ")}`;
     if (e.event_type === "briefing-drafted") return `${p.audience} · ${p.ai?.model || ""}`;
@@ -791,12 +801,12 @@
     const cat = state.catalog;
     if (pol) {
       $("#policy-status-lz").textContent = pol.status;
-      $("#policy-body").innerHTML = `<dl class="dl" style="margin-bottom:12px"><dt>Policy id</dt><dd>${tagm(pol.id)}</dd><dt>Source</dt><dd>${tagm(pol.path)}</dd><dt>Evaluation</dt><dd>Deterministic. First coding on the Observation must equal the rule code and the UCUM unit must match exactly.</dd></dl>
-      <div class="tablewrap" style="box-shadow:none"><table class="tbl"><thead><tr><th>Code</th><th>Condition</th><th>Severity</th><th>Routes to</th></tr></thead><tbody>${pol.rules.map((r) => `<tr class="rulerow" style="cursor:default"><td><code>${esc(r.code)}</code></td><td class="nowrap">${esc({ gte: "≥", gt: ">", lte: "≤", lt: "<" }[r.operator] || r.operator)} ${fnum(r.value)} ${esc(r.unit)}</td><td>${sevLz(r.severity)}</td><td><span class="aud">${r.audiences.map(audLz).join("")}</span></td></tr><tr style="cursor:default"><td colspan="4" class="dim" style="padding-top:0">${esc(r.message)}</td></tr>`).join("")}</tbody></table></div>`;
+      $("#policy-body").innerHTML = `<dl class="dl" style="margin-bottom:12px"><dt>Policy id</dt><dd>${tagm(pol.id)}</dd><dt>Source</dt><dd>${tagm(pol.path)}</dd><dt>Evaluation</dt><dd>Deterministic. First coding on the Observation must equal the rule code. A quantity rule needs the UCUM unit to match exactly and only ever reads <code>valueQuantity</code>; a coded rule lists the value-set concepts it fires on and only ever reads <code>valueCodeableConcept</code>.</dd></dl>
+      <div class="tablewrap" style="box-shadow:none"><table class="tbl"><thead><tr><th>Code</th><th>Condition</th><th>Severity</th><th>Routes to</th></tr></thead><tbody>${pol.rules.map((r) => `<tr class="rulerow" style="cursor:default"><td><code>${esc(r.code)}</code></td><td class="nowrap">${esc(ruleText(r))}</td><td>${sevLz(r.severity)}</td><td><span class="aud">${r.audiences.map(audLz).join("")}</span></td></tr><tr style="cursor:default"><td colspan="4" class="dim" style="padding-top:0">${esc(r.message)}</td></tr>`).join("")}</tbody></table></div>`;
     }
     $("#catalog-count").textContent = `${cat.codes.length} codes`;
     $("#catalog-body").innerHTML = cat.codes.length ? `<dl class="dl" style="margin-bottom:12px"><dt>System</dt><dd>${tagm(cat.system)}</dd><dt>Review threshold</dt><dd>${state.integrations ? `${Math.round(state.integrations.coding.review_confidence_threshold * 100)}% (informational; every proposal still requires review)` : "-"}</dd></dl>
-      <div class="tablewrap" style="box-shadow:none"><table class="tbl"><thead><tr><th>Code</th><th>Display</th><th>Aliases</th><th>Plausible</th><th>Units</th></tr></thead><tbody>${cat.codes.map((c) => `<tr style="cursor:default"><td><code>${esc(c.code)}</code></td><td>${esc(c.display)}</td><td class="dim">${c.aliases.map(esc).join(", ")}</td><td class="nowrap dim">${c.plausible_range ? `${fnum(c.plausible_range.min)} – ${fnum(c.plausible_range.max)}` : "-"}</td><td>${c.accepted_units.map((u) => `<span class="lz lc">${esc(u)}</span>`).join(" ")} ${Object.entries(c.unit_conversions || {}).map(([from, cv]) => `<span class="lz lc" title="factor ${cv.factor}">${esc(from)} → ${esc(cv.target)}</span>`).join(" ")}</td></tr>`).join("")}</tbody></table></div>` : '<p class="quote">Catalog unavailable.</p>';
+      <div class="tablewrap" style="box-shadow:none"><table class="tbl"><thead><tr><th>Code</th><th>Display</th><th>Aliases</th><th>Plausible</th><th>Units / values</th></tr></thead><tbody>${cat.codes.map((c) => `<tr style="cursor:default"><td><code>${esc(c.code)}</code>${legLz(c) ? `<br>${legLz(c)}` : ""}</td><td>${esc(c.display)}</td><td class="dim">${c.aliases.map(esc).join(", ")}</td><td class="nowrap dim">${c.plausible_range ? `${fnum(c.plausible_range.min)} – ${fnum(c.plausible_range.max)}` : "-"}</td><td>${c.accepted_units.map((u) => `<span class="lz lc">${esc(u)}</span>`).join(" ")} ${Object.entries(c.unit_conversions || {}).map(([from, cv]) => `<span class="lz lc" title="factor ${cv.factor}">${esc(from)} → ${esc(cv.target)}</span>`).join(" ")} ${(c.value_set || []).map((v) => `<span class="lz lc purple" title="${esc((v.aliases || []).join(", "))}">${esc(v.code)}</span>`).join(" ")}</td></tr>`).join("")}</tbody></table></div>` : '<p class="quote">Catalog unavailable.</p>';
   }
 
   /* ── integrations ─────────────────────────────────────────────────────── */
@@ -810,6 +820,7 @@
       const r = state.pingResults[name];
       return `<span class="result ${r ? (r.ok ? "ok" : "bad") : ""}">${r ? esc(r.text) : ""}</span>`;
     };
+    const conn = Object.fromEntries((state.connectors || []).map((c) => [c.name, c]));
     const cards = [
       {
         name: "gemini", logo: "G", color: "#1a73e8", title: "Google Gemini", sub: "Coding co-pilot, bulletin intake, advisories, situation reports",
@@ -824,7 +835,7 @@
           : stat("off", "Configured · not yet called"),
         rows: [
           ["Credential", i.gemini.key_fingerprint ? `<span class="secret">${esc(i.gemini.key_fingerprint)}</span> <span class="dim">via ${esc(i.gemini.key_env)}</span>` : `<span class="dim">${esc(i.gemini.key_env)} unset</span>`],
-          ["Model", tagm(i.gemini.model)],
+          ["Model", `${tagm(i.gemini.model)}${i.gemini.fallback_model ? ` <span class="dim">falls back to</span> ${tagm(i.gemini.fallback_model)} <span class="dim">on 429 / 404</span>` : ""}`],
           ["Endpoint", tagm(i.gemini.api_base)],
           ["Assist mode", `<span class="lz lc">${esc(i.gemini.assist_mode)}</span> <span class="dim">below ${Math.round(i.gemini.assist_below_confidence * 100)}% rule confidence</span>`],
           ["Confidence ceiling", `${Math.round(i.gemini.confidence_ceiling * 100)}% <span class="dim">no AI proposal can read as auto-publishable</span>`],
@@ -861,12 +872,36 @@
         actions: `<button class="btn sm" data-ping="terminology" type="button">Check crosswalk</button>`,
       },
       {
+        name: "hubeau", logo: "H", color: "#1d6fa5", title: "Hub'Eau river quality", sub: "Live, keyless: real laboratory analyses for Toulouse, a OneAquaHealth pilot city",
+        status: conn.hubeau?.live ? stat("ok", "Live · keyless") : stat("off", "Off"),
+        rows: [
+          ["Endpoint", tagm(i.connectors?.hubeau?.api_base || "-")],
+          ["Stations", (conn.hubeau?.sites || []).length ? conn.hubeau.sites.map((s) => `<span class="lz lc" title="${esc(s.name || "")}">${esc(s.code)}${s.pilot_city ? ` · ${esc(s.pilot_city)}` : ""}</span>`).join(" ") : '<span class="dim">none configured</span>'],
+          ["Parameters", `<span class="dim">${Object.keys(i.connectors?.hubeau?.parameters || {}).length} Sandre codes the catalog can code</span>`],
+          ["Role", `<span class="dim">${esc(conn.hubeau?.detail || "")}</span>`],
+        ],
+        actions: `<button class="btn sm primary" data-pull-hubeau type="button">${icon("play")}Pull Toulouse now</button><a class="btn sm subtle" href="https://hubeau.eaufrance.fr/page/api-qualite-cours-deau" target="_blank" rel="noreferrer">API docs ${icon("external")}</a>`,
+      },
+      {
+        name: "sentinel2", logo: "S", color: "#2c5f8a", title: "Copernicus Sentinel-2", sub: "Keyless scene listing; NDCI needs an OAuth client",
+        status: conn.sentinel2?.auth === "credentials-configured" ? stat("ok", "Live · NDCI") : conn.sentinel2?.live ? stat("warn", "Catalogue only") : stat("off", "Off"),
+        rows: [
+          ["Catalogue", tagm(i.connectors?.sentinel2?.catalogue_base || "-")],
+          ["Statistics", tagm(i.connectors?.sentinel2?.statistics_url || "-")],
+          ["OAuth client", i.connectors?.sentinel2?.client_id ? `${tagm(i.connectors.sentinel2.client_id)} <span class="secret">${esc(i.connectors.sentinel2.client_secret_fingerprint || "")}</span>` : '<span class="dim">CDSE_CLIENT_ID / CDSE_CLIENT_SECRET unset</span>'],
+          ["Sites", (conn.sentinel2?.sites || []).map((s) => `<span class="lz lc" title="${esc(s.site_name || "")}">${esc(s.site_code)}${s.pilot_city ? ` · ${esc(s.pilot_city)}` : ""}</span>`).join(" ") || '<span class="dim">none configured</span>'],
+          ["Role", `<span class="dim">${esc(conn.sentinel2?.detail || "")}</span>`],
+        ],
+        actions: `<button class="btn sm" data-scenes="garonne-toulouse" type="button">List recent scenes</button><button class="btn sm" data-ndci="garonne-toulouse" type="button">${icon("sparkle")}Compute NDCI</button><a class="btn sm subtle" href="https://shapps.dataspace.copernicus.eu/dashboard/#/account/settings" target="_blank" rel="noreferrer">Get a client ${icon("external")}</a>`,
+      },
+      {
         name: "fhir", logo: "F", color: "#c9372c", title: "HAPI FHIR R4", sub: "Publication target for OneAquaHealth resources",
         status: stat(i.fhir.write_enabled ? "ok" : "warn", i.fhir.write_enabled ? "Writes enabled" : "Dry run"),
         rows: [
           ["Base URL", tagm(i.fhir.base_url)],
           ["Write mode", `<span class="dim">${i.fhir.write_enabled ? "Transaction bundles are validated against the profile and POSTed to the server." : "Bundles are built and stored locally. Nothing is sent, and profile validation is skipped because it runs on the server. Set FHIR_WRITE_ENABLED=true to publish."}</span>`],
-          ["Observation profile", tagm(i.fhir.observation_profile)],
+          ["Indicators profile", tagm(i.fhir.observation_profile)],
+          ["Health-measure profile", `${tagm(i.fhir.health_measure_profile || "-")} <span class="dim">human leg</span>`],
           ["Location profile", tagm(i.fhir.location_profile)],
           ["Timeout", `<span class="dim">${i.fhir.timeout_seconds}s</span>`],
         ],
@@ -905,7 +940,7 @@
   }
 
   async function ping(name, button) {
-    const path = { gemini: "/ai/status", umls: "/terminology/status", terminology: "/terminology/status", health: "/health", fhir: "/health" }[name];
+    const path = { gemini: "/ai/status", umls: "/terminology/status", terminology: "/terminology/status", health: "/health", fhir: "/health", hubeau: "/connectors", sentinel2: "/connectors" }[name];
     const started = performance.now();
     await busy(button, async () => {
       try {
@@ -916,6 +951,7 @@
               ? `Configured · ${body.model} · last call ${body.health} · ${ms} ms`
               : `Not configured · ${ms} ms`)
           : name === "health" || name === "fhir" ? `OK · ${body.fhir_write_mode} · ${body.terminology_crosswalk} · ${ms} ms`
+          : name === "hubeau" || name === "sentinel2" ? (() => { const c = body.find((x) => x.name === name); return c ? `${c.live ? "Live" : "Off"} · ${c.auth} · ${ms} ms` : `Unknown · ${ms} ms`; })()
           : (body.enabled ? `OK · ${body.sources.join("+")} · ${ms} ms` : `No source · ${ms} ms`);
         state.pingResults[name] = { ok: true, text };
       } catch (error) {
@@ -959,7 +995,6 @@
     const tab = state.drawer.tab;
     const r = p.reading;
     const unres = isUnresolved(p);
-    const unitSuggestion = unitCodingSuggestion(p);
     const tabs = [
       ["details", "Details"], ["copilot", "Co-pilot", p.ai ? "" : "dim"], ["crosswalk", "Crosswalk", p.status === "pending" ? "" : "dim"],
       ["fhir", "FHIR"], ["history", "History", state.provenance.filter((e) => e.entity_id === p.id).length],
@@ -974,7 +1009,7 @@
         <button class="icon-btn" data-copy-text="${esc(location.origin + location.pathname + "#/" + state.page + "?issue=" + p.id)}" title="Copy link" type="button">${icon("link", "ic")}</button>
         <button class="icon-btn" data-close-drawer title="Close (Esc)" type="button">${icon("x", "ic")}</button>
       </div>
-      <h2>${esc(r.parameter)}<span class="to">→</span>${p.coding ? `<span class="code">${esc(p.coding.code)}</span>` : unitSuggestion ? `<span class="code suggested">${esc(unitSuggestion.code)}</span><span class="lz green">suggested</span>` : '<span class="lz red">no curated match</span>'}</h2>
+      <h2>${esc(r.parameter)}<span class="to">→</span>${p.coding ? `<span class="code">${esc(p.coding.code)}</span>` : '<span class="lz red">no curated match</span>'}</h2>
       <div class="drawer-actions">${actions}<span class="spacer"></span>${statusLz(p.status)}${proposerLz(p)}${flagLzs(p)}</div>
     </div>
     <div class="tabs">${tabs.map(([k, l, extra]) => `<button class="tab ${tab === k ? "is-active" : ""}" data-tab="${k}" type="button">${l}${typeof extra === "number" ? `<span class="count">${extra}</span>` : ""}</button>`).join("")}</div>
@@ -999,24 +1034,16 @@
       </aside>
     </div>`;
 
-    function codingStatusNote() {
-      if (unitSuggestion) {
-        return `<div class="sec"><div class="note ok">${icon("check")}<span>Source unit <b>${esc(r.unit)}</b> uniquely suggests <b>${esc(unitSuggestion.display)}</b>. Open <b>Approve</b> to review or change the code before any FHIR resource is ${willVerb()}.</span></div></div>`;
-      }
-      if (unres && p.status === "pending") {
-        return `<div class="sec"><div class="note">${icon("alert")}<span>Approval needs a normalized value and a UCUM unit. Use <b>Approve</b> and tick <i>Correct the proposal</i> to supply them.</span></div></div>`;
-      }
-      return "";
-    }
     function detailsTab() {
       return `<div class="sec">
         <div class="mapping">
-          <div class="side"><div class="lbl">As received</div><div class="val">${fnum(r.value)} ${esc(r.unit)}</div><div class="term">${esc(r.parameter)}</div></div>
+          <div class="side"><div class="lbl">As received</div><div class="val">${receivedText(r)}</div><div class="term">${esc(r.parameter)}</div></div>
           <div class="arrow">${icon("chevr", "ic lg")}</div>
-          <div class="side out ${unres ? "unres" : ""}"><div class="lbl">OneAquaHealth FHIR</div><div class="val">${unres ? unitSuggestion ? "code suggested" : "unit unresolved" : `${fnum(p.normalized_value)} ${esc(p.normalized_unit)}`}</div><div class="term">${p.coding ? `${esc(p.coding.display)} <span class="mono dim">${esc(p.coding.code)}</span>` : unitSuggestion ? `${esc(unitSuggestion.display)} <span class="mono dim">${esc(unitSuggestion.code)}</span>` : "a reviewer must choose a curated code"}</div></div>
+          <div class="side out ${unres ? "unres" : ""}"><div class="lbl">OneAquaHealth FHIR${p.leg && p.leg !== "environmental" ? ` · ${esc(p.leg)} leg` : ""}</div><div class="val">${publishedText(p)}</div><div class="term">${p.coding ? `${esc(p.coding.display)} <span class="mono dim">${esc(p.coding.code)}</span>` : "a reviewer must choose a curated code"}${p.normalized_coding ? ` <span class="mono dim">→ ${esc(p.normalized_coding.code)}</span>` : ""}</div></div>
         </div>
       </div>
-      ${codingStatusNote()}
+      ${unres && p.status === "pending" ? `<div class="sec"><div class="note">${icon("alert")}<span>Approval needs a publishable value: a UCUM quantity, or a concept from the indicator's reviewed value set. Use <b>Approve</b> and tick <i>Enter an expert correction</i> to supply it.</span></div></div>` : ""}
+      ${isLive(p) ? `<div class="sec"><div class="note ok">${icon("check")}<span><b>Live reading.</b> Pulled from ${esc(r.raw_payload.connector === "hubeau" ? "Hub'Eau (French national water open data)" : "the Copernicus Data Space Ecosystem")}${r.raw_payload.pilot_city ? `, ${esc(r.raw_payload.pilot_city)}, a OneAquaHealth pilot city` : ""}. The label and unit are exactly what the source returned.${r.evidence_url ? ` <a href="${esc(r.evidence_url)}" target="_blank" rel="noreferrer">Source record ${icon("external")}</a>` : ""}</span></div></div>` : ""}
       <div class="sec"><h4>Rationale</h4><p class="quote">${esc(p.rationale)}</p></div>
       ${p.candidates?.length ? `<div class="sec"><h4>Candidates considered</h4><div class="chips">${p.candidates.map((c) => `<span class="chipbtn ${p.coding?.code === c.code ? "is-on" : ""}" title="${esc(c.origin)}"><span class="mono">${esc(c.code)}</span><span class="dim">${Math.round(c.score * 100)}%</span></span>`).join("")}</div></div>` : ""}
       ${p.secondary_coding ? `<div class="sec"><h4>Second coding ${builtWord()}</h4><p>${tagm(p.secondary_coding.code)} ${esc(p.secondary_coding.display)} <span class="dim mono">${esc(p.secondary_coding.system)}</span></p></div>` : ""}
@@ -1092,7 +1119,9 @@
         return "No FHIR resource can be built yet: an Observation requires a code, and the curated catalog has not matched one. Choose a code when you approve.";
       }
       if (isUnresolved(p)) {
-        return "No FHIR resource can be built yet: the quantity is withheld because the unit could not be resolved or the value is outside its plausible range. A published Observation must carry a real UCUM quantity.";
+        return isCodedReading(p.reading)
+          ? "No FHIR resource can be built yet: the source's word is not in the indicator's reviewed value set, so no coded value can be published. A reviewer picks one at approval."
+          : "No FHIR resource can be built yet: the quantity is withheld because the unit could not be resolved or the value is outside its plausible range. A published Observation must carry a real UCUM quantity.";
       }
       return state.health.fhir_write_mode === "enabled"
         ? "The Location, Organization, and Observation are built at approval time, validated against the OAH profile, and sent as one transaction bundle."
@@ -1113,7 +1142,8 @@
       const codings = [p.coding ? { system, code: p.coding.code, display: p.coding.display } : null, p.secondary_coding || state.picks[p.id] || null].filter(Boolean);
       return `<div class="sec"><h4>Codings to publish</h4>${codings.length ? `<dl class="dl">${codings.map((c, i) => `<dt>${i === 0 ? "Primary" : "Secondary"}</dt><dd>${tagm(c.code)} ${esc(c.display)}<br><span class="dim mono">${esc(c.system)}</span></dd>`).join("")}</dl>` : '<p class="quote dim">No coding yet.</p>'}</div>
       ${(p.taxon || state.taxonPicks[p.id]) ? `<div class="sec"><h4>Organism component</h4><dl class="dl"><dt>Taxon</dt><dd>${tagm((p.taxon || state.taxonPicks[p.id]).code)} ${esc((p.taxon || state.taxonPicks[p.id]).display)}<br><span class="dim mono">${esc((p.taxon || state.taxonPicks[p.id]).system)}</span></dd></dl><p class="quote dim">Published as <code>Observation.component</code>, not as a second <code>code.coding</code>: the indicator axis drives the alert policy and must stay untouched.</p></div>` : ""}
-      <div class="sec"><h4>Profiles</h4><dl class="dl"><dt>Observation</dt><dd>${tagm(state.integrations?.fhir?.observation_profile || "-")}</dd><dt>Location</dt><dd>${tagm(state.integrations?.fhir?.location_profile || "-")}</dd><dt>Target</dt><dd>${tagm(state.integrations?.fhir?.base_url || "-")} <span class="lz lc ${state.health.fhir_write_mode === "enabled" ? "green" : "amber"}">${esc(state.health.fhir_write_mode || "-")}</span></dd></dl></div>
+      ${p.normalized_coding ? `<div class="sec"><h4>Coded value</h4><dl class="dl"><dt>valueCodeableConcept</dt><dd>${tagm(p.normalized_coding.code)} ${esc(p.normalized_coding.display)}<br><span class="dim mono">${esc(p.normalized_coding.system)}</span></dd></dl><p class="quote dim">A coded indicator publishes a concept from the IG's value set instead of a number the source never reported.</p></div>` : ""}
+      <div class="sec"><h4>Profiles</h4><dl class="dl"><dt>Observation</dt><dd>${tagm((p.leg === "human" ? state.integrations?.fhir?.health_measure_profile : state.integrations?.fhir?.observation_profile) || "-")}${p.leg === "human" ? ' <span class="lz lc purple">human leg</span>' : ""}</dd><dt>Location</dt><dd>${tagm(state.integrations?.fhir?.location_profile || "-")}</dd><dt>Target</dt><dd>${tagm(state.integrations?.fhir?.base_url || "-")} <span class="lz lc ${state.health.fhir_write_mode === "enabled" ? "green" : "amber"}">${esc(state.health.fhir_write_mode || "-")}</span></dd></dl></div>
       ${got ? `<div class="sec"><div class="sec-head"><h4>${state.health.fhir_write_mode === "enabled" ? "Observation as published" : "Observation as built (dry run)"}</h4><button class="btn sm subtle" data-copy-text="${esc(JSON.stringify(got.observation, null, 2))}" type="button">${icon("copy")}Copy</button></div><pre class="json">${esc(JSON.stringify(got.observation, null, 2))}</pre></div>
       <div class="sec"><div class="sec-head"><h4>${state.health.fhir_write_mode === "enabled" ? "Server response" : "Local build receipt"}</h4><button class="btn sm subtle" data-copy-text="${esc(JSON.stringify(got.fhir_response, null, 2))}" type="button">${icon("copy")}Copy</button></div><pre class="json">${esc(JSON.stringify(got.fhir_response, null, 2))}</pre></div>`
       : `<div class="note ${p.status === "pending" && (isUnresolved(p) || !p.coding) ? "" : "info"}">${icon(p.status === "pending" && (isUnresolved(p) || !p.coding) ? "alert" : "info")}<span>${fhirPendingReason(p)}</span></div>`}`;
@@ -1124,7 +1154,7 @@
       const related = obsId ? state.alerts.filter((a) => a.observation_id === obsId) : [];
       return `<div class="sec"><h4>Provenance</h4>${entries.length ? `<div class="hist">${entries.map((e) => `<div class="hist-item" data-open-entry="${e.sequence}" style="cursor:pointer"><div class="hist-dot"><i class="evt ${esc(e.event_type)}" style="display:block"></i></div><div><div class="b"><b>${esc(EVENT_LABEL[e.event_type] || e.event_type)}</b> <span class="dim">#${e.sequence}</span> ${esc(actorOf(e))}</div><div class="t">${esc(fdate(e.created_at))} · ${esc(e.hash.slice(0, 16))}</div></div></div>`).join("")}</div>` : `<p class="quote dim">No chain entries loaded for this id. Raise the audit limit or refresh.</p>`}
       ${entries.length === 1 && entries[0].event_type === "mapping-proposed" ? `<p class="quote">This proposal is still waiting for a decision. Approving or rejecting it appends the next entry, with your reviewer identity and the exact published facts.</p>` : ""}</div>
-      ${related.length ? `<div class="sec"><h4>Incidents raised</h4><div class="stack">${related.map((a) => `<div class="note bad" data-open-alert="${a.id}" style="cursor:pointer">${icon("alert")}<span><b>${esc(a.rule_code)}</b> ${esc(a.severity)} · ${fnum(a.value)} ${esc(a.unit)} · ${a.audiences.map((x) => AUDIENCE_LABEL[x] || x).join(", ")}</span></div>`).join("")}</div></div>` : ""}`;
+      ${related.length ? `<div class="sec"><h4>Incidents raised</h4><div class="stack">${related.map((a) => `<div class="note bad" data-open-alert="${a.id}" style="cursor:pointer">${icon("alert")}<span><b>${esc(a.rule_code)}</b> ${esc(a.severity)} · ${esc(alertValue(a))} · ${a.audiences.map((x) => AUDIENCE_LABEL[x] || x).join(", ")}</span></div>`).join("")}</div></div>` : ""}`;
     }
   }
 
@@ -1144,7 +1174,7 @@
     <div class="drawer-body">
       <div class="drawer-main">
         <div class="sec"><p class="quote" style="font-size:14px">${esc(a.message)}</p></div>
-        <div class="sec"><div class="mapping"><div class="side"><div class="lbl">Observed</div><div class="val">${fnum(a.value)} ${esc(a.unit)}</div><div class="term">${esc(fdate(a.observed_at))}</div></div><div class="arrow">${icon("chevr", "ic lg")}</div><div class="side out"><div class="lbl">Rule</div><div class="val">${rule ? `${{ gte: "≥", gt: ">", lte: "≤", lt: "<" }[rule.operator] || rule.operator} ${fnum(rule.value)} ${esc(rule.unit)}` : esc(a.rule_code)}</div><div class="term">${esc(a.policy_id)}</div></div></div></div>
+        <div class="sec"><div class="mapping"><div class="side"><div class="lbl">Observed</div><div class="val">${esc(alertValue(a))}</div><div class="term">${esc(fdate(a.observed_at))}</div></div><div class="arrow">${icon("chevr", "ic lg")}</div><div class="side out"><div class="lbl">Rule</div><div class="val">${rule ? esc(ruleText(rule)) : esc(a.rule_code)}</div><div class="term">${esc(a.policy_id)}</div></div></div></div>
         <div class="sec"><h4>Advisory drafts</h4>${drafts.length ? drafts.map((b) => briefHtml(b, false)).join("") : `<p class="quote dim">None yet. Each audience gets its own framing; every draft is disclaimed and stays a draft.</p>`}</div>
       </div>
       <aside class="drawer-side"><h4>Fields</h4><dl class="dl">
@@ -1209,12 +1239,8 @@
   function openApprove(id) {
     if (!requireReviewer()) return;
     const p = byId(id); if (!p) return;
-    const unitSuggestion = unitCodingSuggestion(p);
-    const defaultCode = p.coding?.code || unitSuggestion?.code || "";
     state.pending.approveId = id;
     state.pending.preview = null;
-    state.pending.unitSuggestionId = null;
-    $("#approve-ai").hidden = true;
     const unres = isUnresolved(p);
     const needsWork = unres || !p.coding;
     $("#approve-title").textContent = needsWork
@@ -1224,14 +1250,14 @@
       ? "Resolve and approve"
       : `Approve and ${approveVerb()}`;
 
-    $("#approve-summary").innerHTML = `<div class="mapping"><div class="side"><div class="lbl">As received</div><div class="val">${fnum(p.reading.value)} ${esc(p.reading.unit)}</div><div class="term">${esc(p.reading.parameter)}</div></div><div class="arrow">${icon("chevr", "ic lg")}</div><div class="side out ${unres ? "unres" : ""}"><div class="lbl">Will ${esc(approveVerb())}</div><div class="val" id="approve-target">${unres ? defaultCode ? "calculating..." : "select a code" : `${fnum(p.normalized_value)} ${esc(p.normalized_unit)}`}</div><div class="term">${p.coding ? esc(p.coding.code) : unitSuggestion ? esc(unitSuggestion.display) : "needs a curated code"}</div></div></div>
-      ${unitSuggestion ? `<div class="note ok" id="approve-code-hint" style="margin-top:10px">${icon("check")}<span>Preselected from reviewed unit evidence: <b>${esc(unitSuggestion.display)}</b>. You can change the OAH coding before approving.</span></div>` : ""}
+    $("#approve-summary").innerHTML = `<div class="mapping"><div class="side"><div class="lbl">As received</div><div class="val">${receivedText(p.reading)}</div><div class="term">${esc(p.reading.parameter)}</div></div><div class="arrow">${icon("chevr", "ic lg")}</div><div class="side out ${unres ? "unres" : ""}"><div class="lbl">Will ${esc(approveVerb())}</div><div class="val" id="approve-target">${unres ? "select a code" : publishedText(p)}</div><div class="term">${p.coding ? esc(p.coding.code) : "needs a curated code"}</div></div></div>
       ${p.duplicate_of ? `<div class="note" style="margin-top:10px">${icon("alert")}<span>An identical reading was already ingested as <b>${esc(keyOf(p.duplicate_of))}</b>. Approving this creates a second Observation for the same measurement.</span></div>` : ""}`;
 
+    // No silent default: an unchosen code must stay unchosen.
     const sel = $("#approve-coding");
     sel.innerHTML = `<option value="">Select a code</option>` +
-      state.catalog.codes.map((c) => `<option value="${esc(c.code)}" ${defaultCode === c.code ? "selected" : ""}>${esc(c.code)} · ${esc(c.display)}</option>`).join("");
-    sel.value = defaultCode;
+      state.catalog.codes.map((c) => `<option value="${esc(c.code)}" ${p.coding?.code === c.code ? "selected" : ""}>${esc(c.code)} · ${esc(c.display)}</option>`).join("");
+    sel.value = p.coding?.code || "";
     $("#unit-list").innerHTML = [...new Set(state.catalog.codes.flatMap((c) => c.accepted_units))].map((u) => `<option value="${esc(u)}">`).join("");
 
     $("#approve-correct").checked = false;
@@ -1252,41 +1278,35 @@
     // for replacing them.
     $("#approve-value").readOnly = !on;
     $("#approve-unit").readOnly = !on;
+    $("#approve-coded-value").disabled = !on;
     $("#approve-correct-fields").hidden = !on;
   }
 
-  let previewRequest = 0;
+  // A coded indicator shows a value-set picker instead of value/unit inputs.
+  function setValueKind(kind, accepted, chosen) {
+    const coded = kind === "coded";
+    $("#approve-quantity-row").hidden = coded;
+    $("#approve-coded-row").hidden = !coded;
+    if (coded) {
+      const sel = $("#approve-coded-value");
+      sel.innerHTML = `<option value="">Select a value</option>` + (accepted || []).map((v) => `<option value="${esc(v.code)}">${esc(v.code)} · ${esc(v.display)}${v.aliases?.length ? ` (${esc(v.aliases.slice(0, 4).join(", "))})` : ""}</option>`).join("");
+      sel.value = chosen || "";
+    }
+  }
 
+  // The conversion is computed by the server and only displayed here, so the
+  // dialog and the published resource cannot drift apart.
   async function refreshPreview() {
-    const request = ++previewRequest;
     const id = state.pending.approveId;
     const code = $("#approve-coding").value;
     const box = $("#approve-preview");
-    const current = () => request === previewRequest && id === state.pending.approveId
-      && code === $("#approve-coding").value && $("#modal-approve").classList.contains("show");
-    state.pending.preview = null;
-    state.pending.unitSuggestionId = null;
-    $("#approve-ai").hidden = true;
-    $("#approve-submit").disabled = true;
-    $("#approve-value").value = "";
-    $("#approve-unit").value = "";
-    $("#approve-reason").value = "";
-    $("#approve-correct").checked = false;
-    setCorrectionMode(false);
-    $("#approve-target").textContent = code ? "calculating..." : "select a code";
-    const selected = state.catalog.codes.find((entry) => entry.code === code);
-    $("#approve-target").nextElementSibling.textContent = selected?.display || "needs a curated code";
-    const hint = $("#approve-code-hint");
-    const suggested = unitCodingSuggestion(byId(id));
-    if (hint && suggested) {
-      hint.hidden = !code;
-      hint.className = `note ${code === suggested.code ? "ok" : "info"}`;
-      hint.innerHTML = code === suggested.code
-        ? `${icon("check")}<span>Preselected from reviewed unit evidence: <b>${esc(suggested.display)}</b>. You can change the OAH coding before approving.</span>`
-        : `${icon("info")}<span>Reviewer-selected code: <b>${esc(selected?.display || code)}</b>. Unit evidence had suggested <b>${esc(suggested.display)}</b>.</span>`;
-    }
+    const submit = $("#approve-submit");
+    const correcting = $("#approve-correct").checked;
     if (!code) {
+      state.pending.preview = null;
       box.innerHTML = `<div class="note">${icon("alert")}<span>Select a code to see the conversion this would publish.</span></div>`;
+      if (!correcting) { $("#approve-value").value = ""; $("#approve-unit").value = ""; }
+      submit.disabled = true;
       return;
     }
     box.innerHTML = `<p class="quote dim">Calculating…</p>`;
@@ -1294,90 +1314,39 @@
     try {
       preview = await api(`/proposals/${id}/normalization?code=${encodeURIComponent(code)}`);
     } catch (error) {
-      if (!current()) return;
+      state.pending.preview = null;
       box.innerHTML = `<div class="note bad">${icon("alert")}<span>${esc(error.message)}</span></div>`;
+      submit.disabled = !correcting;
       return;
     }
-    if (!current()) return;
     state.pending.preview = preview;
-    $("#unit-list").innerHTML = preview.accepted_units.map((u) => `<option value="${esc(u)}">`).join("");
-    renderConversionPreview();
-    if (preview.status === "unit-unresolved" && !preview.ai_result && preview.ai_available) {
-      await requestUnitSuggestion(current);
-    }
-  }
-
-  function renderConversionPreview() {
-    const preview = state.pending.preview;
-    if (!preview) return;
-    const box = $("#approve-preview");
-    const correcting = $("#approve-correct").checked;
+    const target = $("#approve-target");
+    const coded = preview.value_kind === "coded";
+    setValueKind(preview.value_kind, preview.accepted_values, preview.normalized_coding?.code);
     if (preview.status === "ok") {
-      const alias = preview.conversion_origin === "reviewed-alias";
-      box.innerHTML = `<div class="note ok">${icon("check")}<span><b>${alias ? "Reviewed unit alias" : "Reviewed catalog conversion"}</b><br>${esc(preview.formula)}${alias ? `<br><span class="dim">${esc(preview.source_unit)} interpreted as ${esc(preview.interpreted_unit)}</span>` : ""}</span></div>`;
-      if (!correcting) {
+      box.innerHTML = `<div class="note ok">${icon("check")}<span><b>${esc(preview.formula)}</b><br><span class="dim">${coded ? "Resolved by the server against the indicator's reviewed value set." : "Derived by the server from the reviewed conversion factor."} Not editable unless you record an expert correction.</span></span></div>`;
+      if (!correcting && !coded) {
         $("#approve-value").value = preview.normalized_value;
         $("#approve-unit").value = preview.normalized_unit;
       }
+      if (target) target.textContent = coded ? preview.normalized_coding.display : `${fnum(preview.normalized_value)} ${preview.normalized_unit}`;
+      submit.disabled = false;
     } else {
       const why = preview.status === "out-of-range"
         ? "The converted value is outside this indicator's reviewed plausible range."
+        : preview.status === "value-unresolved"
+        ? "This word is not in the indicator's reviewed value set, and words are never rounded to the nearest concept."
+        : preview.status === "kind-mismatch"
+        ? (coded ? "This indicator publishes a quantity, not a coded value." : "This indicator publishes a coded value, not a quantity.")
         : "This source unit has no reviewed conversion for the selected code.";
-      box.innerHTML = `<div class="note">${icon("alert")}<span><b>${preview.status === "out-of-range" ? "Value outside reviewed range" : "Conversion needs review"}</b><br>${esc(why)}<br><span class="dim">Accepted target: ${preview.accepted_units.map(esc).join(", ")}</span></span></div>`;
+      const fix = preview.status === "kind-mismatch"
+        ? "Choose a different code, or reject and ask the source for the right kind of value."
+        : `Tick “Enter an expert correction” to publish a ${coded ? "reviewed value-set concept" : "corrected quantity"} with a written reason.`;
+      box.innerHTML = `<div class="note">${icon("alert")}<span><b>No deterministic resolution.</b> ${esc(why)} ${esc(preview.message)}<br><span class="dim">${esc(fix)}</span></span></div>`;
       if (!correcting) { $("#approve-value").value = ""; $("#approve-unit").value = ""; }
+      if (target) target.textContent = "needs an expert correction";
+      submit.disabled = !correcting || preview.status === "kind-mismatch";
     }
-    renderUnitSuggestion();
-    updateApprovalQuantity();
-  }
-
-  function renderUnitSuggestion() {
-    const box = $("#approve-ai");
-    const preview = state.pending.preview;
-    const result = preview?.ai_result;
-    box.hidden = preview?.status !== "unit-unresolved";
-    if (box.hidden) return;
-    if (result?.suggestion) {
-      const s = result.suggestion;
-      box.innerHTML = `<div class="note">${icon("sparkle")}<div><b>Gemini suggestion · Uncited</b><strong class="unit-formula">${esc(s.formula)}</strong><p>${esc(s.rationale)}</p><p class="dim">Source interpreted as ${esc(s.interpreted_unit)}. ${s.origin === "ai-interpretation" ? "Factor from the reviewed catalog; unit interpretation by Gemini." : "Conversion factor suggested by Gemini."} No web verification.</p></div></div><button class="btn sm" type="button" data-use-unit-suggestion>${icon("check")}Use suggestion as expert correction</button>`;
-    } else {
-      const message = result?.message || (preview.ai_available ? "Gemini suggestion pending." : "Gemini unit assist is disabled. Expert correction remains available.");
-      box.innerHTML = `<p class="quote dim">${esc(message)}</p>${preview.ai_available && result?.status === "unavailable" ? `<button class="btn sm" type="button" data-retry-unit-suggestion>${icon("sparkle")}Retry suggestion</button>` : ""}`;
-    }
-  }
-
-  async function requestUnitSuggestion(current) {
-    const preview = state.pending.preview;
-    const id = state.pending.approveId;
-    const token = previewRequest;
-    current = current || (() => token === previewRequest && id === state.pending.approveId
-      && $("#modal-approve").classList.contains("show"));
-    $("#approve-ai").hidden = false;
-    $("#approve-ai").innerHTML = `<p class="quote dim">Requesting Gemini suggestion...</p>`;
-    let result;
-    try {
-      result = await api(`/proposals/${id}/unit-suggestion?code=${encodeURIComponent(preview.code)}`, { method: "POST" });
-    } catch (error) {
-      result = { status: "unavailable", message: error.message };
-    }
-    if (!current()) return;
-    preview.ai_result = result;
-    renderUnitSuggestion();
-  }
-
-  function updateApprovalQuantity() {
-    const preview = state.pending.preview;
-    const correcting = $("#approve-correct").checked;
-    const value = $("#approve-value").value;
-    const unit = $("#approve-unit").value.trim();
-    const limits = preview?.plausible_range;
-    const valid = value !== "" && Number.isFinite(Number(value))
-      && preview?.accepted_units.includes(unit)
-      && (!limits || (Number(value) >= limits.min && Number(value) <= limits.max));
-    $("#approve-submit").disabled = !preview || (correcting
-      ? !valid || !$("#approve-reason").value.trim() : preview.status !== "ok");
-    const target = $("#approve-target");
-    target.textContent = valid ? `${fnum(Number(value))} ${unit}` : "needs an expert correction";
-    target.parentElement.classList.toggle("unres", !valid);
   }
 
   async function submitApprove(button) {
@@ -1392,14 +1361,19 @@
       body.coding = { system: state.catalog.system, code, display: cat ? cat.display : code };
     }
     if ($("#approve-correct").checked) {
-      const v = $("#approve-value").value, u = $("#approve-unit").value.trim();
       const reason = $("#approve-reason").value.trim();
-      if (v === "" || !u) { toast("An expert correction needs both a value and a UCUM unit.", "bad"); return; }
       if (!reason) { toast("An expert correction needs a written reason.", "bad"); return; }
-      body.normalized_value = Number(v);
-      body.normalized_unit = u;
+      if (state.pending.preview?.value_kind === "coded") {
+        const word = $("#approve-coded-value").value;
+        if (!word) { toast("Pick a value from the reviewed value set.", "bad"); return; }
+        body.coded_value = word;
+      } else {
+        const v = $("#approve-value").value, u = $("#approve-unit").value.trim();
+        if (v === "" || !u) { toast("An expert correction needs both a value and a UCUM unit.", "bad"); return; }
+        body.normalized_value = Number(v);
+        body.normalized_unit = u;
+      }
       body.correction_reason = reason;
-      if (state.pending.unitSuggestionId) body.unit_suggestion_id = state.pending.unitSuggestionId;
     }
     if (state.picks[id]) body.secondary_coding = state.picks[id];
     if (state.taxonPicks[id]) body.taxon = state.taxonPicks[id];
@@ -1455,11 +1429,64 @@
     createTab = tab;
     $$("#create-tabs .tab").forEach((t) => t.classList.toggle("is-active", t.dataset.ct === tab));
     $$("#modal-create [data-ct]:not(.tab)").forEach((f) => { f.hidden = f.dataset.ct !== tab; });
-    $("#create-submit").textContent = { reading: "Create proposal", bulletin: "Extract readings", replay: "Load 5 readings" }[tab];
-    $("#create-submit").disabled = tab === "bulletin" && !state.ai.enabled;
-    $("#create-foot-hint").textContent = tab === "bulletin" && !state.ai.enabled ? "Bulletin intake needs GEMINI_API_KEY." : tab === "reading" ? "Lands in the queue as pending. Nothing is published." : "";
+    $("#create-submit").textContent = { reading: "Create proposal", bulletin: "Extract readings", replay: "Load 5 readings", live: "Pull Hub'Eau now" }[tab];
+    const hub = (state.connectors || []).find((c) => c.name === "hubeau");
+    $("#create-submit").disabled = (tab === "bulletin" && !state.ai.enabled) || (tab === "live" && !(hub && hub.live));
+    $("#create-foot-hint").textContent = tab === "bulletin" && !state.ai.enabled ? "Bulletin intake needs GEMINI_API_KEY." : tab === "reading" ? "Lands in the queue as pending. Nothing is published." : tab === "live" ? "Real readings, queued as pending. A live source gets no shortcut past review." : "";
+    if (tab === "live") renderLiveTab();
     if (tab === "replay") $("#replay-preview").innerHTML = `<p>Five synthetic readings across two sites, 24–29 July 2022: conductivity, NDCI, and dissolved oxygen. Three cross the demo policy once approved.</p><p class="quote dim">Loading the replay again creates a second set of proposals; the dataset is not de-duplicated.</p>`;
   }
+  function renderLiveTab() {
+    const hub = (state.connectors || []).find((c) => c.name === "hubeau");
+    const s2 = (state.connectors || []).find((c) => c.name === "sentinel2");
+    const box = $("#live-stations");
+    if (box && !box.dataset.ready) {
+      box.innerHTML = (hub?.sites || []).map((s) => `<label class="chipbtn wrap"><input type="checkbox" name="station" value="${esc(s.code)}" checked /> <span class="mono">${esc(s.code)}</span><span>${esc(s.name || "")}</span></label>`).join("") || '<span class="dim">No station configured.</span>';
+      box.dataset.ready = "1";
+    }
+    const site = $("#live-site");
+    if (site && !site.dataset.ready) {
+      site.innerHTML = (s2?.sites || []).map((s) => `<option value="${esc(s.site_code)}">${esc(s.site_name)}${s.pilot_city ? ` · ${esc(s.pilot_city)}` : ""}</option>`).join("");
+      site.dataset.ready = "1";
+    }
+    $("#live-hub-status").innerHTML = hub ? `<span class="status ${hub.live ? "ok" : "off"}"><i></i>${hub.live ? "Live · keyless" : "Off"}</span>` : "";
+    $("#live-s2-status").innerHTML = s2 ? `<span class="status ${s2.auth === "credentials-configured" ? "ok" : s2.live ? "warn" : "off"}"><i></i>${s2.auth === "credentials-configured" ? "Live · NDCI enabled" : s2.live ? "Catalogue only" : "Off"}</span>` : "";
+    $("#live-ndci").disabled = !(s2 && s2.auth === "credentials-configured");
+    $("#live-ndci").title = s2 && s2.auth === "credentials-configured" ? "" : "Needs CDSE_CLIENT_ID and CDSE_CLIENT_SECRET";
+  }
+
+  async function pullHubEau(button, stations) {
+    const days = Number($("#live-days")?.value || 730), limit = Number($("#live-limit")?.value || 40);
+    await busy(button, async () => {
+      const r = await api("/connectors/hubeau/pull", { method: "POST", body: JSON.stringify({ stations: stations || [], days, limit }) });
+      const out = $("#live-result");
+      if (out) out.innerHTML = `<div class="note ok">${icon("check")}<span><b>${r.proposals.length} real reading${r.proposals.length === 1 ? "" : "s"} queued</b> from ${r.fetched} rows · request ${esc(r.request_hash.slice(0, 12))}${r.skipped.length ? ` · ${r.skipped.length} skipped` : ""}</span></div>${r.skipped.length ? `<div class="stack" style="margin-top:8px">${r.skipped.slice(0, 5).map((w) => `<div class="note">${icon("flag")}<span>${esc(w)}</span></div>`).join("")}</div>` : ""}`;
+      await refresh();
+      toast(`${r.proposals.length} live readings from Hub'Eau are pending review.`, "ok", { label: "Board", run: () => { closeModals(); go("board"); } });
+    });
+  }
+  async function listScenes(button, siteCode) {
+    const cloud = Number($("#live-cloud")?.value || 40);
+    await busy(button, async () => {
+      const r = await api(`/connectors/sentinel2/scenes?site_code=${encodeURIComponent(siteCode)}&days=60&max_cloud=${cloud}&limit=8`);
+      const html = `<div class="note info">${icon("info")}<span><b>${r.scenes.length} Sentinel-2 L2A scene${r.scenes.length === 1 ? "" : "s"}</b> over ${esc(r.site.site_name)} in the last 60 days with ≤ ${cloud}% cloud. Keyless catalogue query; nothing is queued by listing.</span></div>${r.scenes.length ? `<div class="tablewrap" style="box-shadow:none;margin-top:8px"><table class="tbl"><thead><tr><th>Sensed</th><th>Product</th><th class="num">Cloud</th><th>Tile</th></tr></thead><tbody>${r.scenes.map((s) => `<tr style="cursor:default"><td class="nowrap">${esc(fdate(s.sensed_at).slice(0, 16))}</td><td><a href="${esc(s.catalogue_url)}" target="_blank" rel="noreferrer" class="mono">${esc(s.name.slice(0, 34))}…</a></td><td class="num">${s.cloud_cover === null ? "-" : `${Math.round(s.cloud_cover)}%`}</td><td>${esc(s.tile_id || "-")}</td></tr>`).join("")}</tbody></table></div>` : ""}`;
+      const out = $("#live-result");
+      if (out && $("#modal-create").classList.contains("show")) out.innerHTML = html;
+      else { state.pingResults.sentinel2 = { ok: true, text: `${r.scenes.length} scenes ≤ ${cloud}% cloud` }; renderIntegrations(); }
+      toast(`${r.scenes.length} scenes listed from the Copernicus catalogue.`);
+    });
+  }
+  async function pullNdci(button, siteCode) {
+    const cloud = Number($("#live-cloud")?.value || 40);
+    await busy(button, async () => {
+      const r = await api("/connectors/sentinel2/pull", { method: "POST", body: JSON.stringify({ site_code: siteCode, days: 60, max_cloud: cloud, limit: 20 }) });
+      const out = $("#live-result");
+      if (out) out.innerHTML = `<div class="note ok">${icon("check")}<span><b>${r.proposals.length} NDCI reading${r.proposals.length === 1 ? "" : "s"} queued</b> from ${r.fetched} clear day${r.fetched === 1 ? "" : "s"}, each citing its catalogue scene.</span></div>`;
+      await refresh();
+      toast(`${r.proposals.length} Sentinel-2 NDCI readings are pending review.`);
+    });
+  }
+
   function openCreate(tab = "reading") {
     $("#ct-ai-lz").className = `lz ${state.ai.enabled ? "purple" : ""}`;
     const dt = $("#form-reading [name=observed_at]");
@@ -1474,9 +1501,13 @@
       if (!form.reportValidity()) return;
       const d = new FormData(form);
       const observed = d.get("observed_at") ? new Date(d.get("observed_at") + "Z").toISOString() : new Date().toISOString();
+      const coded = d.get("value_kind") === "coded";
+      if (coded && !String(d.get("coded_value") || "").trim()) { toast("Enter the coded value as the source wrote it.", "bad"); return; }
+      if (!coded && (d.get("value") === "" || !String(d.get("unit") || "").trim())) { toast("A numeric reading needs a value and the unit as written.", "bad"); return; }
       const payload = {
         source_id: d.get("source_id"), source_type: d.get("source_type"), parameter: d.get("parameter"),
-        value: Number(d.get("value")), unit: d.get("unit"), observed_at: observed,
+        ...(coded ? { coded_value: String(d.get("coded_value")).trim() } : { value: Number(d.get("value")), unit: d.get("unit") }),
+        observed_at: observed,
         site_code: d.get("site_code"), site_name: d.get("site_name"),
         latitude: Number(d.get("latitude")), longitude: Number(d.get("longitude")),
         ...(d.get("evidence_url") ? { evidence_url: d.get("evidence_url") } : {}),
@@ -1501,6 +1532,10 @@
         await refresh();
         toast(`${r.extracted_count} reading${r.extracted_count === 1 ? "" : "s"} queued from the bulletin.`);
       });
+    } else if (createTab === "live") {
+      const stations = $$("#live-stations input:checked").map((n) => n.value);
+      if (!stations.length) { toast("Tick at least one station.", "bad"); return; }
+      await pullHubEau(button, stations);
     } else {
       await busy(button, async () => {
         const list = await api("/replay", { method: "POST" });
@@ -1520,6 +1555,7 @@
       { group: "Actions", label: "Create reading", icon: "plus", hint: "C", run: () => openCreate("reading") },
       { group: "Actions", label: "Extract from bulletin", icon: "sparkle", run: () => openCreate("bulletin") },
       { group: "Actions", label: "Load Oder replay", icon: "play", run: () => openCreate("replay") },
+      { group: "Actions", label: "Pull live data (Hub'Eau, Sentinel-2)", icon: "plug", run: () => openCreate("live") },
       { group: "Actions", label: "Approve all pending", icon: "check", run: () => approveMany(state.proposals.filter((p) => p.status === "pending").map((p) => p.id), null) },
       { group: "Actions", label: "Verify hash chain", icon: "shield", run: () => verifyChain(null) },
       { group: "Actions", label: "Generate situation report", icon: "chart", run: () => { go("reports"); situationReport(null); } },
@@ -1533,7 +1569,7 @@
     const items = [...nav, ...actions].filter((i) => !ql || i.label.toLowerCase().includes(ql));
     if (ql) {
       state.proposals.filter((p) => matchText(p, ql)).slice(0, 8).forEach((p) => items.push({ group: "Proposals", label: `${keyOf(p.id)} · ${proposalTitle(p)} · ${p.reading.site_name}`, icon: "board", hint: p.status, run: () => openDrawer("proposal", p.id) }));
-      state.alerts.filter((a) => [a.rule_code, a.site_code, a.severity, a.message].join(" ").toLowerCase().includes(ql)).slice(0, 5).forEach((a) => items.push({ group: "Incidents", label: `${a.rule_code} · ${a.site_code} · ${fnum(a.value)} ${a.unit}`, icon: "alert", hint: a.severity, run: () => { go("alerts"); openDrawer("alert", a.id); } }));
+      state.alerts.filter((a) => [a.rule_code, a.site_code, a.severity, a.message].join(" ").toLowerCase().includes(ql)).slice(0, 5).forEach((a) => items.push({ group: "Incidents", label: `${a.rule_code} · ${a.site_code} · ${alertValue(a)}`, icon: "alert", hint: a.severity, run: () => { go("alerts"); openDrawer("alert", a.id); } }));
       state.provenance.filter((e) => e.hash.startsWith(ql) || e.entity_id.startsWith(ql) || String(e.sequence) === ql).slice(0, 5).forEach((e) => items.push({ group: "Audit", label: `#${e.sequence} ${EVENT_LABEL[e.event_type] || e.event_type} · ${e.hash.slice(0, 16)}`, icon: "shield", run: () => { go("audit"); openDrawer("entry", e.sequence); } }));
     }
     return items;
@@ -1628,12 +1664,13 @@
   async function refresh(announce = false) {
     const limit = state.filters.audit.limit;
     try {
-      const [health, ai, umls, proposals, alerts, briefings, provenance, chain, integrations, catalog] = await Promise.all([
+      const [health, ai, umls, proposals, alerts, briefings, provenance, chain, integrations, catalog, connectors] = await Promise.all([
         api("/health"), api("/ai/status"), api("/terminology/status"), api("/proposals?limit=500"), api("/alerts?limit=500"),
         api("/briefings?limit=500"), api(`/provenance?limit=${limit}`), api("/provenance/verify"),
         api("/integrations").catch(() => state.integrations), api("/coding/catalog").catch(() => state.catalog),
+        api("/connectors").catch(() => state.connectors),
       ]);
-      Object.assign(state, { health, ai, umls, proposals, alerts, briefings, provenance, chain, integrations, catalog, lastRefresh: new Date().toISOString() });
+      Object.assign(state, { health, ai, umls, proposals, alerts, briefings, provenance, chain, integrations, catalog, connectors, lastRefresh: new Date().toISOString() });
       $("#updated-board").classList.remove("stale");
       render();
       if (announce) toast("Refreshed.");
@@ -1722,6 +1759,9 @@
     if ((n = el("[data-unpick]"))) { delete state.picks[n.dataset.unpick]; renderDrawer(); return; }
     if ((n = el("[data-goto-crosswalk]"))) { closeModals(); openDrawer("proposal", n.dataset.gotoCrosswalk, "crosswalk"); return; }
     if ((n = el("[data-brief]"))) { draftBriefing(n.dataset.brief, n.dataset.audience, n); return; }
+    if ((n = el("[data-pull-hubeau]"))) { pullHubEau(n, []); return; }
+    if ((n = el("[data-scenes]"))) { listScenes(n, n.dataset.scenes); return; }
+    if ((n = el("[data-ndci]"))) { pullNdci(n, n.dataset.ndci); return; }
     if ((n = el("[data-ping]"))) { ping(n.dataset.ping, n); return; }
     if ((n = el("[data-approve-shown]"))) { approveMany(applyProposalFilters(state.proposals, state.filters.board).filter((p) => p.status === "pending").map((p) => p.id), n); return; }
     if ((n = el("[data-select]"))) { event.stopPropagation(); if (n.checked) state.selected.add(n.dataset.select); else state.selected.delete(n.dataset.select); renderList(); return; }
@@ -1835,33 +1875,17 @@
   $("#btn-audit-copy").addEventListener("click", () => copy(JSON.stringify(state.provenance, null, 2), `Copied ${state.provenance.length} chain entries.`));
   $("#audit-search").addEventListener("input", (e) => { state.filters.audit.q = e.target.value; renderAudit(); });
   $("#audit-limit").addEventListener("change", (e) => { state.filters.audit.limit = Number(e.target.value); refresh(); });
-  $("#btn-ping-all").addEventListener("click", async (e) => { await busy(e.currentTarget, async () => { await Promise.all(["gemini", "umls", "terminology", "health"].map((n) => ping(n, null))); toast("All integrations checked."); }); });
+  $("#btn-ping-all").addEventListener("click", async (e) => { await busy(e.currentTarget, async () => { await Promise.all(["gemini", "umls", "terminology", "health", "hubeau", "sentinel2"].map((n) => ping(n, null))); toast("All integrations checked."); }); });
 
   // create / approve / reject
   $("#create-tabs").addEventListener("click", (e) => { const t = e.target.closest(".tab"); if (t) showCreateTab(t.dataset.ct); });
   $("#create-submit").addEventListener("click", (e) => submitCreate(e.currentTarget));
   $("#form-reading").addEventListener("submit", (e) => { e.preventDefault(); submitCreate($("#create-submit")); });
   $("#form-bulletin").addEventListener("submit", (e) => { e.preventDefault(); submitCreate($("#create-submit")); });
-  $("#approve-correct").addEventListener("change", (e) => {
-    setCorrectionMode(e.target.checked);
-    if (!e.target.checked) { state.pending.unitSuggestionId = null; $("#approve-reason").value = ""; }
-    renderConversionPreview();
-  });
-  ["#approve-value", "#approve-unit", "#approve-reason"].forEach((id) => $(id).addEventListener("input", updateApprovalQuantity));
-  $("#approve-ai").addEventListener("click", (e) => {
-    if (e.target.closest("[data-retry-unit-suggestion]")) requestUnitSuggestion();
-    if (!e.target.closest("[data-use-unit-suggestion]")) return;
-    const s = state.pending.preview?.ai_result?.suggestion;
-    if (!s) return;
-    state.pending.unitSuggestionId = s.id;
-    $("#approve-correct").checked = true;
-    setCorrectionMode(true);
-    $("#approve-value").value = s.normalized_value;
-    $("#approve-unit").value = s.normalized_unit;
-    $("#approve-reason").value = `Reviewed Gemini suggestion (uncited): ${s.rationale}`.slice(0, 500);
-    updateApprovalQuantity();
-    $("#approve-reason").focus();
-  });
+  $("#create-value-kind").addEventListener("change", (e) => { const coded = e.target.value === "coded"; $$("#form-reading [data-kind]").forEach((f) => { f.hidden = (f.dataset.kind === "coded") !== coded; }); });
+  $("#live-scenes").addEventListener("click", (e) => listScenes(e.currentTarget, $("#live-site").value));
+  $("#live-ndci").addEventListener("click", (e) => pullNdci(e.currentTarget, $("#live-site").value));
+  $("#approve-correct").addEventListener("change", (e) => { setCorrectionMode(e.target.checked); refreshPreview(); });
   $("#approve-coding").addEventListener("change", refreshPreview);
   $("#approve-submit").addEventListener("click", (e) => submitApprove(e.currentTarget));
   $("#reject-submit").addEventListener("click", (e) => submitReject(e.currentTarget));
@@ -1927,7 +1951,11 @@
   (function boot() {
     let theme = null, sidebar = "";
     try { theme = window.localStorage.getItem("aquafhir.theme"); sidebar = window.localStorage.getItem("aquafhir.sidebar") || ""; } catch (_) { /* ignore */ }
-    if (theme) document.documentElement.dataset.theme = theme;
+    // `?theme=light|dark` wins for one load: screenshots and demo recordings
+    // need a deterministic theme without touching this browser's preference.
+    const forced = new URLSearchParams(location.search).get("theme");
+    if (forced === "light" || forced === "dark") document.documentElement.dataset.theme = forced;
+    else if (theme) document.documentElement.dataset.theme = theme;
     else if (window.matchMedia("(prefers-color-scheme: dark)").matches) document.documentElement.dataset.theme = "dark";
     $("#btn-theme use").setAttribute("href", document.documentElement.dataset.theme === "dark" ? "#i-sun" : "#i-moon");
     if (sidebar === "collapsed") { $("#shell").classList.add("sidebar-collapsed"); $("#sidebar-toggle use").setAttribute("href", "#i-chevr"); }

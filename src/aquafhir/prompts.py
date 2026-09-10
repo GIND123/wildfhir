@@ -17,7 +17,7 @@ Design rules that apply to all templates:
 
 from typing import Any
 
-CODING_TEMPLATE_ID = "coding-proposer/v1"
+CODING_TEMPLATE_ID = "coding-proposer/v2"
 INTAKE_TEMPLATE_ID = "intake-extractor/v1"
 BRIEFING_TEMPLATE_ID = "alert-briefing/v1"
 SITUATION_TEMPLATE_ID = "situation-report/v1"
@@ -49,6 +49,11 @@ CODING_SYSTEM = (
     "factors; you only identify which known unit string the source unit means.\n"
     f"- If the source unit does not match any listed known unit, answer '{NO_MATCH}' for the "
     "unit and explain why in the rationale.\n"
+    "- Some indicators publish a coded value (for example absent / present / extensive) "
+    "instead of a number. When the measurement carries a coded value, identify which of the "
+    "catalog entry's known values the source's word denotes, and answer "
+    f"'{NO_MATCH}' for value_code when none clearly fits. Never guess an intensity the "
+    "source did not state.\n"
     "- A near-sounding parameter is not a match. Turbidity is not chlorophyll; conductivity "
     "is not salinity concentration; a chlorophyll index is not a chlorophyll concentration.\n"
     "- confidence is your own calibrated probability that a domain expert would accept this "
@@ -62,26 +67,33 @@ def coding_prompt(
     *,
     parameter: str,
     unit: str,
-    value: float,
+    value: float | None,
     source_type: str,
     site_name: str,
     catalog: list[dict[str, Any]],
     rule_candidate: str | None,
+    coded_value: str | None = None,
 ) -> str:
     lines = ["CATALOG (the only codes you may choose):"]
     for entry in catalog:
         aliases = ", ".join(entry["aliases"])
-        units = ", ".join(entry["known_units"]) or "(none)"
+        units = ", ".join(entry["known_units"]) or "(none: coded value only)"
+        values = ", ".join(entry.get("known_values", [])) or "(none: quantity only)"
         lines.append(
-            f"- code: {entry['code']} | display: {entry['display']}\n"
+            f"- code: {entry['code']} | display: {entry['display']}"
+            f" | one-health leg: {entry.get('leg', 'environmental')}\n"
             f"  known aliases: {aliases}\n"
-            f"  known units: {units}"
+            f"  known units: {units}\n"
+            f"  known values: {values}"
         )
     lines.append("")
     lines.append("MEASUREMENT TO MAP:")
     lines.append(f"- source parameter label: {parameter!r}")
-    lines.append(f"- source unit string: {unit!r}")
-    lines.append(f"- numeric value: {value}")
+    if coded_value is not None:
+        lines.append(f"- source coded value (a word, not a number): {coded_value!r}")
+    else:
+        lines.append(f"- source unit string: {unit!r}")
+        lines.append(f"- numeric value: {value}")
     lines.append(f"- source type: {source_type}")
     lines.append(f"- monitoring site: {site_name}")
     if rule_candidate:
@@ -94,7 +106,9 @@ def coding_prompt(
     return "\n".join(lines)
 
 
-def coding_schema(code_values: list[str], unit_values: list[str]) -> dict[str, Any]:
+def coding_schema(
+    code_values: list[str], unit_values: list[str], value_codes: list[str] | None = None
+) -> dict[str, Any]:
     return {
         "type": "OBJECT",
         "properties": {
@@ -107,6 +121,14 @@ def coding_schema(code_values: list[str], unit_values: list[str]) -> dict[str, A
                 "type": "STRING",
                 "enum": [*unit_values, NO_MATCH],
                 "description": "Which known unit string the source unit denotes, or NO_MATCH.",
+            },
+            "value_code": {
+                "type": "STRING",
+                "enum": [*(value_codes or []), NO_MATCH],
+                "description": (
+                    "For a coded (non-numeric) reading: which known value the source's "
+                    "word denotes, or NO_MATCH. NO_MATCH for numeric readings."
+                ),
             },
             "confidence": {
                 "type": "NUMBER",
@@ -127,6 +149,7 @@ def coding_schema(code_values: list[str], unit_values: list[str]) -> dict[str, A
         "propertyOrdering": [
             "code",
             "unit_code",
+            "value_code",
             "confidence",
             "rationale",
             "evidence",

@@ -1,0 +1,50 @@
+# Live, read-only connectors. Everything here is a *site list*; the credentials
+# and endpoints live in the environment (see .env.example). A pull from either
+# connector produces ordinary pending proposals: a live reading gets no
+# shortcut past human review.
+
+hubeau:
+  # Hub'Eau river water quality (Naiades), keyless. Station codes are Sandre
+  # station codes; find more with
+  # https://hubeau.eaufrance.fr/api/v2/qualite_rivieres/station_pc?code_commune=<INSEE>
+  source_id: hubeau-naiades
+  # Sandre parameter codes to pull. Must be a subset of HUBEAU_PARAMETERS in
+  # src/aquafhir/connectors.py, which is the set the catalog can code.
+  parameters: ["1301", "1302", "1303", "1311", "1335", "1339", "1340", "1350", "1305", "1337", "1449", "1382", "1392", "1383", "1369", "1387", "1370"]
+  stations:
+    # Toulouse: OneAquaHealth pilot city. Three stations on the Garonne through
+    # the city and one on the Hers-Mort below the Ginestous treatment works.
+    - { code: "05163000", name: "La Garonne dans Toulouse (St-Pierre)", pilot_city: Toulouse, latitude: 43.6019, longitude: 1.4356 }
+    - { code: "05162950", name: "La Garonne dans Toulouse (Catalans)", pilot_city: Toulouse, latitude: 43.6029, longitude: 1.4279 }
+    - { code: "05161900", name: "La Garonne à Blagnac", pilot_city: Toulouse, latitude: 43.6249, longitude: 1.4010 }
+    - { code: "05157350", name: "L'Hers-Mort à Toulouse, au Palays (aval STEP)", pilot_city: Toulouse, latitude: 43.5555, longitude: 1.4954 }
+
+sentinel2:
+  # Copernicus Data Space Ecosystem. Scene listing is keyless; NDCI needs
+  # CDSE_CLIENT_ID / CDSE_CLIENT_SECRET. `bbox` is [west, south, east, north]
+  # in EPSG:4326 and should cover water, since the evalscript masks to the
+  # Scene Classification "water" class before computing the statistic.
+  source_id: copernicus-sentinel2-l2a
+  sites:
+    - site_code: garonne-toulouse
+      site_name: Garonne through Toulouse (Sentinel-2 reach)
+      pilot_city: Toulouse
+      latitude: 43.6019
+      longitude: 1.4356
+      bbox: [1.4200, 43.5700, 1.4450, 43.6150]
+    - site_code: oder-kostrzyn
+      site_name: Oder at Kostrzyn
+      latitude: 52.5887
+      longitude: 14.6495
+      bbox: [14.6300, 52.5700, 14.6700, 52.6050]
+    - site_code: mar-menor
+      site_name: Mar Menor lagoon (central basin)
+      latitude: 37.7100
+      longitude: -0.7900
+      bbox: [-0.8300, 37.6700, -0.7500, 37.7500]
+    - site_code: akerselva-oslo
+      site_name: Akerselva outlet, Oslo (Bjørvika)
+      pilot_city: Oslo
+      latitude: 59.9060
+      longitude: 10.7560
+      bbox: [10.7400, 59.8980, 10.7700, 59.9120]

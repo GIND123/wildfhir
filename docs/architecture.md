@@ -2,17 +2,18 @@
 
 ## System boundary
 
-AquaFHIR Bridge owns environmental ingestion, terminology review, OAH resource construction, threshold evaluation, and delivery intent. It does not diagnose disease, predict bloom biology, replace a regulator, or send a public warning autonomously.
+AquaFHIR Bridge owns ingestion across the three One Health legs (environmental and animal indicators, human health measures), terminology review, OAH resource construction, threshold evaluation, and delivery intent. It does not diagnose disease, predict bloom biology, replace a regulator, or send a public warning autonomously.
 
 | Component | Responsibility | Persistent data |
 |---|---|---|
 | FastAPI edge | Validate requests and expose review/webhook APIs | None |
-| Coding proposer | Suggest a curated OAH code and UCUM normalization | Versioned YAML |
+| Coding proposer | Suggest a curated OAH code and either a UCUM normalization or a value-set concept for a coded reading; carry the code's One Health leg | Versioned YAML |
+| Live connectors | Pull real readings from Hub'Eau (keyless) and Sentinel-2 via the Copernicus Data Space Ecosystem (keyless listing, credentialed NDCI); every pull is an ordinary pending proposal plus one chain entry | Versioned YAML site list |
 | Gemini co-pilot | Propose a catalog code for a label rules cannot match; extract readings from free text; draft advisories | Versioned prompt templates |
 | Terminology crosswalk | Suggest a real LOINC/SNOMED CT candidate for a curated OAH code's display text; never selects it | Published LOINC table (read-only) |
 | Review workflow | Enforce pending → approved/rejected state transition; a reviewer may also attach a suggested secondary coding | SQLite |
-| FHIR builder/client | Build atomic R4 transactions and publish to HAPI | HAPI/PostgreSQL |
-| Policy engine | Compare like-for-like code, value, and unit | Versioned YAML |
+| FHIR builder/client | Build atomic R4 transactions through the profile the leg requires (`observation-indicators-oah` or `observation-health-measure-oah`), with `valueQuantity` or `valueCodeableConcept`, and publish to HAPI | HAPI/PostgreSQL |
+| Policy engine | Compare like-for-like code, value, and unit; coded rules compare value-set concepts and only read `valueCodeableConcept` | Versioned YAML |
 | Provenance ledger | Hash-chain material state changes | SQLite |
 | Dashboard | Give a reviewer a small, inspectable work surface | None |
 
@@ -135,6 +136,10 @@ For the single-node demo, approval also calls the policy engine directly. In a d
 
 - Unknown parameter: proposal is created without a code and cannot be approved until a reviewer supplies one.
 - Unknown unit: code may be proposed, but normalized quantity is absent and approval is blocked.
+- Coded word outside the value set, or a number for a coded-only indicator, or a word for a quantity indicator: code may be proposed, the value is withheld, and approval is blocked until a reviewer supplies a value of the right kind from the reviewed set.
+- Hub'Eau unreachable or refusing: `502`, nothing queued. A result flagged below the quantification limit is skipped and listed, never queued as a measurement. An unconfigured station is `503`.
+- Copernicus catalogue unreachable: `502`. No OAuth client configured: scene listing still works; NDCI is `503` naming the two variables to set. A day with no clear water pixels is not a reading.
+- Gemini pinned model answers 429 or 404: the configured fallback model is tried once, the model that answered is recorded on the proposal and in the chain (`fallback_from`); no fallback configured means the curated proposal stands as before.
 - HAPI unavailable or validation failure: request fails and proposal stays pending.
 - Threshold unit mismatch: rule is not evaluated; no implicit conversion occurs in the policy engine.
 - Repeated decision: rejected with `409`.

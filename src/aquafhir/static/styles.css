@@ -2,6 +2,7 @@
    Framework-free. One token set, light and dark, work-management chrome. */
 
 :root {
+  color-scheme: light;
   --n0: #ffffff;
   --n10: #f7f8f9;
   --n20: #f1f2f4;
@@ -30,6 +31,14 @@
   --purple-ink: #5e4db2;
   --teal-soft: #e7f9ff;
   --teal-ink: #206a83;
+  /* Orange is the "high" severity hue shared by the audit dot, the map marker
+     and the site-map legend. The -bold variants are the fills used under white
+     text: the base amber/orange only reach ~3.3:1 with white, so badges get a
+     deeper fill and dots/lines keep the brighter hue. */
+  --orange: #e56910;
+  --orange-bold: #bf4f0a;
+  --amber-bold: #8f6b00;
+  --selection: rgba(12, 102, 228, .25);
   --overlay: rgba(9, 30, 66, .54);
   --shadow-1: 0 1px 1px rgba(9, 30, 66, .25), 0 0 1px rgba(9, 30, 66, .31);
   --shadow-2: 0 8px 12px rgba(9, 30, 66, .15), 0 0 1px rgba(9, 30, 66, .31);
@@ -55,6 +64,7 @@
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
   --n0: #1d2125;
   --n10: #161a1d;
   --n20: #22272b;
@@ -83,6 +93,10 @@
   --purple-ink: #b8acf6;
   --teal-soft: #1e3137;
   --teal-ink: #9dd9ee;
+  --orange: #f38a3f;
+  --orange-bold: #f38a3f;
+  --amber-bold: #e2b203;
+  --selection: rgba(87, 157, 255, .35);
   --overlay: rgba(0, 0, 0, .6);
   --shadow-1: 0 0 0 1px rgba(255, 255, 255, .06);
   --shadow-2: 0 8px 12px rgba(0, 0, 0, .4), 0 0 0 1px rgba(255, 255, 255, .06);
@@ -104,7 +118,7 @@ a { color: var(--brand-ink); }
 button { font: inherit; color: inherit; }
 input, select, textarea { font: inherit; color: inherit; }
 code, .mono { font-family: var(--mono); font-size: 12px; }
-::selection { background: var(--brand-soft); }
+::selection { background: var(--selection); }
 
 .visually-hidden {
   position: absolute !important; width: 1px; height: 1px; overflow: hidden;
@@ -352,7 +366,9 @@ code, .mono { font-family: var(--mono); font-size: 12px; }
 .lz.bold.blue { background: var(--brand); color: #fff; }
 .lz.bold.green { background: var(--green); color: #fff; }
 .lz.bold.red { background: var(--red); color: #fff; }
-.lz.bold.amber { background: var(--amber); color: #fff; }
+.lz.bold.amber { background: var(--amber-bold); color: #fff; }
+/* Dark fills are bright, so bold badges take dark ink there, as .btn.primary does. */
+[data-theme="dark"] .lz.bold, [data-theme="dark"] .sev { color: #1d2125; }
 .lz.lc { text-transform: none; letter-spacing: 0; font-weight: 500; }
 /* Status readout: a dot carries the state, the text stays neutral. Used wherever
    a value is "how is this thing doing" rather than a label worth colouring in.
@@ -382,7 +398,9 @@ code, .mono { font-family: var(--mono); font-size: 12px; }
 .src.agency { background: #0c66e4; }
 .src.citizen { background: #1f845a; }
 .src.satellite { background: #6e5dc6; }
-.src.weather { background: #b38600; }
+/* Theme-constant like its siblings, but darker than --amber: white 9px text on
+   #b38600 is only 3.3:1. */
+.src.weather { background: #8f6b00; }
 
 /* confidence meter */
 .meter { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--n60); font-variant-numeric: tabular-nums; }
@@ -400,7 +418,7 @@ code, .mono { font-family: var(--mono); font-size: 12px; }
   display: flex; align-items: center; gap: 8px; padding: 12px 12px 8px; flex: none;
   font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--n60);
 }
-.col-head .count { background: var(--n30); }
+.col-head .count { background: var(--n30); color: var(--n70); }
 .col-head .btn { margin-left: auto; }
 .col-body { padding: 0 8px 8px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
 .col-empty { margin: 8px; padding: 24px 12px; border: 1px dashed var(--n30); border-radius: var(--r); text-align: center; font-size: 12px; color: var(--n60); }
@@ -469,8 +487,8 @@ code, .mono { font-family: var(--mono); font-size: 12px; }
   width: 32px; height: 32px; border-radius: var(--r); display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 12px;
 }
 .sev.critical { background: var(--red); }
-.sev.high { background: #e56910; }
-.sev.medium { background: var(--amber); }
+.sev.high { background: var(--orange-bold); }
+.sev.medium { background: var(--amber-bold); }
 .sev.low { background: var(--brand); }
 .incident h3 { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .incident .msg { color: var(--n70); font-size: 13px; margin-top: 2px; }
@@ -522,7 +540,7 @@ code, .mono { font-family: var(--mono); font-size: 12px; }
 .evt.mapping-proposed i { background: var(--brand); }
 .evt.mapping-approved i { background: var(--green); }
 .evt.mapping-rejected i { background: var(--red); }
-.evt.alert-created i { background: #e56910; }
+.evt.alert-created i { background: var(--orange); }
 .evt.briefing-drafted i, .evt.situation-report i, .evt.unstructured-intake i { background: var(--purple); }
 /* An AI call that failed is the one an auditor is looking for, so it is not
    the same neutral dot as a successful step. */
@@ -655,6 +673,7 @@ pre.json {
 /* ── modal ────────────────────────────────────────────────────────────── */
 .modal {
   position: fixed; inset: 0; z-index: 70; display: none; place-items: center; padding: 24px;
+  background: var(--overlay);
 }
 .modal.show { display: grid; }
 .modal-box {
@@ -670,7 +689,7 @@ pre.json {
 .modal .tabs { padding: 0; margin: 12px 24px 0; }
 
 /* ── command palette ──────────────────────────────────────────────────── */
-.cmdk { position: fixed; inset: 0; z-index: 80; display: none; justify-content: center; align-items: flex-start; padding-top: 12vh; }
+.cmdk { position: fixed; inset: 0; z-index: 80; display: none; justify-content: center; align-items: flex-start; padding-top: 12vh; background: var(--overlay); }
 .cmdk.show { display: flex; }
 .cmdk-box { width: 640px; max-width: calc(100vw - 32px); background: var(--n0); border-radius: var(--r-lg); box-shadow: var(--shadow-3); overflow: hidden; }
 .cmdk-input { display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--n30); }
@@ -749,10 +768,10 @@ pre.json {
 #fn-out    { grid-area: out; }
 
 .flow-wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; overflow: visible; }
-.flow-wires path { fill: none; stroke: var(--n40); stroke-width: 1.5; transition: stroke .15s, stroke-width .15s; }
+.flow-wires path { fill: none; stroke: var(--n50); stroke-width: 1.5; transition: stroke .15s, stroke-width .15s; }
 .flow-wires path.is-dashed { stroke-dasharray: 4 4; }
 .flow-wires path.is-lit { stroke: var(--brand); stroke-width: 2.5; }
-.flow-wires .wire-head { fill: var(--n40); transition: fill .15s; }
+.flow-wires .wire-head { fill: var(--n50); transition: fill .15s; }
 .flow-wires .wire-head.is-lit { fill: var(--brand); }
 
 .fnode {
@@ -768,11 +787,11 @@ pre.json {
 }
 .fnode-step {
   margin-left: auto; font-family: var(--mono); font-size: 11px; font-weight: 600;
-  color: var(--n50); letter-spacing: .04em;
+  color: var(--n60); letter-spacing: .04em;
 }
 .fnode-tag {
   margin-left: auto; font-size: 10px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: .05em; color: var(--n50);
+  letter-spacing: .05em; color: var(--n60);
 }
 .fnode h3 { font-size: 13.5px; font-weight: 600; color: var(--n90); letter-spacing: -.005em; }
 .fnode p { font-size: 11.5px; line-height: 1.42; color: var(--n60); min-height: 33px; }
@@ -783,7 +802,8 @@ pre.json {
 .fnode.is-gate { border: 1.5px solid var(--brand); background: var(--brand-soft); }
 .fnode.is-gate .fnode-icon { background: var(--brand); color: #fff; }
 .fnode.is-gate p { color: var(--brand-ink); }
-.fnode.is-gate .fnode-stat { border-top-color: rgba(12, 102, 228, .22); }
+.fnode.is-gate .fnode-stat { border-top-color: color-mix(in srgb, var(--brand) 22%, transparent); }
+.fnode.is-gate .fnode-stat span { color: var(--n70); }
 .fnode-gatetag {
   position: absolute; top: -9px; left: 13px; height: 18px; padding: 0 8px; border-radius: 9px;
   background: var(--brand); color: #fff; font-size: 10px; font-weight: 700; text-transform: uppercase;
@@ -795,7 +815,7 @@ pre.json {
 .fnode.is-assist .fnode-stat b { font-size: 16px; }
 
 /* connector ports, the small dots a wire visually terminates on */
-.fport { position: absolute; width: 7px; height: 7px; border-radius: 50%; background: var(--n0); border: 1.5px solid var(--n40); }
+.fport { position: absolute; width: 7px; height: 7px; border-radius: 50%; background: var(--n0); border: 1.5px solid var(--n50); }
 .fnode:hover .fport, .fnode:focus-visible .fport { border-color: var(--brand); }
 .fport-l { left: -4px; top: 50%; margin-top: -3.5px; }
 .fport-r { right: -4px; top: 50%; margin-top: -3.5px; }
@@ -843,9 +863,9 @@ pre.json {
 }
 .flow-legend span { display: inline-flex; align-items: center; gap: 8px; }
 .flow-legend .wk { width: 34px; height: 8px; flex: none; overflow: visible; }
-.flow-legend .wk path { fill: none; stroke: var(--n40); stroke-width: 1.5; }
-.flow-legend .wk polygon { fill: var(--n40); }
-.flow-legend-note { margin-left: auto; color: var(--n50); }
+.flow-legend .wk path { fill: none; stroke: var(--n50); stroke-width: 1.5; }
+.flow-legend .wk polygon { fill: var(--n50); }
+.flow-legend-note { margin-left: auto; color: var(--n60); }
 
 .flow-ledger {
   display: flex; align-items: center; gap: 12px; padding: 13px 18px; border-radius: var(--r-lg);
@@ -927,3 +947,13 @@ pre.json {
   .map-canvas { height: 280px; }
   [data-tip]::after { width: 210px; }
 }
+
+/* ── One Health legs, coded values, live connectors ───────────────────── */
+.lz.leg { text-transform: none; letter-spacing: 0; }
+.evt.connector-pull i { background: var(--teal-ink); }
+.form-h { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--n60); margin: 0; }
+.form .sec-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+#live-stations label.chipbtn { gap: 8px; }
+#live-stations label.chipbtn input { width: 14px; height: 14px; accent-color: var(--brand); margin: 0; }
+#live-result { margin-top: 4px; }
+.mapping .side .val { overflow-wrap: anywhere; }

@@ -26,7 +26,7 @@ python scripts/simulate.py                 # every scenario against a live bridg
   - [2. Milwaukee cryptosporidiosis (1993)](#2-milwaukee-cryptosporidiosis-outbreak--usa-marchapril-1993)
   - [3. Walkerton *E. coli* O157:H7 (2000)](#3-walkerton-e-coli-o157h7-outbreak--ontario-canada-may-2000)
   - [4. Toledo "do not drink" (2014)](#4-toledo-do-not-drink-advisory--ohio-usa-august-2014)
-  - [5. Havelock North campylobacteriosis (2016)](#5-havelock-north-campylobacteriosis-outbreak--new-zealand-august-2016)
+  - [5. Havelock North campylobacteriosis (2016)](#5-havelock-north-campylobacteriosis-outbreak--new-zealand-august-2016) — the One Health loop, closed
   - [6. Flint drinking-water crisis (2014–15)](#6-flint-drinking-water-crisis--michigan-usa-20142015)
   - [7. Baia Mare cyanide spill (2000)](#7-baia-mare-cyanide-spill-someştiszadanube--romania--hungary--serbia-2000)
   - [8. Ajka red-mud spill (2010)](#8-ajka-alumina-plant-red-mud-spill--hungary-october-2010)
@@ -59,8 +59,8 @@ distinction matters more than the counts:
 
 | Outcome | Meaning |
 |---|---|
-| `coded` | An OAH coding **and** a normalised UCUM quantity. A reviewer may approve it. |
-| `blocked_qty` | The concept is recognised, but the number is withheld — the unit does not resolve, or the value is outside its reviewed plausible range. **Approval is refused until a person corrects it.** |
+| `coded` | An OAH coding **and** a publishable value: a normalised UCUM quantity, or a concept from the indicator's reviewed value set for a coded reading. A reviewer may approve it. |
+| `blocked_qty` | The concept is recognised, but the value is withheld — the unit does not resolve, the value is outside its reviewed plausible range, the word is not in the value set, or the value is the wrong kind for the indicator (a number for `foam`, a word for `dissolved-oxygen`). **Approval is refused until a person corrects it.** |
 | `no_code` | No curated match. Usually because the concept is absent from the OAH IG's temporary code system. The bridge refuses to guess. |
 
 `blocked_qty` and `no_code` are not failures of the simulation. They are the product
@@ -75,7 +75,7 @@ This is the sequence to run for a demo, a judging session, or a regression check
 ### 1. Prove the logic offline — no keys, no network, ~2 seconds
 
 ```bash
-pytest -q                              # 332 tests
+pytest -q                              # 402 tests
 pytest tests/test_incidents.py -q      # the 84 that are this catalogue
 ```
 
@@ -153,18 +153,18 @@ is withheld exactly like an unresolvable unit: no number, no publication, no ale
 approval blocked until a person corrects it.
 
 **2. The OAH IG is far larger than this repository was using.** The temporary code system
-publishes **286 concepts**, not the handful this project started with — including
+publishes **185 concepts** in the build vendored in `data/oah/`, not the handful this project started with — including
 `nitrate`, `ammonium`, `tss`, `coliforms`, `lead-dissolved`, `mci`, and the full dissolved-
-metals series. The curated catalog now covers 19 of them, every one verified against the
-published code system and guarded by a test that fails if an unpublished code is ever
-introduced.
+metals series. The curated catalog now covers 29 of them across all three legs, every one checked in CI
+against the vendored code system, so an unpublished code cannot be introduced.
 
 **3. It also carries the human and animal legs of One Health.** `gastrointestinal`,
 `campylobacter`, `cryptosporidium`, `hospitalization-*` and `causes-of-death` are human-health
 indicators in the same code system; `fish`, `amphibians`, `birds`, `ticks` and `diptera` are
-the animal leg. This bridge currently publishes only the environmental leg, through
-`observation-indicators-oah`. Closing the loop needs the IG's second profile,
-`observation-health-measure-oah` — see [Terminology gaps](#terminology-gaps-this-catalogue-found).
+the animal leg. This bridge now publishes all three: the environmental and animal legs
+through `observation-indicators-oah`, the human leg through the IG's second profile,
+`observation-health-measure-oah`, on the same `Location` — see scenario 5 and
+[Terminology gaps](#terminology-gaps-this-catalogue-found) for what the IG still lacks.
 
 **4. Every incident here turned on at least one indicator no standard can express.**
 Turbidity, free chlorine residual, cyanide, microcystin and enterococci are absent from the
@@ -399,14 +399,32 @@ demonstration of the routing claim: a single coliform exceedance at the bore fie
 pathway crosses both — not because someone remembered to forward an email. It would **not**
 have chlorinated the bore, and it does not predict rainfall-driven ingress.
 
+**The loop, closed.** The fixture now carries the human leg too. Alongside the bore-field
+water readings it holds the district health board's line: campylobacteriosis notifications
+per 100,000, the acute gastrointestinal-illness rate as a percentage of the population, and
+a raw case count. They are published through the IG's *second* profile,
+`observation-health-measure-oah`, against the **same** `Location` as the coliform reading,
+so `Observation?subject=Location/brookvale-bore-1` returns the animal→water→human pathway
+as one search rather than as a paragraph. The percentage converts to the IG's per-100,000
+rate by the one reviewed factor; the raw count is coded but its quantity is withheld, because
+without the population there is no reviewed way to make it a rate, and a reviewer who knows
+the denominator supplies it with a reason. The campylobacter rule routes back to the water
+authority and to veterinary as well as public health: a waterborne zoonosis is everyone's
+signal.
+
+What the IG cannot carry is the sheep. There is no OAH concept for livestock, so the animal
+side of this pathway is on the [gap list](#terminology-gaps-this-catalogue-found), not in
+FHIR.
+
 **The simulation.**
 
 ```bash
 python scripts/simulate.py havelock-north-2016 -v
 ```
 
-6 rows → 5 `coded`, 1 `no_code`. Four alerts: `coliforms` (critical), `ammonium` (high),
-`nitrate` (high), `tss` (high) → all three audiences.
+10 rows → 8 `coded`, 1 `blocked_qty`, 1 `no_code`. Six alerts: `coliforms` (critical),
+`ammonium` (high), `nitrate` (high), `tss` (high), `campylobacter` (critical),
+`gastrointestinal` (high) → all three audiences.
 
 The fixture deliberately samples the pond 90 m from the bore head as a distinct
 `Location`, so the alert carries the spatial relationship rather than flattening two places
@@ -775,7 +793,39 @@ rather than a fabricated number.
 
 ---
 
-## 13. Synthetic abuse cases — sensor faults, boundaries, and unknown inputs
+## 13. Citizen stream assessment — Coimbra, Portugal (synthetic, OneAquaHealth app shape)
+
+**What this is.** Not a historical incident. The OneAquaHealth citizen app records foam,
+macrophytes and the benthic-invertebrate assessment as *words*, and the IG models them as
+`CodeableConcept` values from `macrophytes-indicator-value-oah-vs`: `absent`, `present`,
+`extensive`. This fixture is one morning's assessment on the Ribeira de Coselhas in Coimbra,
+a OneAquaHealth pilot city, in exactly that shape.
+
+**The failure mode.** A bridge that publishes only `valueQuantity` cannot carry the
+project's own data, and a bridge that forces a word through a float invents a number the
+citizen never reported.
+
+**What this bridge does.** `foam: present` and `macrophytes: extensive` publish as
+`valueCodeableConcept` concepts from the IG's value set. `macroinvertebrates: none`
+resolves to `absent` through a reviewed alias. `foam: kinda foamy` is **withheld**: the
+word is not in the set and the bridge does not round words to the nearest concept; the
+reviewer picks one of the three, with a reason. `foam: 2 mg/L` is withheld too, because the
+indicator publishes a coded value, not a quantity. The coded rules fire on the coded values
+and route to the water authority (foam) and to veterinary and the water authority
+(invertebrates absent), reading only `valueCodeableConcept`.
+
+**The simulation.**
+
+```bash
+python scripts/simulate.py coimbra-citizen-2026 -v
+```
+
+7 rows → 5 `coded`, 2 `blocked_qty`. Two alerts: `foam` (moderate),
+`macroinvertebreates` (moderate) → veterinary, water-authority.
+
+---
+
+## 14. Synthetic abuse cases — sensor faults, boundaries, and unknown inputs
 
 Not an incident. This is the fixture to run **first** after changing `coding.py`,
 `thresholds.py`, or either YAML file.
@@ -843,8 +893,8 @@ standard in scope can express.
 | Threshold inclusive at the boundary | edge-cases | `test_thresholds_are_inclusive_at_the_boundary` |
 | Threshold silent just outside the boundary | edge-cases | `test_thresholds_do_not_fire_just_outside_the_boundary` |
 | Two rules on one code get distinct alert ids | ajka-2010 | `test_two_rules_on_one_code_get_distinct_alert_ids` |
-| Blocked or uncoded proposal can never be published | all 13 | `test_a_blocked_quantity_can_never_be_published` |
-| Nothing is ever auto-approved | all 13 | `test_no_scenario_reading_is_ever_auto_approved` |
+| Blocked or uncoded proposal can never be published | all 14 | `test_a_blocked_quantity_can_never_be_published` |
+| Nothing is ever auto-approved | all 14 | `test_no_scenario_reading_is_ever_auto_approved` |
 | Upstream normal, downstream critical (site resolution) | akerselva-2011, ajka-2010 | manifest alert sets |
 | Recovery reading does not alert | brixham-2024, seine-2024 | manifest alert sets |
 | Cross-audience One Health routing from one reading | havelock-north-2016 | manifest audiences |
@@ -859,6 +909,16 @@ standard in scope can express.
 | Every policy rule uses a reachable unit | all | `test_every_policy_rule_uses_a_unit_the_catalog_normalises_to` |
 | Every routed audience can be briefed | all | `test_every_alert_audience_is_one_the_briefing_writer_knows` |
 | Every curated code is a published OAH concept | all | `test_every_curated_code_is_an_oah_temporary_code_system_concept` |
+| Human leg published through the health-measure profile on the same Location | havelock-north-2016 | [`tests/test_one_health.py`](../tests/test_one_health.py) |
+| Percentage of population converts to the IG's per-100,000 rate | havelock-north-2016 | `test_a_percentage_of_the_population_converts_to_a_rate` |
+| Raw case count withheld without a denominator | havelock-north-2016 | `test_a_raw_case_count_is_withheld_without_a_denominator` |
+| Coded word published as valueCodeableConcept from the IG value set | coimbra-citizen-2026 | [`tests/test_coded_values.py`](../tests/test_coded_values.py) |
+| Word outside the value set withheld, never rounded | coimbra-citizen-2026 | `test_an_unlisted_word_is_withheld_not_rounded` |
+| Number for a coded indicator, word for a quantity indicator, both withheld | coimbra-citizen-2026 | `test_a_number_for_a_coded_indicator_is_withheld` |
+| Coded rule never reads a quantity | coimbra-citizen-2026 | `test_a_coded_rule_never_reads_a_quantity` |
+| Every human-leg code is in the health-measure value set; no other is | all | [`tests/test_oah_package.py`](../tests/test_oah_package.py) |
+| Live Hub'Eau result below the quantification limit is skipped, not published | live connector | `test_a_below_quantification_limit_result_is_skipped_and_explained` |
+| Live E. coli in n/(100mL) withheld (MPN vs CFU unknown) | live connector | `test_hubeau_readings_are_coded_by_the_ordinary_catalog` |
 | Malformed FHIR from a Subscription | — | [`tests/test_robustness.py`](../tests/test_robustness.py) |
 
 ---
@@ -878,6 +938,7 @@ The refusals are an output, not a shortfall. This is the list to submit.
 | **Enterococci** | Seine 2024 | A mandatory Bathing Water Directive (2006/7/EC) indicator. `coliforms` covers only the *E. coli* half. |
 | Volatile organics (vinyl chloride, acrylates) | East Palestine 2023 | Whole class absent. |
 | **Phytoplankton cell density** | Oder 2022 | The IG has `diatomes` but no concept for a cell count of a named alga. Found while building the biodiversity crosswalk: GBIF resolves *Prymnesium parvum* to `7513065` at 99% confidence, and the reading still cannot be published because there is no indicator to hang it on. |
+| **Livestock / grazing animals** | Havelock North 2016, Walkerton 2000 | The animal leg has `fish`, `amphibians`, `birds`, `ticks`, `diptera` and nothing for sheep or cattle. The reservoir in two of the catalogue's outbreaks cannot be coded, so the animal→water→human loop closes on the water and human legs only. |
 
 ### No taxonomy anywhere in the IG
 
@@ -897,11 +958,15 @@ the IG is the real fix.
   `dissolvedO2` and `dissolved-oxygen`, `fish` and `fishes` all exist as separate codes. Two
   conformant implementations can encode the same measurement differently and fail to join.
   Worth raising with HL7 Europe.
-- **Coded-value indicators are not yet supported here.** `foam` (Foam/colour/smell),
-  `macrophytes`, `macroinvertebreates` and the ordinal value sets are `CodeableConcept`
-  observations, not quantities. This bridge publishes `valueQuantity` only. Since these are
-  the backbone of citizen-science stream assessment, supporting them is the highest-value
-  extension to the ingestion model.
+- **Coded-value indicators are supported.** `foam`, `macrophytes` and `macroinvertebreates`
+  publish `valueCodeableConcept` from `macrophytes-indicator-value-oah-vs`. What the IG
+  does not define is a value set of its own for foam, colour or smell: the three-concept
+  macrophyte set is reused, which is defensible for presence and a stretch for smell.
+  Worth raising.
+- **The human measures are defined as rates, and the code system carries no denominator.**
+  "Cases per 100,000 inhabitants, per district" is the definition; the district population
+  is nowhere in the resource. The IG's `Group` cohort could carry it, and this bridge does
+  not yet publish one.
 
 ### Absent from environmental LOINC
 
@@ -911,16 +976,16 @@ electrical conductivity of water (`87444-6`), but **none** for dissolved oxygen 
 temperature in an environmental specimen, and none for a satellite-derived index. The
 crosswalk returns nothing rather than a plausible-looking wrong code.
 
-### The One Health closure that is available and not yet built
+### The One Health closure, now built
 
-The OAH IG already publishes the human leg (`gastrointestinal`, `campylobacter`,
-`cryptosporidium`, `hospitalization-*`, `causes-of-death`) and the animal leg (`fish`,
-`amphibians`, `birds`, `ticks`, `diptera`) alongside the environmental one, and provides a
-second profile — `observation-health-measure-oah` — for the human measures. Every outbreak
-scenario in this catalogue currently stops at the environmental reading. Publishing the
-human-health counterpart against the same `Location`, through the profile the IG already
-defines, would make the ecosystem-to-human link a queryable fact rather than a narrative
-claim. That is the single highest-value next addition to this repository.
+The OAH IG publishes the human leg (`gastrointestinal`, `campylobacter`,
+`cryptosporidium`, `escherichia-coli`, `hospitalization-*`, `causes-of-death`) and the
+animal leg (`fish`, `amphibians`, `birds`, `ticks`, `diptera`) alongside the environmental
+one, and provides a second profile — `observation-health-measure-oah` — for the human
+measures. The Havelock North scenario now publishes the human counterpart against the same
+`Location` as the water readings, through that profile, so the ecosystem-to-human link is a
+queryable fact. What remains open is the cohort (`Group`) the IG allows a health measure to
+point at, and the missing livestock concept above.
 
 ---
 

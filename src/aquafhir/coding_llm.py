@@ -82,7 +82,7 @@ class GeminiCodingAgent:
         # wrong on real-world feeds.
         return (
             proposal.coding is None
-            or proposal.normalized_unit is None
+            or not proposal.has_publishable_value
             or proposal.confidence < self.assist_below_confidence
         )
 
@@ -128,8 +128,9 @@ class GeminiCodingAgent:
                 site_name=reading.site_name,
                 catalog=catalog,
                 rule_candidate=rule_candidate,
+                coded_value=reading.coded_value,
             ),
-            schema=coding_schema(codes, units),
+            schema=coding_schema(codes, units, self.base.known_values()),
         )
         payload = result.data
         if not isinstance(payload, dict):
@@ -141,6 +142,7 @@ class GeminiCodingAgent:
 
         chosen_code = str(payload.get("code", NO_MATCH))
         chosen_unit = str(payload.get("unit_code", NO_MATCH))
+        chosen_value = str(payload.get("value_code", NO_MATCH) or NO_MATCH)
         model_confidence = _clamp_confidence(payload.get("confidence"))
         model_rationale = str(payload.get("rationale", "")).strip()
         evidence = [str(item) for item in payload.get("evidence", []) if str(item).strip()]
@@ -180,6 +182,7 @@ class GeminiCodingAgent:
             reading=reading,
             rule=rule,
             chosen_unit=chosen_unit,
+            chosen_value=chosen_value,
             model_confidence=model_confidence,
             model_rationale=model_rationale,
             attribution=attribution,
@@ -197,6 +200,7 @@ class GeminiCodingAgent:
         proposal.coding = None
         proposal.normalized_value = None
         proposal.normalized_unit = None
+        proposal.normalized_coding = None
         proposal.confidence = 0.0
         proposal.proposer = ProposerKind.GEMINI_ASSISTED
         proposal.ai = attribution
@@ -213,70 +217,99 @@ class GeminiCodingAgent:
         reading: RawReading,
         rule: dict[str, Any],
         chosen_unit: str,
+        chosen_value: str,
         model_confidence: float,
         model_rationale: str,
         attribution: AiAttribution,
         disagreed: bool,
         needs_expert: bool,
     ) -> MappingProposal:
-        # The model may only *name* which known unit the source string means, and
-        # only when the source string does not already resolve on its own. A unit
-        # the reviewed catalog already understands is never reinterpreted, because
-        # a plausible-sounding misreading would silently rescale a published value.
-        source_unit = self.base.canonical_unit(reading.unit, rule)
-        known_units = self.base.known_units_for_rule(rule)
-        source_unit_resolves = source_unit in known_units
-        interpreted_by_ai = False
         unit_note = ""
-        if chosen_unit != NO_MATCH and chosen_unit != source_unit:
-            if source_unit_resolves:
-                unit_note = (
-                    f"AI read the unit as '{chosen_unit}', but source unit "
-                    f"'{source_unit}' already resolves; source unit kept. "
-                )
-            elif chosen_unit in known_units:
-                unit_note = f"AI read source unit '{source_unit}' as UCUM '{chosen_unit}'. "
-                source_unit = chosen_unit
-                interpreted_by_ai = True
-            else:
-                unit_note = (
-                    f"AI suggested unit '{chosen_unit}', which is not valid for "
-                    f"{rule['code']}; ignored. "
-                )
-
-        value, unit, conversion_note = self.base.normalize_unit(reading.value, source_unit, rule)
-
-        if interpreted_by_ai and value is not None and unit is not None:
-            conversion = rule.get("unit_conversions", {}).get(source_unit)
-            try:
-                suggestion = make_suggestion(
-                    reading, rule, interpreted_unit=source_unit, target=unit,
-                    factor=float(conversion["factor"]) if conversion else 1.0, offset=0.0,
-                    rationale=model_rationale or unit_note, ai=attribution,
-                    origin="ai-interpretation",
-                )
-            except ValueError as error:
-                raise GeminiError(
-                    "Gemini returned an unusable unit interpretation", category="invalid-response",
-                    audit=mark_degraded(proposal.ai_audit or {}, "invalid-response"),
-                ) from error
-            proposal.unit_suggestions[rule["code"]] = UnitSuggestionResult(
-                status="suggested", suggestion=suggestion,
-                message="AI unit interpretation, uncited. Explicit expert review required.",
+        value: float | None = None
+        unit: str | None = None
+        value_coding = None
+        if reading.is_coded:
+            # Same rule as for units: the model may *name* which reviewed
+            # value-set concept the source's word means, and only when the word
+            # does not already resolve on its own. `normalize_coded` still
+            # decides whether that name is in the set.
+            source_word = reading.coded_value or ""
+            resolved, _note = self.base.normalize_coded(source_word, rule)
+            if resolved is None and chosen_value != NO_MATCH:
+                candidate, _ = self.base.normalize_coded(chosen_value, rule)
+                if candidate is not None:
+                    unit_note = f"AI read coded value '{source_word}' as '{chosen_value}'. "
+                    source_word = chosen_value
+                else:
+                    unit_note = (
+                        f"AI suggested value '{chosen_value}', which is not in the value set "
+                        f"for {rule['code']}; ignored. "
+                    )
+            value_coding, conversion_note = self.base.normalize_coded(source_word, rule)
+            resolved_any = value_coding is not None
+        else:
+            # The model may only *name* which known unit the source string means,
+            # and only when the source string does not already resolve on its own.
+            # A unit the reviewed catalog already understands is never
+            # reinterpreted, because a plausible-sounding misreading would
+            # silently rescale a published value.
+            source_unit = self.base.canonical_unit(reading.unit, rule)
+            known_units = self.base.known_units_for_rule(rule)
+            source_unit_resolves = source_unit in known_units
+            interpreted_by_ai = False
+            if chosen_unit != NO_MATCH and chosen_unit != source_unit:
+                if source_unit_resolves:
+                    unit_note = (
+                        f"AI read the unit as '{chosen_unit}', but source unit "
+                        f"'{source_unit}' already resolves; source unit kept. "
+                    )
+                elif chosen_unit in known_units:
+                    unit_note = f"AI read source unit '{source_unit}' as UCUM '{chosen_unit}'. "
+                    source_unit = chosen_unit
+                    interpreted_by_ai = True
+                else:
+                    unit_note = (
+                        f"AI suggested unit '{chosen_unit}', which is not valid for "
+                        f"{rule['code']}; ignored. "
+                    )
+            value, unit, conversion_note = self.base.normalize_unit(
+                reading.value if reading.value is not None else 0.0, source_unit, rule
             )
-            value, unit = None, None
-            conversion_note += " AI unit interpretation requires an expert correction."
+            resolved_any = unit is not None
+
+            if interpreted_by_ai and value is not None and unit is not None:
+                conversion = rule.get("unit_conversions", {}).get(source_unit)
+                try:
+                    suggestion = make_suggestion(
+                        reading, rule, interpreted_unit=source_unit, target=unit,
+                        factor=float(conversion["factor"]) if conversion else 1.0, offset=0.0,
+                        rationale=model_rationale or unit_note, ai=attribution,
+                        origin="ai-interpretation",
+                    )
+                except ValueError as error:
+                    raise GeminiError(
+                        "Gemini returned an unusable unit interpretation", category="invalid-response",
+                        audit=mark_degraded(proposal.ai_audit or {}, "invalid-response"),
+                    ) from error
+                proposal.unit_suggestions[rule["code"]] = UnitSuggestionResult(
+                    status="suggested", suggestion=suggestion,
+                    message="AI unit interpretation, uncited. Explicit expert review required.",
+                )
+                value, unit = None, None
+                conversion_note += " AI unit interpretation requires an expert correction."
 
         confidence = min(model_confidence, self.confidence_ceiling)
-        if unit is None:
+        if not resolved_any:
             confidence = min(confidence, UNRESOLVED_UNIT_CEILING)
         if disagreed or needs_expert:
             # Never let a contested mapping look settled to a reviewer.
             confidence = min(confidence, 0.80)
 
         proposal.coding = self.base.coding_for_code(rule["code"])
+        proposal.leg = self.base.leg_for_rule(rule)
         proposal.normalized_value = value
         proposal.normalized_unit = unit
+        proposal.normalized_coding = value_coding
         proposal.confidence = round(confidence, 2)
         proposal.proposer = ProposerKind.GEMINI_ASSISTED
         proposal.ai = attribution

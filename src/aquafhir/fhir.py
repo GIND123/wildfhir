@@ -5,14 +5,33 @@ from typing import Any
 
 import httpx
 
-from aquafhir.models import MappingProposal
+from aquafhir.models import MappingProposal, OneHealthLeg
 
 OAH_OBSERVATION_PROFILE = (
     "http://hl7.eu/fhir/ig/oah/StructureDefinition/observation-indicators-oah"
 )
+# The IG's second Observation profile, for the human leg of One Health: its
+# `code` is bound to health-indicators-oah-vs (campylobacter, gastrointestinal,
+# hospitalization-*, ...), its subject is the same OAH Location profile, and it
+# takes a Quantity or a CodeableConcept value. Publishing the human counterpart
+# of a water reading against the *same* Location is what makes the
+# ecosystem-to-human link a queryable fact rather than a narrative.
+OAH_HEALTH_MEASURE_PROFILE = (
+    "http://hl7.eu/fhir/ig/oah/StructureDefinition/observation-health-measure-oah"
+)
 OAH_LOCATION_PROFILE = "http://hl7.eu/fhir/ig/oah/StructureDefinition/location-oah"
 OAH_LOCATION_IDENTIFIER = "https://aquafhir.example/location-id"
 OAH_SOURCE_IDENTIFIER = "https://aquafhir.example/source-id"
+SOURCE_TYPE_TAG_SYSTEM = "https://aquafhir.example/source-type"
+# Which One Health leg an Observation carries, as a tag, so one search
+# (`Observation?subject=Location/x&_tag=...`) can split or join the legs.
+ONE_HEALTH_LEG_TAG_SYSTEM = "https://aquafhir.example/one-health-leg"
+
+PROFILE_FOR_LEG = {
+    OneHealthLeg.ENVIRONMENTAL: OAH_OBSERVATION_PROFILE,
+    OneHealthLeg.ANIMAL: OAH_OBSERVATION_PROFILE,
+    OneHealthLeg.HUMAN: OAH_HEALTH_MEASURE_PROFILE,
+}
 
 # Component code for a reviewer-attached organism. It must differ from
 # `Observation.code`: FHIR invariant obs-7 forbids a component repeating the
@@ -41,11 +60,22 @@ def fhir_id(value: str) -> str:
     return f"{stem or 'unknown'}-{suffix}"
 
 
+def profile_for(proposal: MappingProposal) -> str:
+    return PROFILE_FOR_LEG[proposal.leg]
+
+
 def build_resources(
     proposal: MappingProposal,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    if not proposal.coding or proposal.normalized_value is None or not proposal.normalized_unit:
-        raise ValueError("A coding and normalized UCUM quantity are required before approval")
+    if not proposal.coding:
+        raise ValueError("A coding and a normalized value are required before approval")
+    has_quantity = proposal.normalized_value is not None and bool(proposal.normalized_unit)
+    has_coded = proposal.normalized_coding is not None
+    if not has_quantity and not has_coded:
+        raise ValueError(
+            "A coding and a normalized UCUM quantity or reviewed coded value are required "
+            "before approval"
+        )
 
     reading = proposal.reading
     location_id = fhir_id(reading.site_code)
@@ -87,12 +117,10 @@ def build_resources(
         "resourceType": "Observation",
         "id": observation_id,
         "meta": {
-            "profile": [OAH_OBSERVATION_PROFILE],
+            "profile": [profile_for(proposal)],
             "tag": [
-                {
-                    "system": "https://aquafhir.example/source-type",
-                    "code": reading.source_type.value,
-                }
+                {"system": SOURCE_TYPE_TAG_SYSTEM, "code": reading.source_type.value},
+                {"system": ONE_HEALTH_LEG_TAG_SYSTEM, "code": proposal.leg.value},
             ],
         },
         "identifier": [
@@ -106,14 +134,36 @@ def build_resources(
         "subject": {"reference": f"Location/{location_id}", "display": reading.site_name},
         "effectiveDateTime": reading.observed_at.isoformat(),
         "performer": [{"reference": f"Organization/{organization_id}"}],
-        "valueQuantity": {
+        "note": [{"text": f"Mapped from '{reading.parameter}' after human review."}],
+    }
+    if has_quantity:
+        observation["valueQuantity"] = {
             "value": proposal.normalized_value,
             "unit": proposal.normalized_unit,
             "system": "http://unitsofmeasure.org",
             "code": proposal.normalized_unit,
-        },
-        "note": [{"text": f"Mapped from '{reading.parameter}' after human review."}],
-    }
+        }
+    else:
+        # A coded indicator: the published value is a concept from the IG's
+        # value set, not a number the source never reported.
+        assert proposal.normalized_coding is not None
+        observation["valueCodeableConcept"] = {
+            "coding": [proposal.normalized_coding.model_dump()],
+            "text": proposal.normalized_coding.display,
+        }
+        observation["note"].append(
+            {"text": f"Source reported the coded value '{reading.coded_value}'."}
+        )
+    if proposal.leg is OneHealthLeg.HUMAN:
+        observation["note"].append(
+            {
+                "text": (
+                    "Human-health measure published against the exposure Location "
+                    "(the water source), not a residence, so it joins the environmental "
+                    "readings on the same Location."
+                )
+            }
+        )
     if reading.evidence_url:
         observation["note"].append(
             {"text": f"Source evidence URI: {reading.evidence_url}"}

@@ -31,6 +31,9 @@ def _build(
     umls: UMLSClient | None = None,
     loinc_table: LoincTable | None = None,
     gbif: GbifClient | None = None,
+    hubeau=None,
+    copernicus=None,
+    connector_config=None,
 ) -> BridgeService:
     return BridgeService(
         repository=Repository(tmp_path / "test.db"),
@@ -44,6 +47,9 @@ def _build(
         ),
         replay_path=REPLAY,
         gemini=gemini,
+        hubeau=hubeau,
+        copernicus=copernicus,
+        connector_config=connector_config,
     )
 
 

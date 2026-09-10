@@ -162,3 +162,46 @@ rules:
     severity: critical
     message: Dissolved arsenic above the demonstration bound; abstraction review required.
     audiences: [public-health, water-authority]
+
+  # -- human leg: the loop closed (Havelock North 2016, Walkerton 2000,
+  #    Milwaukee 1993, Brixham 2024). Rates are per 100,000 inhabitants, the
+  #    IG's own definition. The human-health rules route back to the water
+  #    authority and to veterinary: a waterborne zoonosis is everyone's
+  #    signal, which is the One Health claim this policy exists to test. ----
+  - code: campylobacter
+    operator: gte
+    value: 100.0
+    unit: '{cases}/100000'
+    severity: critical
+    message: Campylobacteriosis incidence far above background; investigate the water supply and its catchment as an exposure route.
+    audiences: [public-health, veterinary, water-authority]
+  - code: gastrointestinal
+    operator: gte
+    value: 200.0
+    unit: '{cases}/100000'
+    severity: high
+    message: Gastrointestinal illness incidence elevated; check drinking and recreational water in the district.
+    audiences: [public-health, water-authority]
+  - code: cryptosporidium
+    operator: gte
+    value: 50.0
+    unit: '{cases}/100000'
+    severity: critical
+    message: Cryptosporidiosis incidence elevated; filtration and source-water review required.
+    audiences: [public-health, veterinary, water-authority]
+
+  # -- coded citizen-science indicators. A coded rule lists `values`, not a
+  #    number and a unit, and only ever reads valueCodeableConcept. ---------
+  - code: foam
+    operator: in
+    values: [present, extensive]
+    severity: moderate
+    message: Foam, colour or smell reported on the stream surface; check for a discharge upstream.
+    audiences: [water-authority]
+  - id: macroinvertebrates-absent
+    code: macroinvertebreates
+    operator: in
+    values: [absent]
+    severity: moderate
+    message: No benthic macroinvertebrates found; the stream's biological quality may have collapsed.
+    audiences: [veterinary, water-authority]

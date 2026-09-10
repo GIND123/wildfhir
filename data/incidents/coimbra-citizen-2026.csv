@@ -1,0 +1,8 @@
+source_id,source_type,parameter,value,unit,coded_value,observed_at,site_code,site_name,latitude,longitude,evidence_url
+oah-app-coimbra,citizen,foam,,,present,2026-05-04T09:30:00Z,ribeira-de-coselhas,Ribeira de Coselhas at Coimbra,40.2190,-8.4230,
+oah-app-coimbra,citizen,macrophytes,,,extensive,2026-05-04T09:30:00Z,ribeira-de-coselhas,Ribeira de Coselhas at Coimbra,40.2190,-8.4230,
+oah-app-coimbra,citizen,macroinvertebrates,,,none,2026-05-04T09:45:00Z,ribeira-de-coselhas,Ribeira de Coselhas at Coimbra,40.2190,-8.4230,
+oah-app-coimbra,citizen,fish,0,{count},,2026-05-04T09:45:00Z,ribeira-de-coselhas,Ribeira de Coselhas at Coimbra,40.2190,-8.4230,
+oah-app-coimbra,citizen,foam,,,kinda foamy,2026-05-11T09:30:00Z,ribeira-de-coselhas,Ribeira de Coselhas at Coimbra,40.2190,-8.4230,
+oah-app-coimbra,citizen,foam,2,mg/L,,2026-05-11T09:30:00Z,ribeira-de-coselhas,Ribeira de Coselhas at Coimbra,40.2190,-8.4230,
+oah-app-coimbra,citizen,water temperature,17.5,degC,,2026-05-11T09:30:00Z,ribeira-de-coselhas,Ribeira de Coselhas at Coimbra,40.2190,-8.4230,

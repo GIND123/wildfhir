@@ -120,25 +120,37 @@ scenarios:
   - id: havelock-north-2016
     title: Havelock North campylobacteriosis outbreak (New Zealand, August 2016)
     dataset: data/incidents/havelock-north-2016.csv
-    rows: 6
+    rows: 10
     expect:
-      coded: 5
-      blocked_qty: 0
+      coded: 8
+      blocked_qty: 1
       no_code: 1
       alerts:
         - {code: coliforms, severity: critical}
         - {code: ammonium, severity: high}
         - {code: nitrate, severity: high}
         - {code: tss, severity: high}
+        - {code: campylobacter, severity: critical}
+        - {code: gastrointestinal, severity: high}
       audiences: [public-health, veterinary, water-authority]
+      human_leg: 3
     edge_cases:
       - animal-to-water-to-human-pathway            # the One Health case
+      - human-leg-published-against-the-same-location
+      - percent-of-population-converted-to-rate      # 39.3 % -> 39300 per 100000
+      - raw-case-count-withheld-without-denominator  # "1000 cases" has no population
       - rainfall-driven-ingress
       - concept-absent-from-oah-ig                  # free chlorine residual
     notes: >-
       Sheep faeces, heavy rain, an unchlorinated bore. The veterinary and
       public-health audiences are routed from the same reading, which is the
-      One Health routing claim in one step.
+      One Health routing claim in one step. The human leg is now in the same
+      fixture: notified campylobacteriosis and gastrointestinal-illness rates
+      from the district health board, published through the IG's
+      observation-health-measure-oah profile against the *same* Location as
+      the bore-field water readings, so one FHIR search returns both legs.
+      A raw case count ("1000 cases") is coded but its quantity is withheld:
+      without the population there is no reviewed way to make it a rate.
 
   - id: flint-2014
     title: Flint drinking-water crisis (Michigan, USA, 2014-2015)
@@ -302,6 +314,34 @@ scenarios:
       Residents reported illness on 14 May; the boil notice followed on 15 May.
       The 20 May reading is a recovery value that must not alert, which is the
       "does the alert clear" case.
+
+  - id: coimbra-citizen-2026
+    title: Citizen stream assessment in a pilot city (Coimbra, synthetic, OneAquaHealth app shape)
+    dataset: data/incidents/coimbra-citizen-2026.csv
+    rows: 7
+    expect:
+      coded: 5
+      blocked_qty: 2
+      no_code: 0
+      alerts:
+        - {code: foam, severity: moderate}
+        - {code: macroinvertebreates, severity: moderate}
+      audiences: [veterinary, water-authority]
+    edge_cases:
+      - coded-value-published-as-valueCodeableConcept   # foam: present
+      - coded-alias-resolved-to-value-set               # "none" -> absent
+      - unlisted-word-withheld-not-rounded              # "kinda foamy"
+      - number-for-a-coded-indicator-withheld           # foam: 2 mg/L
+      - coded-rule-fires-on-a-coded-value               # foam present -> moderate
+      - animal-leg-tagged-on-the-observation            # macroinvertebrates, fish
+    notes: >-
+      Not a historical incident. This is the shape of the OneAquaHealth
+      citizen app's own data: words, not numbers. Foam "present" and
+      macrophytes "extensive" publish as coded values from the IG's value set;
+      "none" resolves to `absent` through a reviewed alias; "kinda foamy" is
+      withheld because it is not in the set and the bridge does not round
+      words; a number reported for foam is withheld because the indicator
+      publishes a coded value. Coimbra is a OneAquaHealth pilot city.
 
   - id: edge-cases
     title: Synthetic edge cases - sensor faults, boundaries, and unknown inputs
