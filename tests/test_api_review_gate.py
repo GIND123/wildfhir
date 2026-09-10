@@ -152,12 +152,24 @@ def test_openapi_documents_the_new_endpoints(client) -> None:
     assert "/api/v1/proposals/{proposal_id}/observation" in paths
 
 
-def test_no_code_proposal_reports_no_coding_so_the_ui_cannot_default(client) -> None:
+def test_no_code_proposal_can_carry_a_reviewed_unit_suggestion(client) -> None:
     body = client.post(
         "/api/v1/proposals",
-        json={**READING, "parameter": "radon activity concentration", "unit": "Bq/L"},
+        json={**READING, "parameter": "where", "unit": "uS/cm"},
     ).json()
     assert body["coding"] is None
+    assert body["candidates"][0]["code"] == "electrical-conductivity"
+    assert body["candidates"][0]["origin"] == "reviewed-unit"
+
+
+def test_no_code_proposal_still_cannot_be_approved_without_a_selected_code(client) -> None:
+    pid = client.post(
+        "/api/v1/proposals",
+        json={**READING, "parameter": "where", "unit": "uS/cm"},
+    ).json()["id"]
+    response = client.post(f"/api/v1/proposals/{pid}/approve", json={"reviewer": "r@x"})
+    assert response.status_code == 409
+    assert "Select a code" in response.json()["detail"]
 
 
 def test_ai_status_separates_configured_from_healthy(client) -> None:

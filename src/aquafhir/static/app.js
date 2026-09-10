@@ -165,6 +165,9 @@
   const byId = (id) => state.proposals.find((p) => p.id === id);
   const alertById = (id) => state.alerts.find((a) => a.id === id);
   const isUnresolved = (p) => p.normalized_value === null || p.normalized_value === undefined || !p.normalized_unit;
+  const unitCodingSuggestion = (p) => !p.coding
+    ? (p.candidates || []).find((c) => c.origin === "reviewed-unit") || null
+    : null;
   const isFlagged = (p) => Boolean(p.ai && (p.ai.disagreed_with_rules || p.ai.needs_expert_review)) || (!p.coding);
   const isLow = (p) => p.confidence < 0.8;
   const sites = () => [...new Set(state.proposals.map((p) => p.reading.site_name))].sort();
@@ -205,6 +208,7 @@
   function flagLzs(p) {
     const out = [];
     if (!p.coding) out.push('<span class="lz red">no code</span>');
+    if (unitCodingSuggestion(p)) out.push('<span class="lz green">unit hint</span>');
     if (isUnresolved(p) && p.coding) out.push('<span class="lz amber">unit</span>');
     if (p.ai?.disagreed_with_rules) out.push('<span class="lz amber">disagrees</span>');
     if (p.ai?.needs_expert_review) out.push('<span class="lz amber">expert</span>');
@@ -216,7 +220,12 @@
   const audLz = (a) => `<span class="lz lc">${esc(AUDIENCE_LABEL[a] || a)}</span>`;
   const sevLz = (s) => `<span class="lz bold ${s === "critical" ? "red" : s === "high" ? "amber" : "blue"}">${esc(s)}</span>`;
   function summaryHtml(p) {
-    const code = p.coding ? `<span class="code">${esc(p.coding.code)}</span>` : `<span class="unres">no curated match</span>`;
+    const suggested = unitCodingSuggestion(p);
+    const code = p.coding
+      ? `<span class="code">${esc(p.coding.code)}</span>`
+      : suggested
+        ? `<span class="code suggested">${esc(suggested.code)}</span><span class="lz green">suggested</span>`
+        : `<span class="unres">no curated match</span>`;
     return `${esc(p.reading.parameter)}<span class="to">→</span>${code}`;
   }
 
@@ -950,6 +959,7 @@
     const tab = state.drawer.tab;
     const r = p.reading;
     const unres = isUnresolved(p);
+    const unitSuggestion = unitCodingSuggestion(p);
     const tabs = [
       ["details", "Details"], ["copilot", "Co-pilot", p.ai ? "" : "dim"], ["crosswalk", "Crosswalk", p.status === "pending" ? "" : "dim"],
       ["fhir", "FHIR"], ["history", "History", state.provenance.filter((e) => e.entity_id === p.id).length],
@@ -964,7 +974,7 @@
         <button class="icon-btn" data-copy-text="${esc(location.origin + location.pathname + "#/" + state.page + "?issue=" + p.id)}" title="Copy link" type="button">${icon("link", "ic")}</button>
         <button class="icon-btn" data-close-drawer title="Close (Esc)" type="button">${icon("x", "ic")}</button>
       </div>
-      <h2>${esc(r.parameter)}<span class="to">→</span>${p.coding ? `<span class="code">${esc(p.coding.code)}</span>` : '<span class="lz red">no curated match</span>'}</h2>
+      <h2>${esc(r.parameter)}<span class="to">→</span>${p.coding ? `<span class="code">${esc(p.coding.code)}</span>` : unitSuggestion ? `<span class="code suggested">${esc(unitSuggestion.code)}</span><span class="lz green">suggested</span>` : '<span class="lz red">no curated match</span>'}</h2>
       <div class="drawer-actions">${actions}<span class="spacer"></span>${statusLz(p.status)}${proposerLz(p)}${flagLzs(p)}</div>
     </div>
     <div class="tabs">${tabs.map(([k, l, extra]) => `<button class="tab ${tab === k ? "is-active" : ""}" data-tab="${k}" type="button">${l}${typeof extra === "number" ? `<span class="count">${extra}</span>` : ""}</button>`).join("")}</div>
@@ -989,15 +999,24 @@
       </aside>
     </div>`;
 
+    function codingStatusNote() {
+      if (unitSuggestion) {
+        return `<div class="sec"><div class="note ok">${icon("check")}<span>Source unit <b>${esc(r.unit)}</b> uniquely suggests <b>${esc(unitSuggestion.display)}</b>. Open <b>Approve</b> to review or change the code before any FHIR resource is ${willVerb()}.</span></div></div>`;
+      }
+      if (unres && p.status === "pending") {
+        return `<div class="sec"><div class="note">${icon("alert")}<span>Approval needs a normalized value and a UCUM unit. Use <b>Approve</b> and tick <i>Correct the proposal</i> to supply them.</span></div></div>`;
+      }
+      return "";
+    }
     function detailsTab() {
       return `<div class="sec">
         <div class="mapping">
           <div class="side"><div class="lbl">As received</div><div class="val">${fnum(r.value)} ${esc(r.unit)}</div><div class="term">${esc(r.parameter)}</div></div>
           <div class="arrow">${icon("chevr", "ic lg")}</div>
-          <div class="side out ${unres ? "unres" : ""}"><div class="lbl">OneAquaHealth FHIR</div><div class="val">${unres ? "unit unresolved" : `${fnum(p.normalized_value)} ${esc(p.normalized_unit)}`}</div><div class="term">${p.coding ? `${esc(p.coding.display)} <span class="mono dim">${esc(p.coding.code)}</span>` : "a reviewer must choose a curated code"}</div></div>
+          <div class="side out ${unres ? "unres" : ""}"><div class="lbl">OneAquaHealth FHIR</div><div class="val">${unres ? unitSuggestion ? "code suggested" : "unit unresolved" : `${fnum(p.normalized_value)} ${esc(p.normalized_unit)}`}</div><div class="term">${p.coding ? `${esc(p.coding.display)} <span class="mono dim">${esc(p.coding.code)}</span>` : unitSuggestion ? `${esc(unitSuggestion.display)} <span class="mono dim">${esc(unitSuggestion.code)}</span>` : "a reviewer must choose a curated code"}</div></div>
         </div>
       </div>
-      ${unres && p.status === "pending" ? `<div class="sec"><div class="note">${icon("alert")}<span>Approval needs a normalized value and a UCUM unit. Use <b>Approve</b> and tick <i>Correct the proposal</i> to supply them.</span></div></div>` : ""}
+      ${codingStatusNote()}
       <div class="sec"><h4>Rationale</h4><p class="quote">${esc(p.rationale)}</p></div>
       ${p.candidates?.length ? `<div class="sec"><h4>Candidates considered</h4><div class="chips">${p.candidates.map((c) => `<span class="chipbtn ${p.coding?.code === c.code ? "is-on" : ""}" title="${esc(c.origin)}"><span class="mono">${esc(c.code)}</span><span class="dim">${Math.round(c.score * 100)}%</span></span>`).join("")}</div></div>` : ""}
       ${p.secondary_coding ? `<div class="sec"><h4>Second coding ${builtWord()}</h4><p>${tagm(p.secondary_coding.code)} ${esc(p.secondary_coding.display)} <span class="dim mono">${esc(p.secondary_coding.system)}</span></p></div>` : ""}
@@ -1190,6 +1209,8 @@
   function openApprove(id) {
     if (!requireReviewer()) return;
     const p = byId(id); if (!p) return;
+    const unitSuggestion = unitCodingSuggestion(p);
+    const defaultCode = p.coding?.code || unitSuggestion?.code || "";
     state.pending.approveId = id;
     state.pending.preview = null;
     state.pending.unitSuggestionId = null;
@@ -1203,14 +1224,14 @@
       ? "Resolve and approve"
       : `Approve and ${approveVerb()}`;
 
-    $("#approve-summary").innerHTML = `<div class="mapping"><div class="side"><div class="lbl">As received</div><div class="val">${fnum(p.reading.value)} ${esc(p.reading.unit)}</div><div class="term">${esc(p.reading.parameter)}</div></div><div class="arrow">${icon("chevr", "ic lg")}</div><div class="side out ${unres ? "unres" : ""}"><div class="lbl">Will ${esc(approveVerb())}</div><div class="val" id="approve-target">${unres ? "select a code" : `${fnum(p.normalized_value)} ${esc(p.normalized_unit)}`}</div><div class="term">${p.coding ? esc(p.coding.code) : "needs a curated code"}</div></div></div>
+    $("#approve-summary").innerHTML = `<div class="mapping"><div class="side"><div class="lbl">As received</div><div class="val">${fnum(p.reading.value)} ${esc(p.reading.unit)}</div><div class="term">${esc(p.reading.parameter)}</div></div><div class="arrow">${icon("chevr", "ic lg")}</div><div class="side out ${unres ? "unres" : ""}"><div class="lbl">Will ${esc(approveVerb())}</div><div class="val" id="approve-target">${unres ? defaultCode ? "calculating..." : "select a code" : `${fnum(p.normalized_value)} ${esc(p.normalized_unit)}`}</div><div class="term">${p.coding ? esc(p.coding.code) : unitSuggestion ? esc(unitSuggestion.display) : "needs a curated code"}</div></div></div>
+      ${unitSuggestion ? `<div class="note ok" id="approve-code-hint" style="margin-top:10px">${icon("check")}<span>Preselected from reviewed unit evidence: <b>${esc(unitSuggestion.display)}</b>. You can change the OAH coding before approving.</span></div>` : ""}
       ${p.duplicate_of ? `<div class="note" style="margin-top:10px">${icon("alert")}<span>An identical reading was already ingested as <b>${esc(keyOf(p.duplicate_of))}</b>. Approving this creates a second Observation for the same measurement.</span></div>` : ""}`;
 
-    // No silent default: an unchosen code must stay unchosen.
     const sel = $("#approve-coding");
     sel.innerHTML = `<option value="">Select a code</option>` +
-      state.catalog.codes.map((c) => `<option value="${esc(c.code)}" ${p.coding?.code === c.code ? "selected" : ""}>${esc(c.code)} · ${esc(c.display)}</option>`).join("");
-    sel.value = p.coding?.code || "";
+      state.catalog.codes.map((c) => `<option value="${esc(c.code)}" ${defaultCode === c.code ? "selected" : ""}>${esc(c.code)} · ${esc(c.display)}</option>`).join("");
+    sel.value = defaultCode;
     $("#unit-list").innerHTML = [...new Set(state.catalog.codes.flatMap((c) => c.accepted_units))].map((u) => `<option value="${esc(u)}">`).join("");
 
     $("#approve-correct").checked = false;
@@ -1255,6 +1276,15 @@
     $("#approve-target").textContent = code ? "calculating..." : "select a code";
     const selected = state.catalog.codes.find((entry) => entry.code === code);
     $("#approve-target").nextElementSibling.textContent = selected?.display || "needs a curated code";
+    const hint = $("#approve-code-hint");
+    const suggested = unitCodingSuggestion(byId(id));
+    if (hint && suggested) {
+      hint.hidden = !code;
+      hint.className = `note ${code === suggested.code ? "ok" : "info"}`;
+      hint.innerHTML = code === suggested.code
+        ? `${icon("check")}<span>Preselected from reviewed unit evidence: <b>${esc(suggested.display)}</b>. You can change the OAH coding before approving.</span>`
+        : `${icon("info")}<span>Reviewer-selected code: <b>${esc(selected?.display || code)}</b>. Unit evidence had suggested <b>${esc(suggested.display)}</b>.</span>`;
+    }
     if (!code) {
       box.innerHTML = `<div class="note">${icon("alert")}<span>Select a code to see the conversion this would publish.</span></div>`;
       return;

@@ -281,6 +281,12 @@ curl "http://localhost:8000/api/v1/proposals/PROPOSAL_ID/normalization?code=elec
 # -> {"status":"ok","formula":"2444 uS/cm × 0.001 = 2.444 mS/cm","normalized_value":2.444, ...}
 ```
 
+If the source label cannot be coded but the source unit uniquely belongs to one
+reviewed rule, the proposal keeps `coding: null` and adds a `reviewed-unit`
+candidate. The console shows that candidate in the drawer and preselects it in
+the approval dialog, where the reviewer can still change the code before signing
+off.
+
 A reviewer who disagrees with the model selects a different catalog code. Only the
 `code` is read; the published system and display text come from the catalog, and the
 quantity is re-derived for the code actually chosen:

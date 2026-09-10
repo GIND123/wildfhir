@@ -35,3 +35,20 @@ def test_unknown_parameter_is_not_auto_coded(service):
     assert proposal.normalized_value is None
     assert proposal.requires_review is True
 
+
+def test_unique_source_unit_is_suggested_without_auto_coding(service):
+    proposal = service.propose(reading("where", 2350, "uS/cm"))
+
+    assert proposal.coding is None
+    assert proposal.normalized_value is None
+    assert proposal.candidates[0].code == "electrical-conductivity"
+    assert proposal.candidates[0].display == "Electrical conductivity"
+    assert proposal.candidates[0].origin == "reviewed-unit"
+    assert "unit" in proposal.rationale
+
+
+def test_ambiguous_source_unit_does_not_create_a_unit_suggestion(service):
+    proposal = service.propose(reading("where", 3.6, "mg/L"))
+
+    assert proposal.coding is None
+    assert all(candidate.origin != "reviewed-unit" for candidate in proposal.candidates)

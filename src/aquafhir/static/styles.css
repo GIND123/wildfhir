@@ -417,6 +417,7 @@ code, .mono { font-family: var(--mono); font-size: 12px; }
 .card-title { font-weight: 500; line-height: 1.35; word-break: break-word; }
 .card-title .to { color: var(--n50); margin: 0 4px; }
 .card-title .code { color: var(--brand-ink); font-family: var(--mono); font-size: 12.5px; }
+.card-title .code.suggested { color: var(--green-ink); }
 .card-title .unres { color: var(--amber-ink); font-weight: 600; }
 .card-sub { font-size: 12px; color: var(--n60); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .card-foot { display: flex; align-items: center; gap: 8px; }
@@ -556,6 +557,7 @@ code, .mono { font-family: var(--mono); font-size: 12px; }
 .drawer-top .spacer { flex: 1; }
 .drawer h2 { font-size: 20px; font-weight: 500; margin: 8px 0 12px; line-height: 1.3; word-break: break-word; }
 .drawer h2 .code { font-family: var(--mono); font-size: 16px; color: var(--brand-ink); }
+.drawer h2 .code.suggested { color: var(--green-ink); }
 .drawer h2 .to { color: var(--n50); margin: 0 6px; }
 .drawer-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding-bottom: 12px; border-bottom: 1px solid var(--n30); }
 .drawer-actions .spacer { flex: 1; }

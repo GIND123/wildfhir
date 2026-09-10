@@ -141,9 +141,35 @@ class ReviewedCodingAgent:
             for score, rule, _alias in self.rank(parameter)[:limit]
         ]
 
+    def unit_candidates(self, reading: RawReading, limit: int = 1) -> list[CandidateCoding]:
+        """Return a code suggestion when the source unit points to exactly one rule.
+
+        This is deliberately only a suggestion. A bad parameter label such as
+        "where" should not become an approved Observation just because its unit
+        looks familiar, but the reviewer should not have to hunt for the one
+        plausible catalog code either.
+        """
+        matches: list[dict[str, Any]] = []
+        for rule in self.rules:
+            unit = self.canonical_unit(reading.unit, rule)
+            if unit in self.known_units_for_rule(rule):
+                matches.append(rule)
+        if len(matches) != 1:
+            return []
+        rule = matches[0]
+        return [
+            CandidateCoding(
+                code=rule["code"],
+                display=rule["display"],
+                score=0.86,
+                origin="reviewed-unit",
+            )
+        ][:limit]
+
     def propose(self, reading: RawReading) -> MappingProposal:
         ranked = self.rank(reading.parameter)
         score, rule, alias = ranked[0]
+        unit_candidates = self.unit_candidates(reading)
 
         coding = None
         normalized_value = None
@@ -158,6 +184,17 @@ class ReviewedCodingAgent:
             if normalized_unit is None:
                 score = min(score, UNRESOLVED_UNIT_CEILING)
             rationale = f"Matched input to curated alias '{alias}'. {unit_note}"
+        elif unit_candidates:
+            unit_candidate = unit_candidates[0]
+            rationale = (
+                f"{rationale} Source unit '{reading.unit}' uniquely suggests "
+                f"{unit_candidate.display}; reviewer must confirm the code."
+            )
+
+        candidates = unit_candidates + [
+            candidate for candidate in self.candidates(reading.parameter)
+            if candidate.code not in {item.code for item in unit_candidates}
+        ]
 
         return MappingProposal(
             id=str(uuid4()),
@@ -169,7 +206,7 @@ class ReviewedCodingAgent:
             rationale=rationale,
             requires_review=True,
             proposer=ProposerKind.CURATED,
-            candidates=self.candidates(reading.parameter),
+            candidates=candidates[:3],
         )
 
     # -- unit handling -----------------------------------------------------
