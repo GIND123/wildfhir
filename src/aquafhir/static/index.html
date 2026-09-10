@@ -567,7 +567,8 @@ Angler melden tote Fische flussabwärts — keine Messung vorhanden.</textarea><
           <div id="approve-summary" style="margin-bottom:14px"></div>
           <div class="form">
             <label class="field"><span>OAH coding <em>*</em></span><select id="approve-coding"></select><span class="help">Only codes from the curated catalog can be published. The system and display text always come from the catalog, never from this browser.</span></label>
-            <div id="approve-preview"></div>
+            <div id="approve-preview" aria-live="polite"></div>
+            <div id="approve-ai" class="unit-assist" aria-live="polite" hidden></div>
             <div class="frow">
               <label class="field"><span>Normalized value</span><input id="approve-value" type="number" step="any" readonly /></label>
               <label class="field"><span>UCUM unit</span><input id="approve-unit" list="unit-list" readonly /><datalist id="unit-list"></datalist></label>

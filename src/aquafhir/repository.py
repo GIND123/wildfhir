@@ -11,6 +11,7 @@ from aquafhir.models import (
     ChainVerification,
     MappingProposal,
     ProvenanceEntry,
+    UnitSuggestionResult,
 )
 
 
@@ -102,6 +103,30 @@ class Repository:
                 "SELECT document FROM proposals WHERE id = ?", (proposal_id,)
             ).fetchone()
         return MappingProposal.model_validate_json(row["document"]) if row else None
+
+    def save_unit_suggestion(
+        self, proposal_id: str, code: str, result: UnitSuggestionResult
+    ) -> UnitSuggestionResult | None:
+        """Merge without allowing a slow AI request to reopen a decided proposal."""
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT document FROM proposals WHERE id = ?", (proposal_id,)
+            ).fetchone()
+            if not row:
+                return None
+            proposal = MappingProposal.model_validate_json(row["document"])
+            if proposal.status.value != "pending":
+                return None
+            existing = proposal.unit_suggestions.get(code)
+            if existing and existing.status != "unavailable":
+                return existing
+            proposal.unit_suggestions[code] = result
+            connection.execute(
+                "UPDATE proposals SET document = ? WHERE id = ?",
+                (_canonical(proposal.model_dump(mode="json")), proposal_id),
+            )
+            return result
 
     def list_proposals(self, limit: int = 100) -> list[MappingProposal]:
         with self._connect() as connection:

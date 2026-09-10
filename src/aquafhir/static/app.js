@@ -1192,6 +1192,8 @@
     const p = byId(id); if (!p) return;
     state.pending.approveId = id;
     state.pending.preview = null;
+    state.pending.unitSuggestionId = null;
+    $("#approve-ai").hidden = true;
     const unres = isUnresolved(p);
     const needsWork = unres || !p.coding;
     $("#approve-title").textContent = needsWork
@@ -1232,19 +1234,29 @@
     $("#approve-correct-fields").hidden = !on;
   }
 
-  // The conversion is computed by the server and only displayed here, so the
-  // dialog and the published resource cannot drift apart.
+  let previewRequest = 0;
+
   async function refreshPreview() {
+    const request = ++previewRequest;
     const id = state.pending.approveId;
     const code = $("#approve-coding").value;
     const box = $("#approve-preview");
-    const submit = $("#approve-submit");
-    const correcting = $("#approve-correct").checked;
+    const current = () => request === previewRequest && id === state.pending.approveId
+      && code === $("#approve-coding").value && $("#modal-approve").classList.contains("show");
+    state.pending.preview = null;
+    state.pending.unitSuggestionId = null;
+    $("#approve-ai").hidden = true;
+    $("#approve-submit").disabled = true;
+    $("#approve-value").value = "";
+    $("#approve-unit").value = "";
+    $("#approve-reason").value = "";
+    $("#approve-correct").checked = false;
+    setCorrectionMode(false);
+    $("#approve-target").textContent = code ? "calculating..." : "select a code";
+    const selected = state.catalog.codes.find((entry) => entry.code === code);
+    $("#approve-target").nextElementSibling.textContent = selected?.display || "needs a curated code";
     if (!code) {
-      state.pending.preview = null;
       box.innerHTML = `<div class="note">${icon("alert")}<span>Select a code to see the conversion this would publish.</span></div>`;
-      if (!correcting) { $("#approve-value").value = ""; $("#approve-unit").value = ""; }
-      submit.disabled = true;
       return;
     }
     box.innerHTML = `<p class="quote dim">Calculating…</p>`;
@@ -1252,30 +1264,90 @@
     try {
       preview = await api(`/proposals/${id}/normalization?code=${encodeURIComponent(code)}`);
     } catch (error) {
-      state.pending.preview = null;
+      if (!current()) return;
       box.innerHTML = `<div class="note bad">${icon("alert")}<span>${esc(error.message)}</span></div>`;
-      submit.disabled = !correcting;
       return;
     }
+    if (!current()) return;
     state.pending.preview = preview;
-    const target = $("#approve-target");
+    $("#unit-list").innerHTML = preview.accepted_units.map((u) => `<option value="${esc(u)}">`).join("");
+    renderConversionPreview();
+    if (preview.status === "unit-unresolved" && !preview.ai_result && preview.ai_available) {
+      await requestUnitSuggestion(current);
+    }
+  }
+
+  function renderConversionPreview() {
+    const preview = state.pending.preview;
+    if (!preview) return;
+    const box = $("#approve-preview");
+    const correcting = $("#approve-correct").checked;
     if (preview.status === "ok") {
-      box.innerHTML = `<div class="note ok">${icon("check")}<span><b>${esc(preview.formula)}</b><br><span class="dim">Derived by the server from the reviewed conversion factor. Not editable unless you record an expert correction.</span></span></div>`;
+      const alias = preview.conversion_origin === "reviewed-alias";
+      box.innerHTML = `<div class="note ok">${icon("check")}<span><b>${alias ? "Reviewed unit alias" : "Reviewed catalog conversion"}</b><br>${esc(preview.formula)}${alias ? `<br><span class="dim">${esc(preview.source_unit)} interpreted as ${esc(preview.interpreted_unit)}</span>` : ""}</span></div>`;
       if (!correcting) {
         $("#approve-value").value = preview.normalized_value;
         $("#approve-unit").value = preview.normalized_unit;
       }
-      if (target) target.textContent = `${fnum(preview.normalized_value)} ${preview.normalized_unit}`;
-      submit.disabled = false;
     } else {
       const why = preview.status === "out-of-range"
         ? "The converted value is outside this indicator's reviewed plausible range."
         : "This source unit has no reviewed conversion for the selected code.";
-      box.innerHTML = `<div class="note">${icon("alert")}<span><b>No deterministic conversion.</b> ${esc(why)} ${esc(preview.message)}<br><span class="dim">Tick “Enter an expert correction” to publish a corrected quantity with a written reason.</span></span></div>`;
+      box.innerHTML = `<div class="note">${icon("alert")}<span><b>${preview.status === "out-of-range" ? "Value outside reviewed range" : "Conversion needs review"}</b><br>${esc(why)}<br><span class="dim">Accepted target: ${preview.accepted_units.map(esc).join(", ")}</span></span></div>`;
       if (!correcting) { $("#approve-value").value = ""; $("#approve-unit").value = ""; }
-      if (target) target.textContent = "needs an expert correction";
-      submit.disabled = !correcting;
     }
+    renderUnitSuggestion();
+    updateApprovalQuantity();
+  }
+
+  function renderUnitSuggestion() {
+    const box = $("#approve-ai");
+    const preview = state.pending.preview;
+    const result = preview?.ai_result;
+    box.hidden = preview?.status !== "unit-unresolved";
+    if (box.hidden) return;
+    if (result?.suggestion) {
+      const s = result.suggestion;
+      box.innerHTML = `<div class="note">${icon("sparkle")}<div><b>Gemini suggestion · Uncited</b><strong class="unit-formula">${esc(s.formula)}</strong><p>${esc(s.rationale)}</p><p class="dim">Source interpreted as ${esc(s.interpreted_unit)}. ${s.origin === "ai-interpretation" ? "Factor from the reviewed catalog; unit interpretation by Gemini." : "Conversion factor suggested by Gemini."} No web verification.</p></div></div><button class="btn sm" type="button" data-use-unit-suggestion>${icon("check")}Use suggestion as expert correction</button>`;
+    } else {
+      const message = result?.message || (preview.ai_available ? "Gemini suggestion pending." : "Gemini unit assist is disabled. Expert correction remains available.");
+      box.innerHTML = `<p class="quote dim">${esc(message)}</p>${preview.ai_available && result?.status === "unavailable" ? `<button class="btn sm" type="button" data-retry-unit-suggestion>${icon("sparkle")}Retry suggestion</button>` : ""}`;
+    }
+  }
+
+  async function requestUnitSuggestion(current) {
+    const preview = state.pending.preview;
+    const id = state.pending.approveId;
+    const token = previewRequest;
+    current = current || (() => token === previewRequest && id === state.pending.approveId
+      && $("#modal-approve").classList.contains("show"));
+    $("#approve-ai").hidden = false;
+    $("#approve-ai").innerHTML = `<p class="quote dim">Requesting Gemini suggestion...</p>`;
+    let result;
+    try {
+      result = await api(`/proposals/${id}/unit-suggestion?code=${encodeURIComponent(preview.code)}`, { method: "POST" });
+    } catch (error) {
+      result = { status: "unavailable", message: error.message };
+    }
+    if (!current()) return;
+    preview.ai_result = result;
+    renderUnitSuggestion();
+  }
+
+  function updateApprovalQuantity() {
+    const preview = state.pending.preview;
+    const correcting = $("#approve-correct").checked;
+    const value = $("#approve-value").value;
+    const unit = $("#approve-unit").value.trim();
+    const limits = preview?.plausible_range;
+    const valid = value !== "" && Number.isFinite(Number(value))
+      && preview?.accepted_units.includes(unit)
+      && (!limits || (Number(value) >= limits.min && Number(value) <= limits.max));
+    $("#approve-submit").disabled = !preview || (correcting
+      ? !valid || !$("#approve-reason").value.trim() : preview.status !== "ok");
+    const target = $("#approve-target");
+    target.textContent = valid ? `${fnum(Number(value))} ${unit}` : "needs an expert correction";
+    target.parentElement.classList.toggle("unres", !valid);
   }
 
   async function submitApprove(button) {
@@ -1297,6 +1369,7 @@
       body.normalized_value = Number(v);
       body.normalized_unit = u;
       body.correction_reason = reason;
+      if (state.pending.unitSuggestionId) body.unit_suggestion_id = state.pending.unitSuggestionId;
     }
     if (state.picks[id]) body.secondary_coding = state.picks[id];
     if (state.taxonPicks[id]) body.taxon = state.taxonPicks[id];
@@ -1739,7 +1812,26 @@
   $("#create-submit").addEventListener("click", (e) => submitCreate(e.currentTarget));
   $("#form-reading").addEventListener("submit", (e) => { e.preventDefault(); submitCreate($("#create-submit")); });
   $("#form-bulletin").addEventListener("submit", (e) => { e.preventDefault(); submitCreate($("#create-submit")); });
-  $("#approve-correct").addEventListener("change", (e) => { setCorrectionMode(e.target.checked); refreshPreview(); });
+  $("#approve-correct").addEventListener("change", (e) => {
+    setCorrectionMode(e.target.checked);
+    if (!e.target.checked) { state.pending.unitSuggestionId = null; $("#approve-reason").value = ""; }
+    renderConversionPreview();
+  });
+  ["#approve-value", "#approve-unit", "#approve-reason"].forEach((id) => $(id).addEventListener("input", updateApprovalQuantity));
+  $("#approve-ai").addEventListener("click", (e) => {
+    if (e.target.closest("[data-retry-unit-suggestion]")) requestUnitSuggestion();
+    if (!e.target.closest("[data-use-unit-suggestion]")) return;
+    const s = state.pending.preview?.ai_result?.suggestion;
+    if (!s) return;
+    state.pending.unitSuggestionId = s.id;
+    $("#approve-correct").checked = true;
+    setCorrectionMode(true);
+    $("#approve-value").value = s.normalized_value;
+    $("#approve-unit").value = s.normalized_unit;
+    $("#approve-reason").value = `Reviewed Gemini suggestion (uncited): ${s.rationale}`.slice(0, 500);
+    updateApprovalQuantity();
+    $("#approve-reason").focus();
+  });
   $("#approve-coding").addEventListener("change", refreshPreview);
   $("#approve-submit").addEventListener("click", (e) => submitApprove(e.currentTarget));
   $("#reject-submit").addEventListener("click", (e) => submitReject(e.currentTarget));

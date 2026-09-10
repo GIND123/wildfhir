@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, HttpUrl, model_validator
 
@@ -71,6 +71,27 @@ class CandidateCoding(BaseModel):
     origin: str
 
 
+class UnitSuggestion(BaseModel):
+    id: str
+    code: str
+    interpreted_unit: str = Field(min_length=1, max_length=120)
+    normalized_unit: str = Field(min_length=1, max_length=40)
+    normalized_value: float = Field(allow_inf_nan=False)
+    factor: float = Field(gt=0, allow_inf_nan=False)
+    offset: float = Field(default=0, allow_inf_nan=False)
+    formula: str
+    rationale: str = Field(min_length=1, max_length=1000)
+    ai: AiAttribution
+    origin: Literal["ai-interpretation", "ai-conversion"]
+    evidence_status: Literal["uncited"] = "uncited"
+
+
+class UnitSuggestionResult(BaseModel):
+    status: Literal["suggested", "no-match", "unavailable"]
+    suggestion: UnitSuggestion | None = None
+    message: str
+
+
 class TerminologyMatch(BaseModel):
     """One UMLS-suggested real-world code for a curated OAH display term.
 
@@ -111,6 +132,7 @@ class MappingProposal(BaseModel):
     correction_reason: str | None = None
     # Id of an earlier proposal carrying an identical reading, if any.
     duplicate_of: str | None = None
+    unit_suggestions: dict[str, UnitSuggestionResult] = Field(default_factory=dict)
 
 
 class ReviewDecision(BaseModel):
@@ -132,6 +154,7 @@ class ReviewDecision(BaseModel):
     normalized_value: float | None = Field(default=None, allow_inf_nan=False)
     normalized_unit: str | None = None
     correction_reason: str | None = Field(default=None, max_length=500)
+    unit_suggestion_id: str | None = Field(default=None, max_length=120)
     secondary_coding: Coding | None = None
     # A GBIF Backbone taxon the reviewer chose from the biodiversity crosswalk.
     # Like `secondary_coding`, it is never inferred: no taxon reaches FHIR
@@ -151,6 +174,10 @@ class ReviewDecision(BaseModel):
             "normalized_unit": self.normalized_unit is not None,
             "correction_reason": bool((self.correction_reason or "").strip()),
         }
+        if self.unit_suggestion_id and not all(supplied.values()):
+            raise ValueError(
+                "Accepting an AI unit suggestion requires a complete expert correction"
+            )
         if any(supplied.values()) and not all(supplied.values()):
             missing = sorted(name for name, present in supplied.items() if not present)
             raise ValueError(
@@ -274,6 +301,10 @@ class NormalizationPreview(BaseModel):
     factor: float | None = None
     formula: str | None = None
     message: str
+    conversion_origin: Literal["reviewed-catalog", "reviewed-alias", "none"] = "none"
+    interpreted_unit: str | None = None
+    ai_result: UnitSuggestionResult | None = None
+    ai_available: bool = False
 
 
 class ApprovalResult(BaseModel):

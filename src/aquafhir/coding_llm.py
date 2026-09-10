@@ -34,6 +34,7 @@ from aquafhir.models import (
     MappingProposal,
     ProposerKind,
     RawReading,
+    UnitSuggestionResult,
 )
 from aquafhir.prompts import (
     CODING_SYSTEM,
@@ -42,6 +43,7 @@ from aquafhir.prompts import (
     coding_prompt,
     coding_schema,
 )
+from aquafhir.unit_assist import make_suggestion
 
 logger = logging.getLogger(__name__)
 
@@ -221,9 +223,10 @@ class GeminiCodingAgent:
         # only when the source string does not already resolve on its own. A unit
         # the reviewed catalog already understands is never reinterpreted, because
         # a plausible-sounding misreading would silently rescale a published value.
-        source_unit = reading.unit
+        source_unit = self.base.canonical_unit(reading.unit, rule)
         known_units = self.base.known_units_for_rule(rule)
         source_unit_resolves = source_unit in known_units
+        interpreted_by_ai = False
         unit_note = ""
         if chosen_unit != NO_MATCH and chosen_unit != source_unit:
             if source_unit_resolves:
@@ -234,6 +237,7 @@ class GeminiCodingAgent:
             elif chosen_unit in known_units:
                 unit_note = f"AI read source unit '{source_unit}' as UCUM '{chosen_unit}'. "
                 source_unit = chosen_unit
+                interpreted_by_ai = True
             else:
                 unit_note = (
                     f"AI suggested unit '{chosen_unit}', which is not valid for "
@@ -241,6 +245,27 @@ class GeminiCodingAgent:
                 )
 
         value, unit, conversion_note = self.base.normalize_unit(reading.value, source_unit, rule)
+
+        if interpreted_by_ai and value is not None and unit is not None:
+            conversion = rule.get("unit_conversions", {}).get(source_unit)
+            try:
+                suggestion = make_suggestion(
+                    reading, rule, interpreted_unit=source_unit, target=unit,
+                    factor=float(conversion["factor"]) if conversion else 1.0, offset=0.0,
+                    rationale=model_rationale or unit_note, ai=attribution,
+                    origin="ai-interpretation",
+                )
+            except ValueError as error:
+                raise GeminiError(
+                    "Gemini returned an unusable unit interpretation", category="invalid-response",
+                    audit=mark_degraded(proposal.ai_audit or {}, "invalid-response"),
+                ) from error
+            proposal.unit_suggestions[rule["code"]] = UnitSuggestionResult(
+                status="suggested", suggestion=suggestion,
+                message="AI unit interpretation, uncited. Explicit expert review required.",
+            )
+            value, unit = None, None
+            conversion_note += " AI unit interpretation requires an expert correction."
 
         confidence = min(model_confidence, self.confidence_ceiling)
         if unit is None:

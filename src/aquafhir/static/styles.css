@@ -618,6 +618,14 @@ pre.json {
 .note.bad { background: var(--red-soft); color: var(--red-ink); }
 .note .ic { flex: none; margin-top: 1px; }
 
+.unit-assist { display: grid; gap: 8px; min-width: 0; }
+.unit-assist[hidden] { display: none; }
+.unit-assist .note > div { min-width: 0; overflow-wrap: anywhere; }
+.unit-assist .unit-formula { display: block; margin: 6px 0; font-variant-numeric: tabular-nums; }
+.unit-assist .btn { justify-self: start; height: auto; min-height: 32px; white-space: normal; text-align: left; }
+#approve-preview { min-width: 0; overflow-wrap: anywhere; }
+#modal-approve .frow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
 .brief { padding: 12px 14px; border: 1px solid var(--n30); border-radius: var(--r); margin-top: 8px; display: grid; gap: 8px; }
 .brief h4 { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; text-transform: none; letter-spacing: 0; color: var(--n90); margin: 0; }
 .brief p { font-size: 13px; color: var(--n80); }

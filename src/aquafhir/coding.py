@@ -175,6 +175,26 @@ class ReviewedCodingAgent:
     # -- unit handling -----------------------------------------------------
 
     @staticmethod
+    def canonical_unit(unit: str, rule: dict[str, Any]) -> str:
+        """Resolve explicit spelling aliases without folding case-sensitive SI prefixes."""
+        known = ReviewedCodingAgent.known_units_for_rule(rule)
+        if unit in known:
+            return unit
+        compact = re.sub(r"\s+", "", unit).replace("\u00b5", "u").replace("\u03bc", "u")
+        if compact in known:
+            return compact
+        aliases = {
+            "us/cm": "uS/cm",
+            "\u00b0C": "Cel",
+            "Celsius": "Cel",
+            "celsius": "Cel",
+            "degC": "Cel",
+            "pH": "[pH]",
+        }
+        candidate = aliases.get(compact, compact)
+        return candidate if candidate in known else unit
+
+    @staticmethod
     def normalize_unit(
         value: float, unit: str, rule: dict[str, Any]
     ) -> tuple[float | None, str | None, str]:
@@ -189,6 +209,8 @@ class ReviewedCodingAgent:
         proposers route their arithmetic through here, so a failed sensor
         cannot raise an alert down either path.
         """
+        original_unit = unit
+        unit = ReviewedCodingAgent.canonical_unit(unit, rule)
         if unit in rule.get("accepted_units", []):
             converted, target, note = value, unit, "Unit is an accepted UCUM code."
         else:
@@ -198,6 +220,9 @@ class ReviewedCodingAgent:
             converted = value * float(conversion["factor"])
             target = conversion["target"]
             note = f"Converted from {unit}."
+
+        if unit != original_unit:
+            note = f"Recognized '{original_unit}' as '{unit}' using a reviewed alias. {note}"
 
         implausible = range_violation(converted, target, rule)
         if implausible:

@@ -40,6 +40,7 @@ from aquafhir.models import (
     SituationReport,
     TerminologyMatch,
     UmlsStatus,
+    UnitSuggestionResult,
 )
 from aquafhir.repository import Repository
 from aquafhir.service import (
@@ -590,6 +591,23 @@ def normalization_preview(
         return service.normalization_preview(proposal_id, code)
     except ProposalNotFoundError as error:
         raise HTTPException(status_code=404, detail="Proposal not found") from error
+
+
+@app.post(
+    "/api/v1/proposals/{proposal_id}/unit-suggestion",
+    response_model=UnitSuggestionResult,
+    summary="Suggest an unresolved unit conversion for explicit expert review",
+)
+def suggest_unit_conversion(
+    proposal_id: str, service: Service,
+    code: Annotated[str, Query(description="A code from the curated OAH catalog")],
+) -> UnitSuggestionResult:
+    try:
+        return service.suggest_unit_conversion(proposal_id, code)
+    except ProposalNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Proposal not found") from error
+    except InvalidReviewStateError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 @app.get(

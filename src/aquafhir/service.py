@@ -8,6 +8,7 @@ from typing import Any
 
 from aquafhir.briefing import KNOWN_AUDIENCES, BriefingWriter
 from aquafhir.coding import CodingProposer, range_violation
+from aquafhir.config import AssistMode
 from aquafhir.fhir import (
     OAH_LOCATION_PROFILE,
     OAH_OBSERVATION_PROFILE,
@@ -34,10 +35,12 @@ from aquafhir.models import (
     ReviewStatus,
     SituationReport,
     TerminologyMatch,
+    UnitSuggestionResult,
 )
 from aquafhir.repository import Repository
 from aquafhir.terminology import TerminologyCrosswalk
 from aquafhir.thresholds import ThresholdPolicy
+from aquafhir.unit_assist import suggest_unit
 
 logger = logging.getLogger(__name__)
 
@@ -89,8 +92,7 @@ class BridgeService:
         self.briefing_writer = briefing_writer
         self.terminology = terminology
         self.replay_path = replay_path
-        # Held only so status reporting can read the outcome of the last real
-        # call. Nothing in the pipeline reaches the model through this handle.
+        # Shared client for status reporting and review-time unit suggestions.
         self.gemini = gemini
 
     # -- ingestion ---------------------------------------------------------
@@ -187,6 +189,7 @@ class BridgeService:
             )
         reading = proposal.reading
         value, unit, note = self.catalog.normalize_unit(reading.value, reading.unit, rule)
+        interpreted = self.catalog.canonical_unit(reading.unit, rule)
         accepted = self.catalog.accepted_units_for_rule(rule)
         limits = rule.get("plausible_range")
         common = {
@@ -196,6 +199,9 @@ class BridgeService:
             "source_value": reading.value,
             "source_unit": reading.unit,
             "accepted_units": accepted,
+            "interpreted_unit": interpreted,
+            "ai_result": proposal.unit_suggestions.get(code),
+            "ai_available": self.unit_assist_available,
             "plausible_range": (
                 {"min": float(limits["min"]), "max": float(limits["max"])} if limits else None
             ),
@@ -204,7 +210,7 @@ class BridgeService:
             status = "out-of-range" if "plausible range" in note else "unit-unresolved"
             return NormalizationPreview(**common, status=status, message=note.strip())
 
-        conversion = rule.get("unit_conversions", {}).get(reading.unit)
+        conversion = rule.get("unit_conversions", {}).get(interpreted)
         factor = float(conversion["factor"]) if conversion else 1.0
         formula = (
             f"{_trim(reading.value)} {reading.unit} \u00d7 {_trim(factor)} = {_trim(value)} {unit}"
@@ -214,12 +220,56 @@ class BridgeService:
         return NormalizationPreview(
             **common,
             status="ok",
+            conversion_origin=(
+                "reviewed-alias" if interpreted != reading.unit else "reviewed-catalog"
+            ),
             normalized_value=value,
             normalized_unit=unit,
             factor=factor,
             formula=formula,
             message=note.strip(),
         )
+
+    @property
+    def unit_assist_available(self) -> bool:
+        return bool(
+            self.gemini and self.gemini.enabled
+            and getattr(self.coding_agent, "assist_mode", AssistMode.AUTO) != AssistMode.OFF
+        )
+
+    def suggest_unit_conversion(self, proposal_id: str, code: str) -> UnitSuggestionResult:
+        proposal = self._pending_proposal(proposal_id)
+        preview = self.normalization_preview(proposal_id, code)
+        if preview.status != "unit-unresolved":
+            raise ApprovalValidationError("AI unit suggestions require an unresolved source unit")
+        existing = proposal.unit_suggestions.get(code)
+        if existing and existing.status != "unavailable":
+            return existing
+        if not self.unit_assist_available:
+            return UnitSuggestionResult(
+                status="unavailable", message="Gemini unit assist is disabled."
+            )
+        rule = self.catalog.rule_for_code(code)
+        assert rule is not None and self.gemini is not None
+        try:
+            result, audit = suggest_unit(self.gemini, self.catalog, proposal.reading, rule)
+        except GeminiError as error:
+            self._chain_ai_call(proposal_id, error.audit)
+            return UnitSuggestionResult(
+                status="unavailable",
+                message=(
+                    "Gemini could not provide a usable suggestion. Retry or enter a correction."
+                ),
+            )
+        self._chain_ai_call(proposal_id, audit)
+        stored = self.repository.save_unit_suggestion(proposal_id, code, result)
+        if stored is None:
+            raise InvalidReviewStateError("Proposal was decided while Gemini was responding")
+        if stored == result:
+            self.repository.append_provenance(
+                "unit-suggestion", proposal_id, {"code": code, **result.model_dump(mode="json")}
+            )
+        return stored
 
     def _resolve_decision(
         self, proposal: MappingProposal, decision: ReviewDecision
@@ -250,27 +300,30 @@ class BridgeService:
         assert coding is not None
         accepted = self.catalog.accepted_units_for_rule(rule)
 
+        if decision.unit_suggestion_id:
+            result = proposal.unit_suggestions.get(selected)
+            if (
+                not result or not result.suggestion
+                or result.suggestion.id != decision.unit_suggestion_id
+            ):
+                raise ApprovalValidationError(
+                    "Unit suggestion does not belong to this proposal and code"
+                )
+
         if decision.normalized_value is not None:
             value = decision.normalized_value
             unit = decision.normalized_unit or ""
             reason = (decision.correction_reason or "").strip()
         else:
-            changed_code = not proposal.coding or proposal.coding.code != rule["code"]
-            kept = proposal.normalized_value is not None and bool(proposal.normalized_unit)
-            if not changed_code and kept:
-                # Keep what the proposer derived, including a unit the co-pilot
-                # resolved, but still hold it to the checks below.
-                value, unit = proposal.normalized_value, proposal.normalized_unit
-            else:
-                derived, derived_unit, note = self.catalog.normalize_unit(
-                    proposal.reading.value, proposal.reading.unit, rule
+            derived, derived_unit, note = self.catalog.normalize_unit(
+                proposal.reading.value, proposal.reading.unit, rule
+            )
+            if derived is None or not derived_unit:
+                raise ApprovalValidationError(
+                    f"{note.strip()} Supply an expert correction with a reason "
+                    "to accept an AI interpretation or replace the quantity."
                 )
-                if derived is None or not derived_unit:
-                    raise ApprovalValidationError(
-                        f"{note.strip()} Supply an expert correction with a reason "
-                        "if the source value itself needs replacing."
-                    )
-                value, unit = derived, derived_unit
+            value, unit = derived, derived_unit
             reason = None
 
         if unit not in accepted:
@@ -318,7 +371,7 @@ class BridgeService:
                 "observation_id": observation["id"],
                 "observation_hash": _digest(observation),
                 "proposer": proposal.proposer.value,
-                "ai_accepted": proposal.ai is not None,
+                "ai_accepted": proposal.ai is not None or decision.unit_suggestion_id is not None,
                 "ai_prompt_hash": proposal.ai.prompt_hash if proposal.ai else None,
                 # The exact published facts, not a boolean saying something
                 # happened. An auditor should not have to re-derive what was
@@ -329,6 +382,11 @@ class BridgeService:
                 "reviewer_overrode_coding": decision.coding is not None,
                 "expert_correction": correction_reason is not None,
                 "correction_reason": correction_reason,
+                "unit_suggestion_id": decision.unit_suggestion_id,
+                "unit_suggestion": (
+                    proposal.unit_suggestions[coding.code].model_dump(mode="json")
+                    if decision.unit_suggestion_id else None
+                ),
                 "secondary_coding": (
                     proposal.secondary_coding.model_dump()
                     if proposal.secondary_coding

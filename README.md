@@ -314,6 +314,29 @@ range is a `422`: nothing is published and no incident is raised.
 The override is recorded in the provenance payload alongside the model's prompt hash, so
 the disagreement itself is auditable.
 
+The approval dialog recognizes common source spellings such as `µS/cm`, `°C`,
+`µg/L`, `pH`, and `CFU / 100 mL`, while preserving the original record. Reviewed
+conversions and spelling aliases have a green label. The catalog defines this
+project's accepted target units; it is not an exhaustive list of FHIR/UCUM units.
+
+For unresolved units, the dialog requests
+`POST /api/v1/proposals/{id}/unit-suggestion?code=CODE`. Gemini can interpret an
+unfamiliar spelling or suggest a conversion factor and offset to an existing
+accepted target. The server computes the candidate value and checks its range.
+Suggestions are amber and labeled **Gemini suggestion · Uncited**: this integration
+does not search the internet or verify sources. A valid target unit does not
+establish that an AI-suggested conversion is correct.
+
+**Use suggestion as expert correction** fills editable value, unit, and reason
+fields. The reviewer can change them, cancel, or reject the proposal. Approval
+requires a complete correction and rechecks the selected indicator's accepted
+units and range. The request includes `unit_suggestion_id`; provenance records
+the original suggestion, model attribution, and final approved quantity. An AI
+unit interpretation made during intake follows the same explicit review gate.
+Suggestions are reused per proposal and selected code; failures can be retried.
+With Gemini disabled or unavailable, reviewed conversions and manual corrections
+remain available. No database migration or new dependency is required.
+
 With `UMLS_API_KEY` set, ask for a real-terminology crosswalk on a pending proposal, then
 carry the pick into approval as `secondary_coding`:
 
@@ -369,7 +392,8 @@ But a language model must never be trusted with the parts that decide what gets 
 | Gemini may decide | Deterministic code decides |
 |---|---|
 | Which catalog code a messy label denotes | The code's display text, read from the YAML |
-| Which known unit string a source unit denotes | The conversion factor and the published number |
+| Which known unit string a source unit denotes | Reviewed conversion arithmetic and validation |
+| An uncited factor/offset when no reviewed conversion exists | Candidate arithmetic; publication requires an explicit expert correction |
 | Which measurements a free-text note literally contains | Whether review is required — always yes |
 | How to phrase an advisory for one audience | Whether an alert fires, at what severity, to whom |
 | | What is written to FHIR |
@@ -381,21 +405,22 @@ Three guardrails hold it:
    and [`coding_llm.py`](src/aquafhir/coding_llm.py) re-checks the returned code against
    the catalog anyway. A schema is a request, not a proof. An out-of-catalog code is
    discarded and the curated proposal stands.
-2. **No model arithmetic.** The model may say *"this `uS/cm` string denotes the `uS/cm`
-   unit"*. The factor and the multiplication live in
-   `ReviewedCodingAgent.normalize_unit`, from reviewed YAML. The prompt never contains the
-   converted value, so the model cannot anchor on the answer — there is a test asserting
-   exactly that.
+2. **Explicit unit review.** Known-unit interpretations use reviewed YAML factors;
+   model-suggested factors and offsets are confined to uncited suggestions in
+   `unit_assist.py`. The server computes candidate values. Every AI unit suggestion
+   needs explicit acceptance as an expert correction before publication. Ordinary
+   approval re-derives the quantity from the original reading and reviewed rules.
 3. **Capped confidence.** Any AI-influenced proposal is capped at
    `GEMINI_CONFIDENCE_CEILING` (0.95). A disagreement with the curated match, or a
    model-raised expert-review flag, caps it at 0.80 and surfaces a warning on the card.
    No value publishes anything; `requires_review` is unconditional.
 
-### Four wired features
+### Wired features
 
 | Feature | Endpoint | What the model is allowed to return |
 |---|---|---|
 | Terminology coding co-pilot | `POST /api/v1/proposals` | One catalog code, one known unit name, evidence, confidence |
+| Unit review assistant | `POST /api/v1/proposals/{id}/unit-suggestion?code=CODE` | An uncited unit interpretation or factor/offset for explicit expert correction |
 | Unstructured intake | `POST /api/v1/intake` | Measurements literally present in the note, plus warnings |
 | Audience advisory drafting | `POST /api/v1/alerts/{id}/briefings` | Prose for one already-decided alert, marked `draft` |
 | Grounded situation report | `POST /api/v1/ai/situation-report` | A summary of this bridge's own stored records only |
