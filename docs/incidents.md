@@ -75,7 +75,7 @@ This is the sequence to run for a demo, a judging session, or a regression check
 ### 1. Prove the logic offline — no keys, no network, ~2 seconds
 
 ```bash
-pytest -q                              # 402 tests
+pytest -q                              # 438 tests
 pytest tests/test_incidents.py -q      # the 84 that are this catalogue
 ```
 

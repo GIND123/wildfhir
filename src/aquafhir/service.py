@@ -460,12 +460,15 @@ class BridgeService:
             factor=factor,
             formula=formula,
             message=note.strip(),
-            conversion_origin=("reviewed-alias" if interpreted != reading.unit else "reviewed-catalog"),
+            conversion_origin=(
+                "reviewed-alias" if interpreted != reading.unit else "reviewed-catalog"
+            ),
         )
 
     @property
     def unit_assist_available(self) -> bool:
-        return bool(self.gemini and self.gemini.enabled and getattr(self.coding_agent, "assist_mode", AssistMode.AUTO) != AssistMode.OFF)
+        mode = getattr(self.coding_agent, "assist_mode", AssistMode.AUTO)
+        return bool(self.gemini and self.gemini.enabled and mode != AssistMode.OFF)
 
     def suggest_unit_conversion(self, proposal_id: str, code: str) -> UnitSuggestionResult:
         proposal = self._pending_proposal(proposal_id)
@@ -476,20 +479,27 @@ class BridgeService:
         if existing and existing.status != "unavailable":
             return existing
         if not self.unit_assist_available:
-            return UnitSuggestionResult(status="unavailable", message="Gemini unit assist is disabled.")
+            return UnitSuggestionResult(
+                status="unavailable", message="Gemini unit assist is disabled."
+            )
         rule = self.catalog.rule_for_code(code)
         assert rule is not None and self.gemini is not None
         try:
             result, audit = suggest_unit(self.gemini, self.catalog, proposal.reading, rule)
         except GeminiError as error:
             self._chain_ai_call(proposal_id, error.audit)
-            return UnitSuggestionResult(status="unavailable", message="Gemini could not provide a usable suggestion. Retry or enter a correction.")
+            return UnitSuggestionResult(
+                status="unavailable",
+                message="Gemini gave no usable suggestion. Retry or enter a correction.",
+            )
         self._chain_ai_call(proposal_id, audit)
         stored = self.repository.save_unit_suggestion(proposal_id, code, result)
         if stored is None:
             raise InvalidReviewStateError("Proposal was decided while Gemini was responding")
         if stored == result:
-            self.repository.append_provenance("unit-suggestion", proposal_id, {"code": code, **result.model_dump(mode="json")})
+            self.repository.append_provenance(
+                "unit-suggestion", proposal_id, {"code": code, **result.model_dump(mode="json")}
+            )
         return stored
 
     def _resolve_decision(
@@ -526,8 +536,11 @@ class BridgeService:
 
         if decision.unit_suggestion_id:
             result = proposal.unit_suggestions.get(selected)
-            if not result or not result.suggestion or result.suggestion.id != decision.unit_suggestion_id:
-                raise ApprovalValidationError("Unit suggestion does not belong to this proposal and code")
+            suggestion = result.suggestion if result else None
+            if not suggestion or suggestion.id != decision.unit_suggestion_id:
+                raise ApprovalValidationError(
+                    "Unit suggestion does not belong to this proposal and code"
+                )
 
         # -- coded indicator -------------------------------------------------
         if reading.is_coded or decision.coded_value:
@@ -635,7 +648,11 @@ class BridgeService:
                 "expert_correction": resolved.correction_reason is not None,
                 "correction_reason": resolved.correction_reason,
                 "unit_suggestion_id": decision.unit_suggestion_id,
-                "unit_suggestion": (proposal.unit_suggestions[resolved.coding.code].model_dump(mode="json") if decision.unit_suggestion_id else None),
+                "unit_suggestion": (
+                    proposal.unit_suggestions[resolved.coding.code].model_dump(mode="json")
+                    if decision.unit_suggestion_id
+                    else None
+                ),
                 "secondary_coding": (
                     proposal.secondary_coding.model_dump()
                     if proposal.secondary_coding

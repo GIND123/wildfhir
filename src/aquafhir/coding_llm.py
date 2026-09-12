@@ -288,7 +288,8 @@ class GeminiCodingAgent:
                     )
                 except ValueError as error:
                     raise GeminiError(
-                        "Gemini returned an unusable unit interpretation", category="invalid-response",
+                        "Gemini returned an unusable unit interpretation",
+                        category="invalid-response",
                         audit=mark_degraded(proposal.ai_audit or {}, "invalid-response"),
                     ) from error
                 proposal.unit_suggestions[rule["code"]] = UnitSuggestionResult(

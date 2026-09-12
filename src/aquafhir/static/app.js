@@ -901,7 +901,7 @@
           ["Base URL", tagm(i.fhir.base_url)],
           ["Write mode", `<span class="dim">${i.fhir.write_enabled ? "Transaction bundles are validated against the profile and POSTed to the server." : "Bundles are built and stored locally. Nothing is sent, and profile validation is skipped because it runs on the server. Set FHIR_WRITE_ENABLED=true to publish."}</span>`],
           ["Indicators profile", tagm(i.fhir.observation_profile)],
-          ["Health-measure profile", `${tagm(i.fhir.health_measure_profile || "-")} <span class="dim">human leg</span>`],
+          ["Health-measure profile", `${tagm(i.fhir.health_measure_profile || "-")}<br><span class="dim">used for the human leg</span>`],
           ["Location profile", tagm(i.fhir.location_profile)],
           ["Timeout", `<span class="dim">${i.fhir.timeout_seconds}s</span>`],
         ],

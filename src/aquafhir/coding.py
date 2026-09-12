@@ -259,7 +259,14 @@ class ReviewedCodingAgent:
         """Resolve explicit spelling aliases without folding case-sensitive SI prefixes."""
         known = ReviewedCodingAgent.known_units_for_rule(rule)
         compact = re.sub(r"\s+", "", unit).replace("\u00b5", "u").replace("\u03bc", "u")
-        aliases = {"us/cm": "uS/cm", "\u00b0C": "Cel", "Celsius": "Cel", "celsius": "Cel", "degC": "Cel", "pH": "[pH]"}
+        aliases = {
+            "us/cm": "uS/cm",
+            "\u00b0C": "Cel",
+            "Celsius": "Cel",
+            "celsius": "Cel",
+            "degC": "Cel",
+            "pH": "[pH]",
+        }
         candidate = aliases.get(compact, compact)
         return candidate if candidate in known else unit
 
