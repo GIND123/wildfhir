@@ -6,6 +6,10 @@
     <meta name="description" content="AquaFHIR Bridge review console: terminology review, incidents, advisories, and audit for OneAquaHealth FHIR." />
     <meta name="color-scheme" content="light dark" />
     <title>Board - AquaFHIR Bridge</title>
+    <link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="apple-touch-icon" href="/assets/brand/apple-touch-icon.png" />
+    <meta name="theme-color" content="#0a1f3d" />
     <link rel="stylesheet" href="/assets/vendor/leaflet/leaflet.css" />
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
@@ -54,7 +58,10 @@
     <!-- ── top navigation ─────────────────────────────────────────────── -->
     <header class="topnav">
       <div class="topnav-left">
-        <a class="brand" href="#/board"><span class="brand-mark">A</span><span>AquaFHIR</span></a>
+        <a class="brand" href="#/board" aria-label="AquaFHIR, go to the board">
+          <img class="brand-mark" src="/assets/brand/aquafhir-mark.svg" alt="" width="22" height="24" />
+          <span class="brand-word">Aqua<b>FHIR</b></span>
+        </a>
         <a class="topnav-item" href="#/board" data-nav="board">Board</a>
         <a class="topnav-item" href="#/list" data-nav="list">Queue</a>
         <a class="topnav-item" href="#/alerts" data-nav="alerts">Incidents</a>
@@ -116,6 +123,13 @@
           <button class="nav-link" data-nav="integrations" type="button"><svg class="ic"><use href="#i-plug"/></svg><span>Integrations</span></button>
         </div>
 
+        <div class="sidebar-lockup" aria-hidden="true">
+          <img src="/assets/brand/aquafhir-mark.svg" alt="" width="26" height="28" />
+          <div>
+            <div class="lockup-word">Aqua<b>FHIR</b></div>
+            <div class="lockup-tag"><span>Data systems //</span><span>One Health global</span></div>
+          </div>
+        </div>
         <div class="sidebar-foot">
           <b id="foot-policy">policy</b>
           <span id="foot-policy-status"></span>

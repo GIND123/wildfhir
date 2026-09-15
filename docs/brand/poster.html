@@ -1,0 +1,90 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>AquaFHIR Bridge poster</title>
+<style>
+  html,body{margin:0;background:#050d1f}
+  .poster{position:relative;width:1920px;height:1080px;overflow:hidden;font-family:"Inter","SF Pro Display","Helvetica Neue",Arial,sans-serif;
+    background:radial-gradient(1200px 700px at 26% 42%,#0f3a7a 0%,rgba(15,58,122,0) 70%),
+               radial-gradient(900px 600px at 88% 100%,#0b5d6e 0%,rgba(11,93,110,0) 70%),
+               linear-gradient(180deg,#07183a 0%,#061430 45%,#041026 100%)}
+  svg.bg{position:absolute;inset:0}
+  .content{position:absolute;inset:0;display:flex;align-items:center;padding:0 150px;gap:96px}
+  .mark{width:380px;height:412px;flex:none;filter:drop-shadow(0 30px 80px rgba(40,120,255,.35))}
+  .divider{width:2px;height:330px;background:linear-gradient(180deg,rgba(110,170,251,0),rgba(110,170,251,.55),rgba(16,203,173,.55),rgba(16,203,173,0));flex:none}
+  .eyebrow{font-size:22px;font-weight:600;letter-spacing:.32em;text-transform:uppercase;color:#5fd8c4;margin-bottom:26px}
+  h1{margin:0;font-size:168px;line-height:.95;font-weight:600;letter-spacing:-.035em;color:#f4f8ff}
+  h1 b{font-weight:700;background:linear-gradient(90deg,#6eaafb,#4a8bff 45%,#22d3c0);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .bridge{font-size:64px;font-weight:300;letter-spacing:-.01em;color:#c9d8f2;margin-top:14px}
+  .sub{margin-top:40px;font-size:28px;line-height:1.5;color:#9fb3d6;max-width:880px}
+  .tag{margin-top:44px;font-size:20px;font-weight:600;letter-spacing:.3em;color:#7189b3;text-transform:uppercase}
+  .foot{position:absolute;left:150px;right:150px;bottom:64px;display:flex;justify-content:space-between;font-size:19px;letter-spacing:.14em;text-transform:uppercase;color:#5d7399}
+  .foot span b{color:#a9c4ee;font-weight:600}
+</style></head>
+<body><div class="poster">
+<svg class="bg" viewBox="0 0 1920 1080" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id="ray" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8cc4ff" stop-opacity=".16"/><stop offset="1" stop-color="#8cc4ff" stop-opacity="0"/></linearGradient>
+    <linearGradient id="w1" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#1250dc"/><stop offset=".55" stop-color="#1b74c9"/><stop offset="1" stop-color="#0f8fb4"/></linearGradient>
+    <linearGradient id="w2" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0d2d6b"/><stop offset="1" stop-color="#0a5566"/></linearGradient>
+    <radialGradient id="glow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#3f8cff" stop-opacity=".45"/><stop offset="1" stop-color="#3f8cff" stop-opacity="0"/></radialGradient>
+  </defs>
+  <!-- light rays through water -->
+  <g>
+    <polygon points="330,0 470,0 760,1080 420,1080" fill="url(#ray)"/>
+    <polygon points="560,0 620,0 1000,1080 830,1080" fill="url(#ray)" opacity=".7"/>
+    <polygon points="160,0 230,0 330,1080 120,1080" fill="url(#ray)" opacity=".6"/>
+  </g>
+  <!-- catchment contour lines -->
+  <g fill="none" stroke="#6eaafb" stroke-opacity=".07" stroke-width="1.5">
+    <path d="M980 -40 C1180 120 1320 90 1480 220 S1780 330 1980 300"/>
+    <path d="M1000 20 C1190 170 1330 150 1490 280 S1790 400 1980 370"/>
+    <path d="M1030 90 C1210 230 1350 220 1510 350 S1800 470 1980 450"/>
+    <path d="M1070 170 C1240 300 1370 300 1530 430 S1810 550 1980 540"/>
+    <path d="M1120 260 C1280 380 1400 390 1560 520 S1830 640 1980 640"/>
+    <path d="M1180 360 C1330 470 1440 490 1600 620 S1850 740 1980 750"/>
+  </g>
+  <!-- monitoring-station network -->
+  <g stroke="#5fd8c4" stroke-opacity=".22" stroke-width="1.4" fill="none">
+    <path d="M1310 250 L1500 330 L1690 270 L1820 400 L1640 520 L1500 330"/>
+    <path d="M1640 520 L1760 640 L1560 700"/>
+  </g>
+  <g fill="#5fd8c4">
+    <circle cx="1310" cy="250" r="5" opacity=".55"/><circle cx="1500" cy="330" r="7" opacity=".8"/>
+    <circle cx="1690" cy="270" r="5" opacity=".5"/><circle cx="1820" cy="400" r="6" opacity=".6"/>
+    <circle cx="1640" cy="520" r="7" opacity=".75"/><circle cx="1760" cy="640" r="5" opacity=".5"/>
+    <circle cx="1560" cy="700" r="5" opacity=".45"/>
+  </g>
+  <g fill="none" stroke="#5fd8c4" stroke-opacity=".25"><circle cx="1500" cy="330" r="18"/><circle cx="1640" cy="520" r="18"/></g>
+  <!-- glow behind mark -->
+  <circle cx="340" cy="520" r="420" fill="url(#glow)"/>
+  <!-- water waves at the base -->
+  <path d="M0 880 C240 840 420 910 700 880 S1180 820 1460 860 S1800 900 1920 870 L1920 1080 L0 1080Z" fill="url(#w2)" opacity=".55"/>
+  <path d="M0 940 C300 900 520 970 820 940 S1300 890 1560 930 S1840 960 1920 945 L1920 1080 L0 1080Z" fill="url(#w1)" opacity=".28"/>
+  <path d="M0 1000 C260 975 560 1030 880 1005 S1420 965 1700 995 S1880 1010 1920 1000 L1920 1080 L0 1080Z" fill="#041026" opacity=".85"/>
+  <g fill="none" stroke="#8cc4ff" stroke-opacity=".18" stroke-width="1.5">
+    <path d="M0 880 C240 840 420 910 700 880 S1180 820 1460 860 S1800 900 1920 870"/>
+    <path d="M0 940 C300 900 520 970 820 940 S1300 890 1560 930 S1840 960 1920 945"/>
+  </g>
+</svg>
+<div class="content">
+  <svg class="mark" viewBox="220 170 1160 1260">
+    <defs>
+      <linearGradient id="afL" x1="250" y1="1400" x2="800" y2="200" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#1250dc"/><stop offset=".5" stop-color="#4a63f5"/><stop offset="1" stop-color="#6eaafb"/></linearGradient>
+      <linearGradient id="afR" x1="800" y1="200" x2="1350" y2="1300" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#10cbad"/><stop offset="1" stop-color="#0f8fb4"/></linearGradient>
+      <linearGradient id="afD" x1="730" y1="780" x2="870" y2="920" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#00d4ff"/><stop offset="1" stop-color="#0080ff"/></linearGradient>
+    </defs>
+    <path fill="#eef4ff" d="M800 200c-150 220-225 440-225 650 0 190 65 360 225 550 160-190 225-360 225-550 0-210-75-430-225-650z"/>
+    <path fill="url(#afL)" d="M800 200C480 200 250 510 250 850c0 330 250 550 550 550-160-190-225-360-225-550 0-210 75-430 225-650z"/>
+    <path fill="url(#afR)" d="M800 200c320 0 550 310 550 650 0 330-250 550-550 550 160-190 225-360 225-550 0-210-75-430-225-650z"/>
+    <circle cx="800" cy="850" r="94" fill="url(#afD)"/>
+  </svg>
+  <div class="divider"></div>
+  <div>
+    <div class="eyebrow">One Health · HL7 FHIR R4</div>
+    <h1>Aqua<b>FHIR</b></h1>
+    <div class="bridge">Bridge</div>
+    <div class="sub">Turns raw water-quality readings into reviewed, standards-coded FHIR observations and One Health alerts.</div>
+    <div class="tag">Data systems // One Health global</div>
+  </div>
+</div>
+<div class="foot"><span>IEEE OneAquaHealth Global Hackathon <b>2026</b></span><span>Track 7 · <b>Digital Health Standards</b></span></div>
+</div></body></html>

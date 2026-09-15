@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="220 170 1160 1260">
+  <defs>
+    <linearGradient id="fL" x1="250" y1="1400" x2="800" y2="200" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1250dc"/><stop offset=".5" stop-color="#4a63f5"/><stop offset="1" stop-color="#6eaafb"/>
+    </linearGradient>
+    <linearGradient id="fR" x1="800" y1="200" x2="1350" y2="1300" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#10cbad"/><stop offset="1" stop-color="#0f8fb4"/>
+    </linearGradient>
+    <linearGradient id="fD" x1="730" y1="780" x2="870" y2="920" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00d4ff"/><stop offset="1" stop-color="#0080ff"/>
+    </linearGradient>
+  </defs>
+  <path fill="#eef4ff" d="M800 200c-150 220-225 440-225 650 0 190 65 360 225 550 160-190 225-360 225-550 0-210-75-430-225-650z"/>
+  <path fill="url(#fL)" d="M800 200C480 200 250 510 250 850c0 330 250 550 550 550-160-190-225-360-225-550 0-210 75-430 225-650z"/>
+  <path fill="url(#fR)" d="M800 200c320 0 550 310 550 650 0 330-250 550-550 550 160-190 225-360 225-550 0-210-75-430-225-650z"/>
+  <circle cx="800" cy="850" r="110" fill="url(#fD)"/>
+</svg>

@@ -1,3 +1,5 @@
+<p align="center"><img src="src/aquafhir/static/brand/aquafhir-lockup.svg" alt="AquaFHIR, data systems for One Health" width="560"></p>
+
 # AquaFHIR Bridge
 
 **The One Health data bus for OneAquaHealth: fragmented water, citizen, satellite and public-health readings in; reviewed OneAquaHealth FHIR resources, routed alerts and a tamper-evident audit trail out.**

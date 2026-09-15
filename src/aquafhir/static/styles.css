@@ -61,6 +61,9 @@
   --band-hover: rgba(255, 255, 255, .08);
   --band-accent: #4c9aff;
   --band-accent-ink: #06204a;
+  --logo-blue: #4a63f5;
+  --logo-sky: #6eaafb;
+  --logo-teal: #10cbad;
 }
 
 [data-theme="dark"] {
@@ -139,8 +142,12 @@ code, .mono { font-family: var(--mono); font-size: 12px; }
   position: fixed; inset: 0 0 auto 0; height: var(--topnav-h); z-index: 40;
   display: flex; align-items: center; gap: 4px; padding: 0 12px 0 8px;
   background: var(--band-0);
-  border-bottom: 2px solid var(--band-accent);
   color: var(--band-fg);
+}
+.topnav::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+  background: linear-gradient(90deg, var(--logo-blue), var(--band-accent) 55%, var(--logo-teal));
+  pointer-events: none;
 }
 /* `flex: none` on both end groups, not `min-width: 0`: their children are
    nowrap, so letting either group shrink below its content made the children
@@ -153,10 +160,9 @@ code, .mono { font-family: var(--mono); font-size: 12px; }
   text-decoration: none; color: var(--band-fg); font-weight: 600; letter-spacing: -.01em;
 }
 .brand:hover { background: var(--band-hover); }
-.brand-mark {
-  width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center;
-  background: var(--band-accent); color: var(--band-accent-ink); font-size: 12px; font-weight: 800;
-}
+.brand-mark { width: 22px; height: 24px; flex: none; display: block; }
+.brand-word { font-size: 15px; font-weight: 500; letter-spacing: -.015em; color: var(--band-fg); }
+.brand-word b { font-weight: 600; color: var(--logo-sky); }
 .topnav-item {
   display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 8px;
   border: 0; border-radius: var(--r); background: transparent; color: var(--band-fg-dim);
@@ -267,7 +273,21 @@ code, .mono { font-family: var(--mono); font-size: 12px; }
 }
 .nav-link.is-active .count { background: var(--brand); color: #fff; }
 .count.hot { background: var(--red-soft); color: var(--red-ink); }
-.sidebar-foot { margin-top: auto; padding: 16px 8px 0; border-top: 1px solid var(--n30); font-size: 12px; color: var(--n60); }
+.sidebar-lockup {
+  margin-top: auto; display: flex; align-items: center; gap: 10px;
+  padding: 14px 8px 12px; border-top: 1px solid var(--n30);
+}
+.sidebar-lockup img { flex: none; display: block; }
+.lockup-word { font-size: 15px; font-weight: 500; letter-spacing: -.015em; color: var(--n90); line-height: 1.15; }
+.lockup-word b { font-weight: 600; color: var(--brand); }
+/* The full tagline is wider than the sidebar, so it breaks after the "//"
+   onto two lines rather than being clipped. */
+.lockup-tag {
+  margin-top: 3px; font-size: 9.5px; font-weight: 600; letter-spacing: .12em; line-height: 1.45;
+  text-transform: uppercase; color: var(--n50);
+}
+.lockup-tag span { display: block; }
+.sidebar-foot { margin-top: 0; padding: 4px 8px 0; font-size: 12px; color: var(--n60); }
 .sidebar-foot b { display: block; color: var(--n80); font-weight: 600; margin-bottom: 4px; }
 .sidebar-foot .kv { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; margin-top: 8px; }
 .sidebar-foot .kv span:nth-child(even) { color: var(--n80); font-weight: 500; text-align: right; }

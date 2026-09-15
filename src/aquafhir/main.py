@@ -924,6 +924,12 @@ STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/assets", StaticFiles(directory=STATIC_DIR), name="assets")
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> FileResponse:
+    """Browsers request this path unprompted, whatever the page links to."""
+    return FileResponse(STATIC_DIR / "brand" / "favicon.ico", media_type="image/x-icon")
+
+
 @app.get("/", include_in_schema=False)
 def dashboard() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
