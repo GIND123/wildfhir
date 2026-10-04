@@ -5,7 +5,7 @@ import pytest
 from aquafhir.briefing import BriefingWriter
 from aquafhir.coding import ReviewedCodingAgent
 from aquafhir.coding_llm import GeminiCodingAgent
-from aquafhir.config import AssistMode
+from aquafhir.config import AssistMode, get_settings
 from aquafhir.fhir import FhirClient
 from aquafhir.gbif import GbifClient
 from aquafhir.gemini import GeminiClient
@@ -22,6 +22,32 @@ ROOT = Path(__file__).parents[1]
 RULES = ROOT / "config" / "coding-rules.yaml"
 THRESHOLDS = ROOT / "config" / "thresholds.yaml"
 REPLAY = ROOT / "data" / "oder-replay.csv"
+INCIDENTS = ROOT / "data" / "incidents.csv"
+
+
+@pytest.fixture(autouse=True)
+def _isolated_app_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Keep every test off the developer's database, keys and FHIR server.
+
+    A few tests start the real app (`with TestClient(main.app)`), whose
+    lifespan builds its service from `get_settings()`: the repository `.env`
+    and the `aquafhir.db` default. Without this fixture each run wrote the
+    connector fixtures into the working database as "live" readings and,
+    with a key in `.env`, spent real Gemini calls. Explicit keyword arguments
+    to `Settings(...)` still win over these environment values.
+    """
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "app-under-test.db"))
+    monkeypatch.setenv("GEMINI_API_KEY", "")
+    monkeypatch.setenv("UMLS_API_KEY", "")
+    monkeypatch.setenv("CDSE_CLIENT_ID", "")
+    monkeypatch.setenv("CDSE_CLIENT_SECRET", "")
+    monkeypatch.setenv("FHIR_WRITE_ENABLED", "false")
+    clear = getattr(get_settings, "cache_clear", None)
+    if clear:
+        clear()
+    yield
+    if clear:
+        clear()
 
 
 def _build(
@@ -46,6 +72,7 @@ def _build(
             umls or UMLSClient(api_key=""), loinc_table=loinc_table, gbif=gbif
         ),
         replay_path=REPLAY,
+        incidents_path=INCIDENTS,
         gemini=gemini,
         hubeau=hubeau,
         copernicus=copernicus,

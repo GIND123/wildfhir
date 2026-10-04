@@ -260,7 +260,7 @@
               <h1>Review board</h1>
               <div class="page-actions">
                 <span class="updated" id="updated-board"><i></i>live</span>
-                <button class="btn" id="btn-replay" type="button"><svg class="ic sm"><use href="#i-play"/></svg>Load Oder replay</button>
+                <button class="btn" id="btn-replay" type="button"><svg class="ic sm"><use href="#i-play"/></svg>Load incidents</button>
                 <button class="btn primary" id="btn-approve-all" type="button">Approve all pending</button>
               </div>
             </div>
@@ -529,6 +529,7 @@
             <label class="field"><span>Evidence URL</span><input name="evidence_url" type="url" placeholder="https://" /></label>
           </form>
 
+
           <form class="form" id="form-bulletin" data-ct="bulletin" hidden>
             <div class="note info" id="bulletin-note"><svg class="ic sm"><use href="#i-info"/></svg><span>Gemini extracts only measurements that are literally written. Anything inferred becomes a warning, not a reading.</span></div>
             <label class="field"><span>Bulletin, email, or field log <em>*</em></span><textarea name="text" rows="8" required>WIOŚ Szczecin — Odra / Oder at Kostrzyn, 27.07.2022 08:00 UTC.
@@ -551,8 +552,11 @@ Angler melden tote Fische flussabwärts — keine Messung vorhanden.</textarea><
           </form>
 
           <div class="form" id="form-replay" data-ct="replay" hidden>
-            <div class="note info"><svg class="ic sm"><use href="#i-info"/></svg><span>Loads the transparent synthetic Oder 2022 timeline from <code>data/oder-replay.csv</code> as pending proposals. Nothing is approved automatically.</span></div>
+            <div class="note info"><svg class="ic sm"><use href="#i-info"/></svg><span>Loads a fixture as pending proposals. <b>Real incidents</b> is the twelve cases from <code>docs/incidents.md</code> in one file, <code>data/incidents.csv</code>; the <b>Oder replay</b> is the five-reading timeline from the demo. With the full round on, a named reviewer approves what is publishable, rejects the rest with a reason, the policy evaluates, alerts route, and the chain is verified, so the tool's working is shown end to end. Nothing is published by a model.</span></div>
+            <label class="field"><span>Dataset</span><select name="dataset" id="replay-dataset"><option value="incidents">Real incidents · data/incidents.csv · 83 readings, 12 incidents</option><option value="oder-replay">Oder 2022 replay · data/oder-replay.csv · 5 readings</option></select></label>
+            <label class="chipbtn wrap"><input type="checkbox" id="replay-run" checked /> <span>Run the full round after loading</span><span class="dim">approve · reject with reason · policy · routing · chain verify</span></label>
             <div class="help-list" id="replay-preview"></div>
+            <div id="replay-result"></div>
           </div>
 
           <div class="form" id="form-live" data-ct="live" hidden>

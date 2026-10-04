@@ -111,8 +111,11 @@ live path honest before it is scheduled rather than pressed.
 - Keep the below-quantification-limit skip (`code_remarque != 1`) and extend it to the
   other Sandre remark codes (trace, saturation) with the laboratory's own definitions.
 - Decide, with a laboratory, whether Hub'Eau's `n/(100mL)` E. coli counts are MPN or CFU
-  per method code (`code_methode`) before adding any conversion; the bridge currently
-  withholds them deliberately.
+  per method code before adding any conversion; the bridge currently withholds them
+  deliberately and records the Sandre method (`code_methode_analyse`, on the reading as
+  `analysis_method`) so the decision can be made per result. On the national feed the
+  unit is reported almost only under NF EN ISO 9308-3 (Sandre 334, an MPN method) or with
+  no method at all (Sandre 0), so a blanket CFU conversion would be wrong.
 - Record the Hub'Eau `api_version` and the Sandre parameter/unit release with each pull.
 - Copernicus: register a project OAuth client, rotate its secret, and pin the evalscript
   by hash (already recorded on every NDCI reading). Store the scene id, cloud cover,

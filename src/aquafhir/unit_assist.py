@@ -18,7 +18,8 @@ normalization cannot turn milligrams into micrograms. Prefer a known source unit
 when the input is just a spelling variant. Otherwise propose an affine conversion
 (target = source * factor + offset). Do not calculate the resulting value.
 Return no-match if information is missing or the quantities are incompatible.
-Never equate MPN with CFU, conductivity with salinity, or an index with concentration.
+Never equate MPN (NPP in French sources) with CFU, conductivity with salinity, or an
+index with concentration.
 Do not convert ppm/ppb to mass per volume without an explicit concentration basis
 and density. Do not change chemical reporting basis (such as nitrate as N vs NO3).
 State any assumptions in the rationale. You have no internet search tool; do not
@@ -41,8 +42,8 @@ def make_suggestion(
     target: str, factor: float, offset: float, rationale: str,
     ai: AiAttribution, origin: Literal["ai-interpretation", "ai-conversion"],
 ) -> UnitSuggestion:
-    if rule["code"] == "coliforms" and "mpn" in reading.unit.casefold():
-        raise ValueError("MPN and CFU are different measurement methods")
+    if rule["code"] == "coliforms" and any(k in reading.unit.casefold() for k in ("mpn", "npp")):
+        raise ValueError("MPN (NPP in French sources) and CFU are different measurement methods")
     value = reading.value * factor + offset
     if target not in rule.get("accepted_units", []):
         raise ValueError("Suggested target is not accepted for this indicator")

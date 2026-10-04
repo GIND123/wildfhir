@@ -1,0 +1,5829 @@
+{
+ "run_started": "2026-09-22T21:12:18+00:00",
+ "run_finished": "2026-09-22T23:21:54+00:00",
+ "health": {
+  "status": "ok",
+  "fhir_write_mode": "dry-run",
+  "threshold_policy": "oder-replay-demo-v1",
+  "threshold_policy_status": "demo-not-for-operational-use",
+  "ai_mode": "gemini",
+  "ai_model": "gemini-3.1-flash-lite",
+  "ai_fallback_model": null,
+  "terminology_crosswalk": "loinc-table+umls+gbif",
+  "connectors": [
+   "hubeau",
+   "sentinel2"
+  ]
+ },
+ "calls": {
+  "total": 322,
+  "ok": 322,
+  "failed": 0
+ },
+ "chain": {
+  "valid": true,
+  "entries_checked": 328,
+  "first_invalid_sequence": null
+ },
+ "tamper": {
+  "rows_altered": 1,
+  "altered_sequences": [
+   141
+  ],
+  "verify_after": {
+   "valid": false,
+   "entries_checked": 141,
+   "first_invalid_sequence": 141
+  }
+ },
+ "provenance": {
+  "ai-call": 40,
+  "alert-created": 52,
+  "mapping-approved": 76,
+  "mapping-proposed": 116,
+  "mapping-rejected": 40,
+  "unstructured-intake": 4
+ },
+ "provenance_total": 328,
+ "scenarios": [
+  {
+   "id": "oder-2022",
+   "title": "Oder River fish kill (Poland / Germany, July-August 2022)",
+   "expect": {
+    "coded": 9,
+    "blocked_qty": 0,
+    "no_code": 2,
+    "alerts": [
+     {
+      "code": "electrical-conductivity",
+      "severity": "high"
+     },
+     {
+      "code": "chloride",
+      "severity": "high"
+     },
+     {
+      "code": "ndci",
+      "severity": "high"
+     },
+     {
+      "code": "dissolved-oxygen",
+      "severity": "critical"
+     },
+     {
+      "code": "waterTemperature",
+      "severity": "moderate"
+     }
+    ],
+    "audiences": [
+     "public-health",
+     "veterinary",
+     "water-authority"
+    ]
+   },
+   "summary": {
+    "counts": {
+     "coded": 10,
+     "blocked_qty": 0,
+     "no_code": 1,
+     "http_error": 0
+    },
+    "counts_match": false,
+    "alerts_fired": [
+     [
+      "chloride",
+      "high"
+     ],
+     [
+      "dissolved-oxygen",
+      "critical"
+     ],
+     [
+      "electrical-conductivity",
+      "high"
+     ],
+     [
+      "ndci",
+      "high"
+     ],
+     [
+      "waterTemperature",
+      "moderate"
+     ]
+    ],
+    "alerts_documented": [
+     [
+      "chloride",
+      "high"
+     ],
+     [
+      "dissolved-oxygen",
+      "critical"
+     ],
+     [
+      "electrical-conductivity",
+      "high"
+     ],
+     [
+      "ndci",
+      "high"
+     ],
+     [
+      "waterTemperature",
+      "moderate"
+     ]
+    ],
+    "alerts_match": true,
+    "audiences": [
+     "public-health",
+     "veterinary",
+     "water-authority"
+    ],
+    "audiences_match": true,
+    "approved": 10,
+    "rejected": 1,
+    "alert_count": 6,
+    "gemini_rows": 3,
+    "mean_latency_ms": 1434.4,
+    "pass": false
+   },
+   "rows": [
+    {
+     "parameter": "EC",
+     "value": 1.2,
+     "unit": "mS/cm",
+     "coded_value": null,
+     "observed_at": "2022-07-24T08:00:00Z",
+     "site_code": "oder-kostrzyn",
+     "site_name": "Oder at Kostrzyn",
+     "source_id": "pl-gios-wios",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 3.0,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "electrical-conductivity",
+     "display": "Electrical conductivity",
+     "leg": "environmental",
+     "normalized_value": 1.2,
+     "normalized_unit": "mS/cm",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'ec'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": []
+    },
+    {
+     "parameter": "chlorki",
+     "value": 340.0,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2022-07-24T08:00:00Z",
+     "site_code": "oder-kostrzyn",
+     "site_name": "Oder at Kostrzyn",
+     "source_id": "pl-gios-wios",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 5103.0,
+     "outcome": "coded",
+     "proposer": "gemini-assisted",
+     "confidence": 0.95,
+     "code": "chloride",
+     "display": "Chloride",
+     "leg": "environmental",
+     "normalized_value": 340.0,
+     "normalized_unit": "mg/L",
+     "normalized_coding": null,
+     "rationale": "The source label 'chlorki' is the Polish term for chloride, which aligns with the suggested alias 'chloride' in the catalog. The unit mg/L is a valid unit for chloride concentration. Unit is an accepted UCUM code.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [
+      "chlorki",
+      "mg/L"
+     ],
+     "ai_disagreed": false,
+     "ai_latency_ms": 5094,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": []
+    },
+    {
+     "parameter": "NDCI",
+     "value": 0.18,
+     "unit": "1",
+     "coded_value": null,
+     "observed_at": "2022-07-25T10:15:00Z",
+     "site_code": "oder-kostrzyn",
+     "site_name": "Oder at Kostrzyn",
+     "source_id": "copernicus-s2",
+     "source_type": "satellite",
+     "http_status": 201,
+     "latency_ms": 4.9,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "ndci",
+     "display": "Normalized Difference Chlorophyll Index (NDCI)",
+     "leg": "environmental",
+     "normalized_value": 0.18,
+     "normalized_unit": "1",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'ndci'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": []
+    },
+    {
+     "parameter": "Leitfaehigkeit",
+     "value": 2350.0,
+     "unit": "uS/cm",
+     "coded_value": null,
+     "observed_at": "2022-07-27T08:00:00Z",
+     "site_code": "oder-kostrzyn",
+     "site_name": "Oder at Kostrzyn",
+     "source_id": "pl-gios-wios",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 4553.4,
+     "outcome": "coded",
+     "proposer": "gemini-assisted",
+     "confidence": 0.95,
+     "code": "electrical-conductivity",
+     "display": "Electrical conductivity",
+     "leg": "environmental",
+     "normalized_value": 2.35,
+     "normalized_unit": "mS/cm",
+     "normalized_coding": null,
+     "rationale": "Leitfaehigkeit is the German term for electrical conductivity. The unit uS/cm is explicitly listed in the catalog for this parameter. Converted from uS/cm.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [
+      "Leitfaehigkeit",
+      "uS/cm"
+     ],
+     "ai_disagreed": false,
+     "ai_latency_ms": 4542,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "electrical-conductivity",
+       "severity": "high",
+       "audiences": [
+        "public-health",
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Conductivity pattern warrants cross-border ecological review.",
+       "value": 2.35,
+       "unit": "mS/cm",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "chloride dissolved",
+     "value": 1180.0,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2022-07-27T08:00:00Z",
+     "site_code": "oder-kostrzyn",
+     "site_name": "Oder at Kostrzyn",
+     "source_id": "pl-gios-wios",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 12.9,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "chloride",
+     "display": "Chloride",
+     "leg": "environmental",
+     "normalized_value": 1180.0,
+     "normalized_unit": "mg/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'chloride dissolved'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "chloride",
+       "severity": "high",
+       "audiences": [
+        "water-authority",
+        "veterinary"
+       ],
+       "message": "Chloride elevated; check for a saline discharge upstream.",
+       "value": 1180.0,
+       "unit": "mg/L",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "temp water",
+     "value": 26.4,
+     "unit": "Cel",
+     "coded_value": null,
+     "observed_at": "2022-07-27T08:00:00Z",
+     "site_code": "oder-kostrzyn",
+     "site_name": "Oder at Kostrzyn",
+     "source_id": "pl-gios-wios",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 7.5,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "waterTemperature",
+     "display": "Water temperature",
+     "leg": "environmental",
+     "normalized_value": 26.4,
+     "normalized_unit": "Cel",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'temp water'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "waterTemperature",
+       "severity": "moderate",
+       "audiences": [
+        "water-authority"
+       ],
+       "message": "Elevated water temperature compounds bloom and hypoxia risk.",
+       "value": 26.4,
+       "unit": "Cel",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "normalized difference chlorophyll index",
+     "value": 0.43,
+     "unit": "1",
+     "coded_value": null,
+     "observed_at": "2022-07-28T10:15:00Z",
+     "site_code": "oder-kostrzyn",
+     "site_name": "Oder at Kostrzyn",
+     "source_id": "copernicus-s2",
+     "source_type": "satellite",
+     "http_status": 201,
+     "latency_ms": 10.2,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "ndci",
+     "display": "Normalized Difference Chlorophyll Index (NDCI)",
+     "leg": "environmental",
+     "normalized_value": 0.43,
+     "normalized_unit": "1",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'normalized difference chlorophyll index'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "ndci",
+       "severity": "high",
+       "audiences": [
+        "public-health",
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Satellite chlorophyll proxy warrants bloom investigation.",
+       "value": 0.43,
+       "unit": "1",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "dissolved O2",
+     "value": 3.6,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2022-07-29T07:30:00Z",
+     "site_code": "oder-frankfurt",
+     "site_name": "Oder at Frankfurt (Oder)",
+     "source_id": "de-lfu-bb",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 5.3,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "dissolved-oxygen",
+     "display": "Dissolved Oxygen",
+     "leg": "environmental",
+     "normalized_value": 3.6,
+     "normalized_unit": "mg/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'dissolved o2'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "dissolved-oxygen",
+       "severity": "critical",
+       "audiences": [
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Low dissolved oxygen may threaten aquatic life.",
+       "value": 3.6,
+       "unit": "mg/L",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "electrical conductivity",
+     "value": 2.41,
+     "unit": "mS/cm",
+     "coded_value": null,
+     "observed_at": "2022-08-06T09:00:00Z",
+     "site_code": "oder-frankfurt",
+     "site_name": "Oder at Frankfurt (Oder)",
+     "source_id": "de-lfu-bb",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 6.3,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "electrical-conductivity",
+     "display": "Electrical conductivity",
+     "leg": "environmental",
+     "normalized_value": 2.41,
+     "normalized_unit": "mS/cm",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'electrical conductivity'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "electrical-conductivity",
+       "severity": "high",
+       "audiences": [
+        "public-health",
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Conductivity pattern warrants cross-border ecological review.",
+       "value": 2.41,
+       "unit": "mS/cm",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "mercury",
+     "value": 0.35,
+     "unit": "ug/L",
+     "coded_value": null,
+     "observed_at": "2022-08-09T09:00:00Z",
+     "site_code": "oder-frankfurt",
+     "site_name": "Oder at Frankfurt (Oder)",
+     "source_id": "de-lfu-bb",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 3.8,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "mercury-dissolved",
+     "display": "Mercury dissolved",
+     "leg": "environmental",
+     "normalized_value": 0.35,
+     "normalized_unit": "ug/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'mercury'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": []
+    },
+    {
+     "parameter": "Prymnesium parvum cell count",
+     "value": 98000.0,
+     "unit": "{cells}/mL",
+     "coded_value": null,
+     "observed_at": "2022-08-10T09:00:00Z",
+     "site_code": "oder-szczecin",
+     "site_name": "Oder at Szczecin",
+     "source_id": "pl-gios-wios",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 6068.4,
+     "outcome": "no_code",
+     "proposer": "gemini-assisted",
+     "confidence": 0.0,
+     "code": null,
+     "display": null,
+     "leg": "environmental",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": null,
+     "rationale": "AI co-pilot found no safe match in the curated OAH catalog. The parameter 'Prymnesium parvum cell count' refers to a specific algal species, which is not included in the OAH catalog. The unit '{cells}/mL' is also not present in the allowed UCUM unit list. A reviewer must supply a code or reject.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [],
+     "ai_disagreed": false,
+     "ai_latency_ms": 6050,
+     "approved": false,
+     "rejected": true,
+     "reject_reason": "No OAH code: concept absent from the temporary code system.",
+     "alerts": []
+    }
+   ],
+   "intake": {
+    "http_status": 201,
+    "latency_ms": 24625.8,
+    "extracted": 4,
+    "rejected": 0,
+    "warnings": [
+     "The note mentions a previous day conductivity value of 1200 uS/cm, which was excluded as it is historical context rather than a current measurement.",
+     "Angler report of dead fish over 12 km was excluded as it contains no quantitative environmental measurement."
+    ],
+    "proposals": [
+     {
+      "parameter": "Leitf\u00e4higkeit",
+      "value": 2350.0,
+      "unit": "uS/cm",
+      "code": "electrical-conductivity",
+      "normalized_value": 2.35,
+      "normalized_unit": "mS/cm"
+     },
+     {
+      "parameter": "Chlorki",
+      "value": 1180.0,
+      "unit": "mg/l",
+      "code": "chloride",
+      "normalized_value": 1180.0,
+      "normalized_unit": "mg/L"
+     },
+     {
+      "parameter": "Gel\u00f6ster Sauerstoff",
+      "value": 3.6,
+      "unit": "mg/l",
+      "code": "dissolved-oxygen",
+      "normalized_value": 3.6,
+      "normalized_unit": "mg/L"
+     },
+     {
+      "parameter": "Wassertemperatur",
+      "value": 26.4,
+      "unit": "\u00b0C",
+      "code": "waterTemperature",
+      "normalized_value": 26.4,
+      "normalized_unit": "Cel"
+     }
+    ],
+    "model": "gemini-3.1-flash-lite"
+   },
+   "crosswalk": [
+    {
+     "oah_code": "electrical-conductivity",
+     "top": [
+      {
+       "system": "http://loinc.org",
+       "code": "87444-6",
+       "display": "Electron [Electrical Conductivity] of Water",
+       "vocabulary": "LNC",
+       "score": 0.85
+      },
+      {
+       "system": "http://snomed.info/sct",
+       "code": "468605001",
+       "display": "Electrical conductivity meter",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.88
+      }
+     ],
+     "n": 5
+    },
+    {
+     "oah_code": "chloride",
+     "top": [
+      {
+       "system": "http://loinc.org",
+       "code": "12530-2",
+       "display": "Chloride [Moles/volume] in Water",
+       "vocabulary": "LNC",
+       "score": 1.0
+      },
+      {
+       "system": "http://loinc.org",
+       "code": "54494-0",
+       "display": "Chloride [Mass/volume] in Water",
+       "vocabulary": "LNC",
+       "score": 1.0
+      }
+     ],
+     "n": 5
+    },
+    {
+     "oah_code": "ndci",
+     "top": [],
+     "n": 0
+    }
+   ],
+   "profiles": {
+    "http://hl7.eu/fhir/ig/oah/StructureDefinition/observation-indicators-oah": 10
+   }
+  },
+  {
+   "id": "milwaukee-1993",
+   "title": "Milwaukee cryptosporidiosis outbreak (USA, March-April 1993)",
+   "expect": {
+    "coded": 4,
+    "blocked_qty": 0,
+    "no_code": 2,
+    "alerts": [
+     {
+      "code": "tss",
+      "severity": "high"
+     }
+    ],
+    "audiences": [
+     "public-health",
+     "water-authority"
+    ]
+   },
+   "summary": {
+    "counts": {
+     "coded": 4,
+     "blocked_qty": 0,
+     "no_code": 2,
+     "http_error": 0
+    },
+    "counts_match": true,
+    "alerts_fired": [
+     [
+      "tss",
+      "high"
+     ]
+    ],
+    "alerts_documented": [
+     [
+      "tss",
+      "high"
+     ]
+    ],
+    "alerts_match": true,
+    "audiences": [
+     "public-health",
+     "water-authority"
+    ],
+    "audiences_match": true,
+    "approved": 4,
+    "rejected": 2,
+    "alert_count": 2,
+    "gemini_rows": 2,
+    "mean_latency_ms": 2188.2,
+    "pass": true
+   },
+   "rows": [
+    {
+     "parameter": "turbidity",
+     "value": 0.3,
+     "unit": "[NTU]",
+     "coded_value": null,
+     "observed_at": "1993-03-20T06:00:00Z",
+     "site_code": "mke-howard-ave-finished",
+     "site_name": "Howard Avenue plant finished water",
+     "source_id": "mke-howard-ave",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 4934.6,
+     "outcome": "no_code",
+     "proposer": "gemini-assisted",
+     "confidence": 0.0,
+     "code": null,
+     "display": null,
+     "leg": "environmental",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": null,
+     "rationale": "AI co-pilot found no safe match in the curated OAH catalog. Turbidity is not included in the OAH catalog. The unit [NTU] is also not present in the allowed UCUM unit list. A reviewer must supply a code or reject.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [
+      "turbidity",
+      "[NTU]"
+     ],
+     "ai_disagreed": false,
+     "ai_latency_ms": 4924,
+     "approved": false,
+     "rejected": true,
+     "reject_reason": "No OAH code: concept absent from the temporary code system.",
+     "alerts": []
+    },
+    {
+     "parameter": "turbidity",
+     "value": 1.7,
+     "unit": "[NTU]",
+     "coded_value": null,
+     "observed_at": "1993-03-28T06:00:00Z",
+     "site_code": "mke-howard-ave-finished",
+     "site_name": "Howard Avenue plant finished water",
+     "source_id": "mke-howard-ave",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 8157.1,
+     "outcome": "no_code",
+     "proposer": "gemini-assisted",
+     "confidence": 0.0,
+     "code": null,
+     "display": null,
+     "leg": "environmental",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": null,
+     "rationale": "AI co-pilot found no safe match in the curated OAH catalog. Turbidity is not present in the OAH catalog. The unit [NTU] is also not supported by the catalog. A reviewer must supply a code or reject.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [
+      "turbidity",
+      "[NTU]"
+     ],
+     "ai_disagreed": false,
+     "ai_latency_ms": 8144,
+     "approved": false,
+     "rejected": true,
+     "reject_reason": "No OAH code: concept absent from the temporary code system.",
+     "alerts": []
+    },
+    {
+     "parameter": "total suspended solids",
+     "value": 4.2,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "1993-03-20T06:00:00Z",
+     "site_code": "mke-howard-ave-finished",
+     "site_name": "Howard Avenue plant finished water",
+     "source_id": "mke-howard-ave",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 14.0,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "tss",
+     "display": "Total suspended solids (TSS)",
+     "leg": "environmental",
+     "normalized_value": 4.2,
+     "normalized_unit": "mg/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'total suspended solids'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": []
+    },
+    {
+     "parameter": "total suspended solids",
+     "value": 31.5,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "1993-03-28T06:00:00Z",
+     "site_code": "mke-howard-ave-finished",
+     "site_name": "Howard Avenue plant finished water",
+     "source_id": "mke-howard-ave",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 10.3,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "tss",
+     "display": "Total suspended solids (TSS)",
+     "leg": "environmental",
+     "normalized_value": 31.5,
+     "normalized_unit": "mg/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'total suspended solids'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "tss",
+       "severity": "high",
+       "audiences": [
+        "public-health",
+        "water-authority"
+       ],
+       "message": "Suspended solids elevated; filtration performance and pathogen breakthrough warrant review.",
+       "value": 31.5,
+       "unit": "mg/L",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "suspended solids",
+     "value": 48.0,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "1993-04-01T06:00:00Z",
+     "site_code": "mke-howard-ave-finished",
+     "site_name": "Howard Avenue plant finished water",
+     "source_id": "mke-howard-ave",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 6.9,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "tss",
+     "display": "Total suspended solids (TSS)",
+     "leg": "environmental",
+     "normalized_value": 48.0,
+     "normalized_unit": "mg/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'suspended solids'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "tss",
+       "severity": "high",
+       "audiences": [
+        "public-health",
+        "water-authority"
+       ],
+       "message": "Suspended solids elevated; filtration performance and pathogen breakthrough warrant review.",
+       "value": 48.0,
+       "unit": "mg/L",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "water temperature",
+     "value": 3.8,
+     "unit": "Cel",
+     "coded_value": null,
+     "observed_at": "1993-03-28T06:00:00Z",
+     "site_code": "mke-lake-intake",
+     "site_name": "Lake Michigan south intake",
+     "source_id": "mke-intake",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 6.0,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "waterTemperature",
+     "display": "Water temperature",
+     "leg": "environmental",
+     "normalized_value": 3.8,
+     "normalized_unit": "Cel",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'water temperature'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": []
+    }
+   ],
+   "intake": null,
+   "crosswalk": [
+    {
+     "oah_code": "tss",
+     "top": [],
+     "n": 0
+    },
+    {
+     "oah_code": "tss",
+     "top": [],
+     "n": 0
+    },
+    {
+     "oah_code": "tss",
+     "top": [],
+     "n": 0
+    }
+   ],
+   "profiles": {
+    "http://hl7.eu/fhir/ig/oah/StructureDefinition/observation-indicators-oah": 4
+   }
+  },
+  {
+   "id": "walkerton-2000",
+   "title": "Walkerton E. coli O157:H7 outbreak (Ontario, Canada, May 2000)",
+   "expect": {
+    "coded": 4,
+    "blocked_qty": 0,
+    "no_code": 1,
+    "alerts": [
+     {
+      "code": "coliforms",
+      "severity": "critical"
+     },
+     {
+      "code": "ammonium",
+      "severity": "high"
+     },
+     {
+      "code": "tss",
+      "severity": "high"
+     }
+    ],
+    "audiences": [
+     "public-health",
+     "veterinary",
+     "water-authority"
+    ]
+   },
+   "summary": {
+    "counts": {
+     "coded": 4,
+     "blocked_qty": 0,
+     "no_code": 1,
+     "http_error": 0
+    },
+    "counts_match": true,
+    "alerts_fired": [
+     [
+      "ammonium",
+      "high"
+     ],
+     [
+      "coliforms",
+      "critical"
+     ],
+     [
+      "tss",
+      "high"
+     ]
+    ],
+    "alerts_documented": [
+     [
+      "ammonium",
+      "high"
+     ],
+     [
+      "coliforms",
+      "critical"
+     ],
+     [
+      "tss",
+      "high"
+     ]
+    ],
+    "alerts_match": true,
+    "audiences": [
+     "public-health",
+     "veterinary",
+     "water-authority"
+    ],
+    "audiences_match": true,
+    "approved": 4,
+    "rejected": 1,
+    "alert_count": 4,
+    "gemini_rows": 1,
+    "mean_latency_ms": 900.3,
+    "pass": true
+   },
+   "rows": [
+    {
+     "parameter": "free chlorine residual",
+     "value": 0.0,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2000-05-15T09:00:00Z",
+     "site_code": "walkerton-well-5",
+     "site_name": "Walkerton Well 5",
+     "source_id": "walkerton-puc",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 4466.1,
+     "outcome": "no_code",
+     "proposer": "gemini-assisted",
+     "confidence": 0.0,
+     "code": null,
+     "display": null,
+     "leg": "environmental",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": null,
+     "rationale": "AI co-pilot found no safe match in the curated OAH catalog. The catalog does not contain a parameter for free chlorine residual. It is not equivalent to any of the listed chemical parameters. A reviewer must supply a code or reject.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [
+      "free chlorine residual"
+     ],
+     "ai_disagreed": false,
+     "ai_latency_ms": 4453,
+     "approved": false,
+     "rejected": true,
+     "reject_reason": "No OAH code: concept absent from the temporary code system.",
+     "alerts": []
+    },
+    {
+     "parameter": "total coliforms",
+     "value": 2400.0,
+     "unit": "{cfu}/100mL",
+     "coded_value": null,
+     "observed_at": "2000-05-15T09:00:00Z",
+     "site_code": "walkerton-well-5",
+     "site_name": "Walkerton Well 5",
+     "source_id": "walkerton-puc",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 12.9,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "coliforms",
+     "display": "Coliforms",
+     "leg": "environmental",
+     "normalized_value": 2400.0,
+     "normalized_unit": "{cfu}/dL",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'total coliforms'. Converted from {cfu}/100mL.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "coliforms",
+       "severity": "critical",
+       "audiences": [
+        "public-health",
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Faecal indicator organisms above the demonstration recreational bound.",
+       "value": 2400.0,
+       "unit": "{cfu}/dL",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "faecal coliforms",
+     "value": 1600.0,
+     "unit": "CFU/100mL",
+     "coded_value": null,
+     "observed_at": "2000-05-17T09:00:00Z",
+     "site_code": "walkerton-distribution",
+     "site_name": "Walkerton distribution system",
+     "source_id": "walkerton-puc",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 9.5,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "coliforms",
+     "display": "Coliforms",
+     "leg": "environmental",
+     "normalized_value": 1600.0,
+     "normalized_unit": "{cfu}/dL",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'faecal coliforms'. Converted from CFU/100mL.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "coliforms",
+       "severity": "critical",
+       "audiences": [
+        "public-health",
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Faecal indicator organisms above the demonstration recreational bound.",
+       "value": 1600.0,
+       "unit": "{cfu}/dL",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "ammonium",
+     "value": 1.8,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2000-05-17T09:00:00Z",
+     "site_code": "walkerton-well-5",
+     "site_name": "Walkerton Well 5",
+     "source_id": "walkerton-puc",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 5.8,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "ammonium",
+     "display": "Ammonium",
+     "leg": "environmental",
+     "normalized_value": 1.8,
+     "normalized_unit": "mg/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'ammonium'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "ammonium",
+       "severity": "high",
+       "audiences": [
+        "public-health",
+        "water-authority"
+       ],
+       "message": "Ammonium elevated; untreated sewage or slurry ingress suspected.",
+       "value": 1.8,
+       "unit": "mg/L",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "total suspended solids",
+     "value": 42.0,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2000-05-13T09:00:00Z",
+     "site_code": "walkerton-well-5",
+     "site_name": "Walkerton Well 5",
+     "source_id": "walkerton-puc",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 7.3,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "tss",
+     "display": "Total suspended solids (TSS)",
+     "leg": "environmental",
+     "normalized_value": 42.0,
+     "normalized_unit": "mg/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'total suspended solids'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "tss",
+       "severity": "high",
+       "audiences": [
+        "public-health",
+        "water-authority"
+       ],
+       "message": "Suspended solids elevated; filtration performance and pathogen breakthrough warrant review.",
+       "value": 42.0,
+       "unit": "mg/L",
+       "value_code": null
+      }
+     ]
+    }
+   ],
+   "intake": {
+    "http_status": 201,
+    "latency_ms": 9392.5,
+    "extracted": 5,
+    "rejected": 0,
+    "warnings": [
+     "Ammonium and Total suspended solids lack specific observation dates and site identifiers.",
+     "The note mentions heavy rain on 12 May, but no quantitative precipitation measurement is provided.",
+     "'Ammonium' carried no usable timestamp; ingestion time recorded and flagged for reviewer correction.",
+     "'Total suspended solids' carried no usable timestamp; ingestion time recorded and flagged for reviewer correction."
+    ],
+    "proposals": [
+     {
+      "parameter": "free chlorine residual",
+      "value": 0.0,
+      "unit": "mg/L",
+      "code": null,
+      "normalized_value": null,
+      "normalized_unit": null
+     },
+     {
+      "parameter": "Total coliforms",
+      "value": 2400.0,
+      "unit": "CFU/100 mL",
+      "code": "coliforms",
+      "normalized_value": 2400.0,
+      "normalized_unit": "{cfu}/dL"
+     },
+     {
+      "parameter": "Faecal coliforms",
+      "value": 1600.0,
+      "unit": "CFU/100 mL",
+      "code": "coliforms",
+      "normalized_value": 1600.0,
+      "normalized_unit": "{cfu}/dL"
+     },
+     {
+      "parameter": "Ammonium",
+      "value": 1.8,
+      "unit": "mg/L",
+      "code": "ammonium",
+      "normalized_value": 1.8,
+      "normalized_unit": "mg/L"
+     },
+     {
+      "parameter": "Total suspended solids",
+      "value": 42.0,
+      "unit": "mg/L",
+      "code": "tss",
+      "normalized_value": 42.0,
+      "normalized_unit": "mg/L"
+     }
+    ],
+    "model": "gemini-3.1-flash-lite"
+   },
+   "crosswalk": [
+    {
+     "oah_code": "coliforms",
+     "top": [
+      {
+       "system": "http://snomed.info/sct",
+       "code": "23710009",
+       "display": "Coliform mastitis",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.69
+      },
+      {
+       "system": "http://snomed.info/sct",
+       "code": "77309002",
+       "display": "Coliform bacteria",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.62
+      }
+     ],
+     "n": 5
+    },
+    {
+     "oah_code": "coliforms",
+     "top": [
+      {
+       "system": "http://snomed.info/sct",
+       "code": "23710009",
+       "display": "Coliform mastitis",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.69
+      },
+      {
+       "system": "http://snomed.info/sct",
+       "code": "77309002",
+       "display": "Coliform bacteria",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.62
+      }
+     ],
+     "n": 5
+    },
+    {
+     "oah_code": "ammonium",
+     "top": [
+      {
+       "system": "http://loinc.org",
+       "code": "38589-8",
+       "display": "Ammonia [Mass/volume] in Air",
+       "vocabulary": "LNC",
+       "score": 0.8
+      },
+      {
+       "system": "http://loinc.org",
+       "code": "53500-5",
+       "display": "Ammonia [Moles/volume] in Water",
+       "vocabulary": "LNC",
+       "score": 0.8
+      }
+     ],
+     "n": 5
+    }
+   ],
+   "profiles": {
+    "http://hl7.eu/fhir/ig/oah/StructureDefinition/observation-indicators-oah": 4
+   }
+  },
+  {
+   "id": "toledo-2014",
+   "title": "Toledo \"do not drink\" advisory (Ohio, USA, August 2014)",
+   "expect": {
+    "coded": 6,
+    "blocked_qty": 0,
+    "no_code": 1,
+    "alerts": [
+     {
+      "code": "ndci",
+      "severity": "high"
+     },
+     {
+      "code": "mci",
+      "severity": "high"
+     },
+     {
+      "code": "total-phosphates",
+      "severity": "moderate"
+     },
+     {
+      "code": "waterTemperature",
+      "severity": "moderate"
+     }
+    ],
+    "audiences": [
+     "public-health",
+     "veterinary",
+     "water-authority"
+    ]
+   },
+   "summary": {
+    "counts": {
+     "coded": 6,
+     "blocked_qty": 0,
+     "no_code": 1,
+     "http_error": 0
+    },
+    "counts_match": true,
+    "alerts_fired": [
+     [
+      "mci",
+      "high"
+     ],
+     [
+      "ndci",
+      "high"
+     ],
+     [
+      "total-phosphates",
+      "moderate"
+     ],
+     [
+      "waterTemperature",
+      "moderate"
+     ]
+    ],
+    "alerts_documented": [
+     [
+      "mci",
+      "high"
+     ],
+     [
+      "ndci",
+      "high"
+     ],
+     [
+      "total-phosphates",
+      "moderate"
+     ],
+     [
+      "waterTemperature",
+      "moderate"
+     ]
+    ],
+    "alerts_match": true,
+    "audiences": [
+     "public-health",
+     "veterinary",
+     "water-authority"
+    ],
+    "audiences_match": true,
+    "approved": 6,
+    "rejected": 1,
+    "alert_count": 4,
+    "gemini_rows": 1,
+    "mean_latency_ms": 223.9,
+    "pass": true
+   },
+   "rows": [
+    {
+     "parameter": "NDCI",
+     "value": 0.22,
+     "unit": "1",
+     "coded_value": null,
+     "observed_at": "2014-07-27T10:20:00Z",
+     "site_code": "toledo-crib-intake",
+     "site_name": "Toledo Lake Erie crib intake",
+     "source_id": "copernicus-s2",
+     "source_type": "satellite",
+     "http_status": 201,
+     "latency_ms": 3.7,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "ndci",
+     "display": "Normalized Difference Chlorophyll Index (NDCI)",
+     "leg": "environmental",
+     "normalized_value": 0.22,
+     "normalized_unit": "1",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'ndci'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": []
+    },
+    {
+     "parameter": "maximum chlorophyll index",
+     "value": 0.14,
+     "unit": "1",
+     "coded_value": null,
+     "observed_at": "2014-07-27T10:20:00Z",
+     "site_code": "toledo-crib-intake",
+     "site_name": "Toledo Lake Erie crib intake",
+     "source_id": "copernicus-s2",
+     "source_type": "satellite",
+     "http_status": 201,
+     "latency_ms": 6.3,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "mci",
+     "display": "Maximum Chlorophyll Index (MCI)",
+     "leg": "environmental",
+     "normalized_value": 0.14,
+     "normalized_unit": "1",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'maximum chlorophyll index'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": []
+    },
+    {
+     "parameter": "NDCI",
+     "value": 0.51,
+     "unit": "1",
+     "coded_value": null,
+     "observed_at": "2014-08-01T10:20:00Z",
+     "site_code": "toledo-crib-intake",
+     "site_name": "Toledo Lake Erie crib intake",
+     "source_id": "copernicus-s2",
+     "source_type": "satellite",
+     "http_status": 201,
+     "latency_ms": 3.3,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "ndci",
+     "display": "Normalized Difference Chlorophyll Index (NDCI)",
+     "leg": "environmental",
+     "normalized_value": 0.51,
+     "normalized_unit": "1",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'ndci'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "ndci",
+       "severity": "high",
+       "audiences": [
+        "public-health",
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Satellite chlorophyll proxy warrants bloom investigation.",
+       "value": 0.51,
+       "unit": "1",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "maximum chlorophyll index",
+     "value": 0.38,
+     "unit": "1",
+     "coded_value": null,
+     "observed_at": "2014-08-01T10:20:00Z",
+     "site_code": "toledo-crib-intake",
+     "site_name": "Toledo Lake Erie crib intake",
+     "source_id": "copernicus-s2",
+     "source_type": "satellite",
+     "http_status": 201,
+     "latency_ms": 5.4,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "mci",
+     "display": "Maximum Chlorophyll Index (MCI)",
+     "leg": "environmental",
+     "normalized_value": 0.38,
+     "normalized_unit": "1",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'maximum chlorophyll index'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "mci",
+       "severity": "high",
+       "audiences": [
+        "public-health",
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Maximum Chlorophyll Index warrants bloom investigation and toxin sampling.",
+       "value": 0.38,
+       "unit": "1",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "microcystin-LR",
+     "value": 2.5,
+     "unit": "ug/L",
+     "coded_value": null,
+     "observed_at": "2014-08-02T04:00:00Z",
+     "site_code": "toledo-collins-park",
+     "site_name": "Collins Park treatment plant finished water",
+     "source_id": "toledo-collins-park",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 1530.5,
+     "outcome": "no_code",
+     "proposer": "gemini-assisted",
+     "confidence": 0.0,
+     "code": null,
+     "display": null,
+     "leg": "environmental",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": null,
+     "rationale": "AI co-pilot found no safe match in the curated OAH catalog. Microcystin-LR is a cyanotoxin and is not included in the provided OAH environmental or health parameter catalog. A reviewer must supply a code or reject.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [
+      "microcystin-LR"
+     ],
+     "ai_disagreed": false,
+     "ai_latency_ms": 1521,
+     "approved": false,
+     "rejected": true,
+     "reject_reason": "No OAH code: concept absent from the temporary code system.",
+     "alerts": []
+    },
+    {
+     "parameter": "water temperature",
+     "value": 26.8,
+     "unit": "Cel",
+     "coded_value": null,
+     "observed_at": "2014-08-02T04:00:00Z",
+     "site_code": "toledo-crib-intake",
+     "site_name": "Toledo Lake Erie crib intake",
+     "source_id": "toledo-collins-park",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 10.5,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "waterTemperature",
+     "display": "Water temperature",
+     "leg": "environmental",
+     "normalized_value": 26.8,
+     "normalized_unit": "Cel",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'water temperature'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "waterTemperature",
+       "severity": "moderate",
+       "audiences": [
+        "water-authority"
+       ],
+       "message": "Elevated water temperature compounds bloom and hypoxia risk.",
+       "value": 26.8,
+       "unit": "Cel",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "total phosphates",
+     "value": 0.94,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2014-08-01T04:00:00Z",
+     "site_code": "toledo-crib-intake",
+     "site_name": "Toledo Lake Erie crib intake",
+     "source_id": "toledo-collins-park",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 7.6,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "total-phosphates",
+     "display": "Total phosphates",
+     "leg": "environmental",
+     "normalized_value": 0.94,
+     "normalized_unit": "mg/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'total phosphates'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "total-phosphates",
+       "severity": "moderate",
+       "audiences": [
+        "water-authority"
+       ],
+       "message": "Total phosphates elevated; bloom-forming conditions accumulating.",
+       "value": 0.94,
+       "unit": "mg/L",
+       "value_code": null
+      }
+     ]
+    }
+   ],
+   "intake": null,
+   "crosswalk": [
+    {
+     "oah_code": "ndci",
+     "top": [],
+     "n": 0
+    },
+    {
+     "oah_code": "mci",
+     "top": [],
+     "n": 0
+    },
+    {
+     "oah_code": "ndci",
+     "top": [],
+     "n": 0
+    }
+   ],
+   "profiles": {
+    "http://hl7.eu/fhir/ig/oah/StructureDefinition/observation-indicators-oah": 6
+   }
+  },
+  {
+   "id": "havelock-north-2016",
+   "title": "Havelock North campylobacteriosis outbreak (New Zealand, August 2016)",
+   "expect": {
+    "coded": 8,
+    "blocked_qty": 1,
+    "no_code": 1,
+    "alerts": [
+     {
+      "code": "coliforms",
+      "severity": "critical"
+     },
+     {
+      "code": "ammonium",
+      "severity": "high"
+     },
+     {
+      "code": "nitrate",
+      "severity": "high"
+     },
+     {
+      "code": "tss",
+      "severity": "high"
+     },
+     {
+      "code": "campylobacter",
+      "severity": "critical"
+     },
+     {
+      "code": "gastrointestinal",
+      "severity": "high"
+     }
+    ],
+    "audiences": [
+     "public-health",
+     "veterinary",
+     "water-authority"
+    ],
+    "human_leg": 3
+   },
+   "summary": {
+    "counts": {
+     "coded": 8,
+     "blocked_qty": 1,
+     "no_code": 1,
+     "http_error": 0
+    },
+    "counts_match": true,
+    "alerts_fired": [
+     [
+      "ammonium",
+      "high"
+     ],
+     [
+      "campylobacter",
+      "critical"
+     ],
+     [
+      "coliforms",
+      "critical"
+     ],
+     [
+      "gastrointestinal",
+      "high"
+     ],
+     [
+      "nitrate",
+      "high"
+     ],
+     [
+      "tss",
+      "high"
+     ]
+    ],
+    "alerts_documented": [
+     [
+      "ammonium",
+      "high"
+     ],
+     [
+      "campylobacter",
+      "critical"
+     ],
+     [
+      "coliforms",
+      "critical"
+     ],
+     [
+      "gastrointestinal",
+      "high"
+     ],
+     [
+      "nitrate",
+      "high"
+     ],
+     [
+      "tss",
+      "high"
+     ]
+    ],
+    "alerts_match": true,
+    "audiences": [
+     "public-health",
+     "veterinary",
+     "water-authority"
+    ],
+    "audiences_match": true,
+    "approved": 8,
+    "rejected": 2,
+    "alert_count": 8,
+    "gemini_rows": 2,
+    "mean_latency_ms": 991.1,
+    "pass": true
+   },
+   "rows": [
+    {
+     "parameter": "total coliforms",
+     "value": 1900.0,
+     "unit": "{cfu}/100mL",
+     "coded_value": null,
+     "observed_at": "2016-08-08T07:00:00Z",
+     "site_code": "brookvale-bore-1",
+     "site_name": "Brookvale Road bore field",
+     "source_id": "hbrc-brookvale",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 5.1,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "coliforms",
+     "display": "Coliforms",
+     "leg": "environmental",
+     "normalized_value": 1900.0,
+     "normalized_unit": "{cfu}/dL",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'total coliforms'. Converted from {cfu}/100mL.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "coliforms",
+       "severity": "critical",
+       "audiences": [
+        "public-health",
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Faecal indicator organisms above the demonstration recreational bound.",
+       "value": 1900.0,
+       "unit": "{cfu}/dL",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "faecal coliforms",
+     "value": 940.0,
+     "unit": "CFU/100mL",
+     "coded_value": null,
+     "observed_at": "2016-08-10T07:00:00Z",
+     "site_code": "brookvale-bore-1",
+     "site_name": "Brookvale Road bore field",
+     "source_id": "hbrc-brookvale",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 4.9,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "coliforms",
+     "display": "Coliforms",
+     "leg": "environmental",
+     "normalized_value": 940.0,
+     "normalized_unit": "{cfu}/dL",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'faecal coliforms'. Converted from CFU/100mL.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "coliforms",
+       "severity": "critical",
+       "audiences": [
+        "public-health",
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Faecal indicator organisms above the demonstration recreational bound.",
+       "value": 940.0,
+       "unit": "{cfu}/dL",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "ammonium",
+     "value": 2.4,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2016-08-08T07:00:00Z",
+     "site_code": "brookvale-pond",
+     "site_name": "Pond 90 m from the bore head",
+     "source_id": "hbrc-brookvale",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 3.6,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "ammonium",
+     "display": "Ammonium",
+     "leg": "environmental",
+     "normalized_value": 2.4,
+     "normalized_unit": "mg/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'ammonium'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "ammonium",
+       "severity": "high",
+       "audiences": [
+        "public-health",
+        "water-authority"
+       ],
+       "message": "Ammonium elevated; untreated sewage or slurry ingress suspected.",
+       "value": 2.4,
+       "unit": "mg/L",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "nitrate",
+     "value": 58.0,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2016-08-08T07:00:00Z",
+     "site_code": "brookvale-pond",
+     "site_name": "Pond 90 m from the bore head",
+     "source_id": "hbrc-brookvale",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 3.4,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "nitrate",
+     "display": "Nitrate",
+     "leg": "environmental",
+     "normalized_value": 58.0,
+     "normalized_unit": "mg/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'nitrate'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "nitrate",
+       "severity": "high",
+       "audiences": [
+        "public-health",
+        "water-authority"
+       ],
+       "message": "Nitrate elevated; eutrophication and drinking-water risk warrant review.",
+       "value": 58.0,
+       "unit": "mg/L",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "total suspended solids",
+     "value": 66.0,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2016-08-07T22:00:00Z",
+     "site_code": "brookvale-bore-1",
+     "site_name": "Brookvale Road bore field",
+     "source_id": "hbrc-brookvale",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 5.2,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "tss",
+     "display": "Total suspended solids (TSS)",
+     "leg": "environmental",
+     "normalized_value": 66.0,
+     "normalized_unit": "mg/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'total suspended solids'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "tss",
+       "severity": "high",
+       "audiences": [
+        "public-health",
+        "water-authority"
+       ],
+       "message": "Suspended solids elevated; filtration performance and pathogen breakthrough warrant review.",
+       "value": 66.0,
+       "unit": "mg/L",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "free chlorine residual",
+     "value": 0.0,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2016-08-08T07:00:00Z",
+     "site_code": "brookvale-bore-1",
+     "site_name": "Brookvale Road bore field",
+     "source_id": "hbrc-brookvale",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 3058.5,
+     "outcome": "no_code",
+     "proposer": "gemini-assisted",
+     "confidence": 0.0,
+     "code": null,
+     "display": null,
+     "leg": "environmental",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": null,
+     "rationale": "AI co-pilot found no safe match in the curated OAH catalog. The catalog does not contain a parameter for 'free chlorine residual'. It only includes specific dissolved metals, nutrients, and biological indicators. A reviewer must supply a code or reject.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [],
+     "ai_disagreed": false,
+     "ai_latency_ms": 3047,
+     "approved": false,
+     "rejected": true,
+     "reject_reason": "No OAH code: concept absent from the temporary code system.",
+     "alerts": []
+    },
+    {
+     "parameter": "campylobacter notifications per 100000",
+     "value": 714.0,
+     "unit": "{cases}/100000",
+     "coded_value": null,
+     "observed_at": "2016-08-12T00:00:00Z",
+     "site_code": "brookvale-bore-1",
+     "site_name": "Brookvale Road bore field",
+     "source_id": "hawkes-bay-dhb",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 16.4,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "campylobacter",
+     "display": "% of people with Campylobacter",
+     "leg": "human",
+     "normalized_value": 714.0,
+     "normalized_unit": "{cases}/100000",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'campylobacter notifications per 100000'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "campylobacter",
+       "severity": "critical",
+       "audiences": [
+        "public-health",
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Campylobacteriosis incidence far above background; investigate the water supply and its catchment as an exposure route.",
+       "value": 714.0,
+       "unit": "{cases}/100000",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "campylobacteriosis",
+     "value": 7143.0,
+     "unit": "{cases}/100000",
+     "coded_value": null,
+     "observed_at": "2016-08-15T00:00:00Z",
+     "site_code": "brookvale-bore-1",
+     "site_name": "Brookvale Road bore field",
+     "source_id": "hawkes-bay-dhb",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 8.3,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "campylobacter",
+     "display": "% of people with Campylobacter",
+     "leg": "human",
+     "normalized_value": 7143.0,
+     "normalized_unit": "{cases}/100000",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'campylobacteriosis'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "campylobacter",
+       "severity": "critical",
+       "audiences": [
+        "public-health",
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Campylobacteriosis incidence far above background; investigate the water supply and its catchment as an exposure route.",
+       "value": 7143.0,
+       "unit": "{cases}/100000",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "acute gastrointestinal illness",
+     "value": 39.3,
+     "unit": "%",
+     "coded_value": null,
+     "observed_at": "2016-08-19T00:00:00Z",
+     "site_code": "brookvale-bore-1",
+     "site_name": "Brookvale Road bore field",
+     "source_id": "hawkes-bay-dhb",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 8.5,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "gastrointestinal",
+     "display": "% of people with Cases of Gastrointestinal diseases",
+     "leg": "human",
+     "normalized_value": 39300.0,
+     "normalized_unit": "{cases}/100000",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'acute gastrointestinal illness'. Converted from %.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "gastrointestinal",
+       "severity": "high",
+       "audiences": [
+        "public-health",
+        "water-authority"
+       ],
+       "message": "Gastrointestinal illness incidence elevated; check drinking and recreational water in the district.",
+       "value": 39300.0,
+       "unit": "{cases}/100000",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "campylobacter notified cases",
+     "value": 1000.0,
+     "unit": "cases",
+     "coded_value": null,
+     "observed_at": "2016-08-15T00:00:00Z",
+     "site_code": "brookvale-bore-1",
+     "site_name": "Brookvale Road bore field",
+     "source_id": "hawkes-bay-dhb",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 6797.4,
+     "outcome": "blocked_qty",
+     "proposer": "gemini-assisted",
+     "confidence": 0.69,
+     "code": "campylobacter",
+     "display": "% of people with Campylobacter",
+     "leg": "human",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": null,
+     "rationale": "The parameter 'campylobacter notified cases' maps to the campylobacter code. However, the unit 'cases' is not in the allowed UCUM list for this code, which only supports '%' or '{cases}/100000'. Unit 'cases' needs reviewer correction.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [
+      "campylobacter notified cases",
+      "cases"
+     ],
+     "ai_disagreed": false,
+     "ai_latency_ms": 6780,
+     "approved": false,
+     "rejected": true,
+     "reject_reason": "Quantity withheld: unresolvable unit or implausible value. Needs source correction.",
+     "alerts": []
+    }
+   ],
+   "intake": null,
+   "crosswalk": [
+    {
+     "oah_code": "coliforms",
+     "top": [
+      {
+       "system": "http://snomed.info/sct",
+       "code": "23710009",
+       "display": "Coliform mastitis",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.69
+      },
+      {
+       "system": "http://snomed.info/sct",
+       "code": "77309002",
+       "display": "Coliform bacteria",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.62
+      }
+     ],
+     "n": 5
+    },
+    {
+     "oah_code": "coliforms",
+     "top": [
+      {
+       "system": "http://snomed.info/sct",
+       "code": "23710009",
+       "display": "Coliform mastitis",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.69
+      },
+      {
+       "system": "http://snomed.info/sct",
+       "code": "77309002",
+       "display": "Coliform bacteria",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.62
+      }
+     ],
+     "n": 5
+    },
+    {
+     "oah_code": "ammonium",
+     "top": [
+      {
+       "system": "http://loinc.org",
+       "code": "38589-8",
+       "display": "Ammonia [Mass/volume] in Air",
+       "vocabulary": "LNC",
+       "score": 0.8
+      },
+      {
+       "system": "http://loinc.org",
+       "code": "53500-5",
+       "display": "Ammonia [Moles/volume] in Water",
+       "vocabulary": "LNC",
+       "score": 0.8
+      }
+     ],
+     "n": 5
+    }
+   ],
+   "profiles": {
+    "http://hl7.eu/fhir/ig/oah/StructureDefinition/observation-indicators-oah": 5,
+    "http://hl7.eu/fhir/ig/oah/StructureDefinition/observation-health-measure-oah": 3
+   }
+  },
+  {
+   "id": "flint-2014",
+   "title": "Flint drinking-water crisis (Michigan, USA, 2014-2015)",
+   "expect": {
+    "coded": 5,
+    "blocked_qty": 0,
+    "no_code": 1,
+    "alerts": [
+     {
+      "code": "lead-dissolved",
+      "severity": "critical"
+     }
+    ],
+    "audiences": [
+     "public-health",
+     "water-authority"
+    ]
+   },
+   "summary": {
+    "counts": {
+     "coded": 5,
+     "blocked_qty": 0,
+     "no_code": 1,
+     "http_error": 0
+    },
+    "counts_match": true,
+    "alerts_fired": [
+     [
+      "lead-dissolved",
+      "critical"
+     ]
+    ],
+    "alerts_documented": [
+     [
+      "lead-dissolved",
+      "critical"
+     ]
+    ],
+    "alerts_match": true,
+    "audiences": [
+     "public-health",
+     "water-authority"
+    ],
+    "audiences_match": true,
+    "approved": 5,
+    "rejected": 1,
+    "alert_count": 4,
+    "gemini_rows": 1,
+    "mean_latency_ms": 2780.0,
+    "pass": true
+   },
+   "rows": [
+    {
+     "parameter": "lead",
+     "value": 0.004,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2015-06-25T12:00:00Z",
+     "site_code": "flint-site-042",
+     "site_name": "Flint LCR tier-1 site 042",
+     "source_id": "mdeq-lcr-round1",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 3.7,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "lead-dissolved",
+     "display": "Lead dissolved",
+     "leg": "environmental",
+     "normalized_value": 4.0,
+     "normalized_unit": "ug/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'lead'. Converted from mg/L.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": []
+    },
+    {
+     "parameter": "lead",
+     "value": 0.011,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2015-06-26T12:00:00Z",
+     "site_code": "flint-site-071",
+     "site_name": "Flint LCR tier-1 site 071",
+     "source_id": "mdeq-lcr-round1",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 3.8,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "lead-dissolved",
+     "display": "Lead dissolved",
+     "leg": "environmental",
+     "normalized_value": 11.0,
+     "normalized_unit": "ug/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'lead'. Converted from mg/L.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "lead-dissolved",
+       "severity": "critical",
+       "audiences": [
+        "public-health",
+        "water-authority"
+       ],
+       "message": "Dissolved lead above the demonstration bound; exposure assessment required.",
+       "value": 11.0,
+       "unit": "ug/L",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "lead",
+     "value": 0.104,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2015-06-29T12:00:00Z",
+     "site_code": "flint-site-088",
+     "site_name": "Flint LCR tier-1 site 088",
+     "source_id": "mdeq-lcr-round1",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 3.7,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "lead-dissolved",
+     "display": "Lead dissolved",
+     "leg": "environmental",
+     "normalized_value": 104.0,
+     "normalized_unit": "ug/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'lead'. Converted from mg/L.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "lead-dissolved",
+       "severity": "critical",
+       "audiences": [
+        "public-health",
+        "water-authority"
+       ],
+       "message": "Dissolved lead above the demonstration bound; exposure assessment required.",
+       "value": 104.0,
+       "unit": "ug/L",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "lead",
+     "value": 0.02,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2015-07-01T12:00:00Z",
+     "site_code": "flint-site-095",
+     "site_name": "Flint LCR tier-1 site 095",
+     "source_id": "mdeq-lcr-round1",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 3.4,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "lead-dissolved",
+     "display": "Lead dissolved",
+     "leg": "environmental",
+     "normalized_value": 20.0,
+     "normalized_unit": "ug/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'lead'. Converted from mg/L.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "lead-dissolved",
+       "severity": "critical",
+       "audiences": [
+        "public-health",
+        "water-authority"
+       ],
+       "message": "Dissolved lead above the demonstration bound; exposure assessment required.",
+       "value": 20.0,
+       "unit": "ug/L",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "lead",
+     "value": 0.158,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2015-08-17T12:00:00Z",
+     "site_code": "flint-site-101",
+     "site_name": "Flint citizen sampling kit 101",
+     "source_id": "vt-flintwaterstudy",
+     "source_type": "citizen",
+     "http_status": 201,
+     "latency_ms": 3.1,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "lead-dissolved",
+     "display": "Lead dissolved",
+     "leg": "environmental",
+     "normalized_value": 158.0,
+     "normalized_unit": "ug/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'lead'. Converted from mg/L.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "lead-dissolved",
+       "severity": "critical",
+       "audiences": [
+        "public-health",
+        "water-authority"
+       ],
+       "message": "Dissolved lead above the demonstration bound; exposure assessment required.",
+       "value": 158.0,
+       "unit": "ug/L",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "free chlorine residual",
+     "value": 0.02,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2015-01-12T12:00:00Z",
+     "site_code": "flint-distribution",
+     "site_name": "Flint distribution system",
+     "source_id": "flint-wtp",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 16662.2,
+     "outcome": "no_code",
+     "proposer": "gemini-assisted",
+     "confidence": 0.0,
+     "code": null,
+     "display": null,
+     "leg": "environmental",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": null,
+     "rationale": "AI co-pilot found no safe match in the curated OAH catalog. The catalog does not contain a code for 'free chlorine residual'. While 'mg/L' is a valid unit in the catalog, the parameter itself is not listed. A reviewer must supply a code or reject.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [],
+     "ai_disagreed": false,
+     "ai_latency_ms": 16650,
+     "approved": false,
+     "rejected": true,
+     "reject_reason": "No OAH code: concept absent from the temporary code system.",
+     "alerts": []
+    }
+   ],
+   "intake": null,
+   "crosswalk": [
+    {
+     "oah_code": "lead-dissolved",
+     "top": [],
+     "n": 0
+    },
+    {
+     "oah_code": "lead-dissolved",
+     "top": [],
+     "n": 0
+    },
+    {
+     "oah_code": "lead-dissolved",
+     "top": [],
+     "n": 0
+    }
+   ],
+   "profiles": {
+    "http://hl7.eu/fhir/ig/oah/StructureDefinition/observation-indicators-oah": 5
+   }
+  },
+  {
+   "id": "baia-mare-2000",
+   "title": "Baia Mare cyanide spill, Somes-Tisza-Danube (Romania / Hungary / Serbia, January-February 2000)",
+   "expect": {
+    "coded": 5,
+    "blocked_qty": 0,
+    "no_code": 3,
+    "alerts": [
+     {
+      "code": "copper-dissolved",
+      "severity": "high"
+     },
+     {
+      "code": "zinc-dissolved",
+      "severity": "high"
+     },
+     {
+      "code": "dissolved-oxygen",
+      "severity": "critical"
+     }
+    ],
+    "audiences": [
+     "veterinary",
+     "water-authority"
+    ]
+   },
+   "summary": {
+    "counts": {
+     "coded": 5,
+     "blocked_qty": 0,
+     "no_code": 3,
+     "http_error": 0
+    },
+    "counts_match": true,
+    "alerts_fired": [
+     [
+      "copper-dissolved",
+      "high"
+     ],
+     [
+      "dissolved-oxygen",
+      "critical"
+     ],
+     [
+      "zinc-dissolved",
+      "high"
+     ]
+    ],
+    "alerts_documented": [
+     [
+      "copper-dissolved",
+      "high"
+     ],
+     [
+      "dissolved-oxygen",
+      "critical"
+     ],
+     [
+      "zinc-dissolved",
+      "high"
+     ]
+    ],
+    "alerts_match": true,
+    "audiences": [
+     "veterinary",
+     "water-authority"
+    ],
+    "audiences_match": true,
+    "approved": 5,
+    "rejected": 3,
+    "alert_count": 4,
+    "gemini_rows": 3,
+    "mean_latency_ms": 1916.1,
+    "pass": true
+   },
+   "rows": [
+    {
+     "parameter": "total cyanide",
+     "value": 32.0,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2000-01-30T22:00:00Z",
+     "site_code": "somes-baia-mare",
+     "site_name": "Somes below Aurul tailings dam",
+     "source_id": "ro-aurul-tailings",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 4266.0,
+     "outcome": "no_code",
+     "proposer": "gemini-assisted",
+     "confidence": 0.0,
+     "code": null,
+     "display": null,
+     "leg": "environmental",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": null,
+     "rationale": "AI co-pilot found no safe match in the curated OAH catalog. The parameter 'total cyanide' is not present in the provided OAH terminology catalog. The unit 'mg/L' is valid, but the parameter itself cannot be mapped. A reviewer must supply a code or reject.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [],
+     "ai_disagreed": false,
+     "ai_latency_ms": 4253,
+     "approved": false,
+     "rejected": true,
+     "reject_reason": "No OAH code: concept absent from the temporary code system.",
+     "alerts": []
+    },
+    {
+     "parameter": "copper",
+     "value": 2100.0,
+     "unit": "ug/L",
+     "coded_value": null,
+     "observed_at": "2000-01-30T22:00:00Z",
+     "site_code": "somes-baia-mare",
+     "site_name": "Somes below Aurul tailings dam",
+     "source_id": "ro-aurul-tailings",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 10.3,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "copper-dissolved",
+     "display": "Copper dissolved",
+     "leg": "environmental",
+     "normalized_value": 2100.0,
+     "normalized_unit": "ug/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'copper'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "copper-dissolved",
+       "severity": "high",
+       "audiences": [
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Dissolved copper elevated; mine drainage or industrial discharge suspected.",
+       "value": 2100.0,
+       "unit": "ug/L",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "zinc",
+     "value": 4800.0,
+     "unit": "ug/L",
+     "coded_value": null,
+     "observed_at": "2000-01-30T22:00:00Z",
+     "site_code": "somes-baia-mare",
+     "site_name": "Somes below Aurul tailings dam",
+     "source_id": "ro-aurul-tailings",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 7.5,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "zinc-dissolved",
+     "display": "Zinc dissolved",
+     "leg": "environmental",
+     "normalized_value": 4800.0,
+     "normalized_unit": "ug/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'zinc'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "zinc-dissolved",
+       "severity": "high",
+       "audiences": [
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Dissolved zinc elevated; mine drainage or industrial discharge suspected.",
+       "value": 4800.0,
+       "unit": "ug/L",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "total cyanide",
+     "value": 7.8,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2000-02-04T06:00:00Z",
+     "site_code": "tisza-szolnok",
+     "site_name": "Tisza at Szolnok",
+     "source_id": "hu-vituki-tisza",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 5217.5,
+     "outcome": "no_code",
+     "proposer": "gemini-assisted",
+     "confidence": 0.0,
+     "code": null,
+     "display": null,
+     "leg": "environmental",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": null,
+     "rationale": "AI co-pilot found no safe match in the curated OAH catalog. The parameter 'total cyanide' is not present in the provided OAH terminology catalog. A reviewer must supply a code or reject.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [
+      "total cyanide"
+     ],
+     "ai_disagreed": false,
+     "ai_latency_ms": 5207,
+     "approved": false,
+     "rejected": true,
+     "reject_reason": "No OAH code: concept absent from the temporary code system.",
+     "alerts": []
+    },
+    {
+     "parameter": "dissolved O2",
+     "value": 3.1,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2000-02-04T06:00:00Z",
+     "site_code": "tisza-szolnok",
+     "site_name": "Tisza at Szolnok",
+     "source_id": "hu-vituki-tisza",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 7.4,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "dissolved-oxygen",
+     "display": "Dissolved Oxygen",
+     "leg": "environmental",
+     "normalized_value": 3.1,
+     "normalized_unit": "mg/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'dissolved o2'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "dissolved-oxygen",
+       "severity": "critical",
+       "audiences": [
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Low dissolved oxygen may threaten aquatic life.",
+       "value": 3.1,
+       "unit": "mg/L",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "pH",
+     "value": 7.9,
+     "unit": "[pH]",
+     "coded_value": null,
+     "observed_at": "2000-02-04T06:00:00Z",
+     "site_code": "tisza-szolnok",
+     "site_name": "Tisza at Szolnok",
+     "source_id": "hu-vituki-tisza",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 4.2,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "ph",
+     "display": "pH",
+     "leg": "environmental",
+     "normalized_value": 7.9,
+     "normalized_unit": "[pH]",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'ph'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": []
+    },
+    {
+     "parameter": "total cyanide",
+     "value": 0.42,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2000-02-11T06:00:00Z",
+     "site_code": "danube-novi-sad",
+     "site_name": "Danube at Novi Sad",
+     "source_id": "rs-danube-novisad",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 5805.0,
+     "outcome": "no_code",
+     "proposer": "gemini-assisted",
+     "confidence": 0.0,
+     "code": null,
+     "display": null,
+     "leg": "environmental",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": null,
+     "rationale": "AI co-pilot found no safe match in the curated OAH catalog. The parameter 'total cyanide' is not present in the provided OAH terminology catalog. The unit 'mg/L' is valid for many parameters, but the parameter itself has no match. A reviewer must supply a code or reject.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [
+      "total cyanide"
+     ],
+     "ai_disagreed": false,
+     "ai_latency_ms": 5792,
+     "approved": false,
+     "rejected": true,
+     "reject_reason": "No OAH code: concept absent from the temporary code system.",
+     "alerts": []
+    },
+    {
+     "parameter": "copper",
+     "value": 180.0,
+     "unit": "ug/L",
+     "coded_value": null,
+     "observed_at": "2000-02-11T06:00:00Z",
+     "site_code": "danube-novi-sad",
+     "site_name": "Danube at Novi Sad",
+     "source_id": "rs-danube-novisad",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 10.8,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "copper-dissolved",
+     "display": "Copper dissolved",
+     "leg": "environmental",
+     "normalized_value": 180.0,
+     "normalized_unit": "ug/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'copper'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "copper-dissolved",
+       "severity": "high",
+       "audiences": [
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Dissolved copper elevated; mine drainage or industrial discharge suspected.",
+       "value": 180.0,
+       "unit": "ug/L",
+       "value_code": null
+      }
+     ]
+    }
+   ],
+   "intake": null,
+   "crosswalk": [
+    {
+     "oah_code": "copper-dissolved",
+     "top": [],
+     "n": 0
+    },
+    {
+     "oah_code": "zinc-dissolved",
+     "top": [],
+     "n": 0
+    },
+    {
+     "oah_code": "dissolved-oxygen",
+     "top": [
+      {
+       "system": "http://snomed.info/sct",
+       "code": "469130006",
+       "display": "Dissolved oxygen meter, line-powered",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.63
+      },
+      {
+       "system": "http://snomed.info/sct",
+       "code": "468651000",
+       "display": "Dissolved oxygen meter, battery-powered",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.59
+      }
+     ],
+     "n": 5
+    }
+   ],
+   "profiles": {
+    "http://hl7.eu/fhir/ig/oah/StructureDefinition/observation-indicators-oah": 5
+   }
+  },
+  {
+   "id": "ajka-2010",
+   "title": "Ajka alumina plant red-mud spill (Hungary, October 2010)",
+   "expect": {
+    "coded": 6,
+    "blocked_qty": 1,
+    "no_code": 0,
+    "alerts": [
+     {
+      "code": "ph",
+      "severity": "critical"
+     },
+     {
+      "code": "aluminium-dissolved",
+      "severity": "high"
+     },
+     {
+      "code": "dissolved-oxygen",
+      "severity": "critical"
+     }
+    ],
+    "audiences": [
+     "public-health",
+     "veterinary",
+     "water-authority"
+    ]
+   },
+   "summary": {
+    "counts": {
+     "coded": 6,
+     "blocked_qty": 1,
+     "no_code": 0,
+     "http_error": 0
+    },
+    "counts_match": true,
+    "alerts_fired": [
+     [
+      "aluminium-dissolved",
+      "high"
+     ],
+     [
+      "dissolved-oxygen",
+      "critical"
+     ],
+     [
+      "ph",
+      "critical"
+     ]
+    ],
+    "alerts_documented": [
+     [
+      "aluminium-dissolved",
+      "high"
+     ],
+     [
+      "dissolved-oxygen",
+      "critical"
+     ],
+     [
+      "ph",
+      "critical"
+     ]
+    ],
+    "alerts_match": true,
+    "audiences": [
+     "public-health",
+     "veterinary",
+     "water-authority"
+    ],
+    "audiences_match": true,
+    "approved": 6,
+    "rejected": 1,
+    "alert_count": 5,
+    "gemini_rows": 1,
+    "mean_latency_ms": 642.6,
+    "pass": true
+   },
+   "rows": [
+    {
+     "parameter": "pH",
+     "value": 13.0,
+     "unit": "[pH]",
+     "coded_value": null,
+     "observed_at": "2010-10-04T14:00:00Z",
+     "site_code": "torna-kolontar",
+     "site_name": "Torna creek at Kolontar",
+     "source_id": "hu-katved-kolontar",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 3.8,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "ph",
+     "display": "pH",
+     "leg": "environmental",
+     "normalized_value": 13.0,
+     "normalized_unit": "[pH]",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'ph'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "ph",
+       "severity": "critical",
+       "audiences": [
+        "public-health",
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Strongly alkaline water; caustic release suspected.",
+       "value": 13.0,
+       "unit": "[pH]",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "aluminium",
+     "value": 42000.0,
+     "unit": "ug/L",
+     "coded_value": null,
+     "observed_at": "2010-10-04T14:00:00Z",
+     "site_code": "torna-kolontar",
+     "site_name": "Torna creek at Kolontar",
+     "source_id": "hu-katved-kolontar",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 4.5,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "aluminium-dissolved",
+     "display": "Aluminium dissolved",
+     "leg": "environmental",
+     "normalized_value": 42000.0,
+     "normalized_unit": "ug/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'aluminium'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "aluminium-dissolved",
+       "severity": "high",
+       "audiences": [
+        "public-health",
+        "water-authority"
+       ],
+       "message": "Dissolved aluminium elevated; caustic or coagulant release suspected.",
+       "value": 42000.0,
+       "unit": "ug/L",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "pH",
+     "value": 130.0,
+     "unit": "[pH]",
+     "coded_value": null,
+     "observed_at": "2010-10-05T08:00:00Z",
+     "site_code": "marcal-karako",
+     "site_name": "Marcal at Karako",
+     "source_id": "hu-katved-marcal",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 4463.3,
+     "outcome": "blocked_qty",
+     "proposer": "gemini-assisted",
+     "confidence": 0.69,
+     "code": "ph",
+     "display": "pH",
+     "leg": "environmental",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": null,
+     "rationale": "The source parameter 'pH' and unit '[pH]' directly match the OAH catalog entry for pH. Unit is an accepted UCUM code. Normalized value 130 [pH] is outside the reviewed plausible range 0-14 [pH]; quantity withheld for reviewer correction.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [
+      "pH",
+      "[pH]"
+     ],
+     "ai_disagreed": false,
+     "ai_latency_ms": 4454,
+     "approved": false,
+     "rejected": true,
+     "reject_reason": "Quantity withheld: unresolvable unit or implausible value. Needs source correction.",
+     "alerts": []
+    },
+    {
+     "parameter": "pH",
+     "value": 9.6,
+     "unit": "[pH]",
+     "coded_value": null,
+     "observed_at": "2010-10-06T08:00:00Z",
+     "site_code": "marcal-karako",
+     "site_name": "Marcal at Karako",
+     "source_id": "hu-katved-marcal",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 8.2,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "ph",
+     "display": "pH",
+     "leg": "environmental",
+     "normalized_value": 9.6,
+     "normalized_unit": "[pH]",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'ph'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "ph",
+       "severity": "critical",
+       "audiences": [
+        "public-health",
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Strongly alkaline water; caustic release suspected.",
+       "value": 9.6,
+       "unit": "[pH]",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "dissolved O2",
+     "value": 2.1,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2010-10-06T08:00:00Z",
+     "site_code": "marcal-karako",
+     "site_name": "Marcal at Karako",
+     "source_id": "hu-katved-marcal",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 8.1,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "dissolved-oxygen",
+     "display": "Dissolved Oxygen",
+     "leg": "environmental",
+     "normalized_value": 2.1,
+     "normalized_unit": "mg/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'dissolved o2'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "dissolved-oxygen",
+       "severity": "critical",
+       "audiences": [
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Low dissolved oxygen may threaten aquatic life.",
+       "value": 2.1,
+       "unit": "mg/L",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "pH",
+     "value": 8.4,
+     "unit": "[pH]",
+     "coded_value": null,
+     "observed_at": "2010-10-09T08:00:00Z",
+     "site_code": "danube-gyor",
+     "site_name": "Danube at Gyor",
+     "source_id": "hu-katved-gyor",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 4.6,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "ph",
+     "display": "pH",
+     "leg": "environmental",
+     "normalized_value": 8.4,
+     "normalized_unit": "[pH]",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'ph'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": []
+    },
+    {
+     "parameter": "aluminium",
+     "value": 310.0,
+     "unit": "ug/L",
+     "coded_value": null,
+     "observed_at": "2010-10-09T08:00:00Z",
+     "site_code": "danube-gyor",
+     "site_name": "Danube at Gyor",
+     "source_id": "hu-katved-gyor",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 5.6,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "aluminium-dissolved",
+     "display": "Aluminium dissolved",
+     "leg": "environmental",
+     "normalized_value": 310.0,
+     "normalized_unit": "ug/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'aluminium'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "aluminium-dissolved",
+       "severity": "high",
+       "audiences": [
+        "public-health",
+        "water-authority"
+       ],
+       "message": "Dissolved aluminium elevated; caustic or coagulant release suspected.",
+       "value": 310.0,
+       "unit": "ug/L",
+       "value_code": null
+      }
+     ]
+    }
+   ],
+   "intake": null,
+   "crosswalk": [
+    {
+     "oah_code": "ph",
+     "top": [
+      {
+       "system": "http://loinc.org",
+       "code": "9481-3",
+       "display": "pH of Water",
+       "vocabulary": "LNC",
+       "score": 1.0
+      },
+      {
+       "system": "http://snomed.info/sct",
+       "code": "702230000",
+       "display": "pH meter",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.4
+      }
+     ],
+     "n": 5
+    },
+    {
+     "oah_code": "aluminium-dissolved",
+     "top": [],
+     "n": 0
+    },
+    {
+     "oah_code": "ph",
+     "top": [
+      {
+       "system": "http://loinc.org",
+       "code": "9481-3",
+       "display": "pH of Water",
+       "vocabulary": "LNC",
+       "score": 1.0
+      },
+      {
+       "system": "http://snomed.info/sct",
+       "code": "702230000",
+       "display": "pH meter",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.4
+      }
+     ],
+     "n": 5
+    }
+   ],
+   "profiles": {
+    "http://hl7.eu/fhir/ig/oah/StructureDefinition/observation-indicators-oah": 6
+   }
+  },
+  {
+   "id": "mar-menor-2021",
+   "title": "Mar Menor lagoon anoxic fish kill (Spain, August 2021)",
+   "expect": {
+    "coded": 6,
+    "blocked_qty": 0,
+    "no_code": 0,
+    "alerts": [
+     {
+      "code": "nitrate",
+      "severity": "high"
+     },
+     {
+      "code": "total-phosphates",
+      "severity": "moderate"
+     },
+     {
+      "code": "waterTemperature",
+      "severity": "moderate"
+     },
+     {
+      "code": "ndci",
+      "severity": "high"
+     },
+     {
+      "code": "dissolved-oxygen",
+      "severity": "critical"
+     },
+     {
+      "code": "electrical-conductivity",
+      "severity": "high"
+     }
+    ],
+    "audiences": [
+     "public-health",
+     "veterinary",
+     "water-authority"
+    ]
+   },
+   "summary": {
+    "counts": {
+     "coded": 6,
+     "blocked_qty": 0,
+     "no_code": 0,
+     "http_error": 0
+    },
+    "counts_match": true,
+    "alerts_fired": [
+     [
+      "dissolved-oxygen",
+      "critical"
+     ],
+     [
+      "electrical-conductivity",
+      "high"
+     ],
+     [
+      "ndci",
+      "high"
+     ],
+     [
+      "nitrate",
+      "high"
+     ],
+     [
+      "total-phosphates",
+      "moderate"
+     ],
+     [
+      "waterTemperature",
+      "moderate"
+     ]
+    ],
+    "alerts_documented": [
+     [
+      "dissolved-oxygen",
+      "critical"
+     ],
+     [
+      "electrical-conductivity",
+      "high"
+     ],
+     [
+      "ndci",
+      "high"
+     ],
+     [
+      "nitrate",
+      "high"
+     ],
+     [
+      "total-phosphates",
+      "moderate"
+     ],
+     [
+      "waterTemperature",
+      "moderate"
+     ]
+    ],
+    "alerts_match": true,
+    "audiences": [
+     "public-health",
+     "veterinary",
+     "water-authority"
+    ],
+    "audiences_match": true,
+    "approved": 6,
+    "rejected": 0,
+    "alert_count": 6,
+    "gemini_rows": 0,
+    "mean_latency_ms": 4.6,
+    "pass": true
+   },
+   "rows": [
+    {
+     "parameter": "nitrate",
+     "value": 72.0,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2021-08-10T08:00:00Z",
+     "site_code": "marmenor-north",
+     "site_name": "Mar Menor northern basin",
+     "source_id": "es-carm-marmenor",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 4.6,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "nitrate",
+     "display": "Nitrate",
+     "leg": "environmental",
+     "normalized_value": 72.0,
+     "normalized_unit": "mg/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'nitrate'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "nitrate",
+       "severity": "high",
+       "audiences": [
+        "public-health",
+        "water-authority"
+       ],
+       "message": "Nitrate elevated; eutrophication and drinking-water risk warrant review.",
+       "value": 72.0,
+       "unit": "mg/L",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "total phosphates",
+     "value": 0.88,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2021-08-10T08:00:00Z",
+     "site_code": "marmenor-north",
+     "site_name": "Mar Menor northern basin",
+     "source_id": "es-carm-marmenor",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 5.4,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "total-phosphates",
+     "display": "Total phosphates",
+     "leg": "environmental",
+     "normalized_value": 0.88,
+     "normalized_unit": "mg/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'total phosphates'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "total-phosphates",
+       "severity": "moderate",
+       "audiences": [
+        "water-authority"
+       ],
+       "message": "Total phosphates elevated; bloom-forming conditions accumulating.",
+       "value": 0.88,
+       "unit": "mg/L",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "temp water",
+     "value": 30.6,
+     "unit": "Cel",
+     "coded_value": null,
+     "observed_at": "2021-08-12T08:00:00Z",
+     "site_code": "marmenor-north",
+     "site_name": "Mar Menor northern basin",
+     "source_id": "es-carm-marmenor",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 4.3,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "waterTemperature",
+     "display": "Water temperature",
+     "leg": "environmental",
+     "normalized_value": 30.6,
+     "normalized_unit": "Cel",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'temp water'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "waterTemperature",
+       "severity": "moderate",
+       "audiences": [
+        "water-authority"
+       ],
+       "message": "Elevated water temperature compounds bloom and hypoxia risk.",
+       "value": 30.6,
+       "unit": "Cel",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "NDCI",
+     "value": 0.47,
+     "unit": "1",
+     "coded_value": null,
+     "observed_at": "2021-08-13T10:40:00Z",
+     "site_code": "marmenor-north",
+     "site_name": "Mar Menor northern basin",
+     "source_id": "copernicus-s2",
+     "source_type": "satellite",
+     "http_status": 201,
+     "latency_ms": 3.4,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "ndci",
+     "display": "Normalized Difference Chlorophyll Index (NDCI)",
+     "leg": "environmental",
+     "normalized_value": 0.47,
+     "normalized_unit": "1",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'ndci'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "ndci",
+       "severity": "high",
+       "audiences": [
+        "public-health",
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Satellite chlorophyll proxy warrants bloom investigation.",
+       "value": 0.47,
+       "unit": "1",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "dissolved oxygen",
+     "value": 1.4,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2021-08-16T06:00:00Z",
+     "site_code": "marmenor-lamanga",
+     "site_name": "Mar Menor at La Manga shore",
+     "source_id": "es-carm-marmenor",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 4.5,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "dissolved-oxygen",
+     "display": "Dissolved Oxygen",
+     "leg": "environmental",
+     "normalized_value": 1.4,
+     "normalized_unit": "mg/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'dissolved oxygen'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "dissolved-oxygen",
+       "severity": "critical",
+       "audiences": [
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Low dissolved oxygen may threaten aquatic life.",
+       "value": 1.4,
+       "unit": "mg/L",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "electrical conductivity",
+     "value": 68.0,
+     "unit": "mS/cm",
+     "coded_value": null,
+     "observed_at": "2021-08-16T06:00:00Z",
+     "site_code": "marmenor-lamanga",
+     "site_name": "Mar Menor at La Manga shore",
+     "source_id": "es-carm-marmenor",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 5.4,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "electrical-conductivity",
+     "display": "Electrical conductivity",
+     "leg": "environmental",
+     "normalized_value": 68.0,
+     "normalized_unit": "mS/cm",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'electrical conductivity'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "electrical-conductivity",
+       "severity": "high",
+       "audiences": [
+        "public-health",
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Conductivity pattern warrants cross-border ecological review.",
+       "value": 68.0,
+       "unit": "mS/cm",
+       "value_code": null
+      }
+     ]
+    }
+   ],
+   "intake": null,
+   "crosswalk": [
+    {
+     "oah_code": "nitrate",
+     "top": [
+      {
+       "system": "http://loinc.org",
+       "code": "9480-5",
+       "display": "Nitrate [Mass/volume] in Water",
+       "vocabulary": "LNC",
+       "score": 1.0
+      },
+      {
+       "system": "http://loinc.org",
+       "code": "13616-8",
+       "display": "Nitrite [Mass/volume] in Water",
+       "vocabulary": "LNC",
+       "score": 0.86
+      }
+     ],
+     "n": 5
+    },
+    {
+     "oah_code": "total-phosphates",
+     "top": [
+      {
+       "system": "http://loinc.org",
+       "code": "38717-5",
+       "display": "Phosphate [Mass/volume] in Air",
+       "vocabulary": "LNC",
+       "score": 0.72
+      },
+      {
+       "system": "http://snomed.info/sct",
+       "code": "104868000",
+       "display": "Phosphate, total measurement",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.47
+      }
+     ],
+     "n": 5
+    },
+    {
+     "oah_code": "waterTemperature",
+     "top": [
+      {
+       "system": "http://snomed.info/sct",
+       "code": "438631006",
+       "display": "Checking bath water temperature",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.71
+      },
+      {
+       "system": "http://snomed.info/sct",
+       "code": "285974007",
+       "display": "Does control domestic water temperature",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.61
+      }
+     ],
+     "n": 5
+    }
+   ],
+   "profiles": {
+    "http://hl7.eu/fhir/ig/oah/StructureDefinition/observation-indicators-oah": 6
+   }
+  },
+  {
+   "id": "akerselva-2011",
+   "title": "Akerselva chlorine release (Oslo, Norway, March 2011)",
+   "expect": {
+    "coded": 5,
+    "blocked_qty": 0,
+    "no_code": 1,
+    "alerts": [
+     {
+      "code": "dissolved-oxygen",
+      "severity": "critical"
+     }
+    ],
+    "audiences": [
+     "veterinary",
+     "water-authority"
+    ]
+   },
+   "summary": {
+    "counts": {
+     "coded": 5,
+     "blocked_qty": 0,
+     "no_code": 1,
+     "http_error": 0
+    },
+    "counts_match": true,
+    "alerts_fired": [
+     [
+      "dissolved-oxygen",
+      "critical"
+     ]
+    ],
+    "alerts_documented": [
+     [
+      "dissolved-oxygen",
+      "critical"
+     ]
+    ],
+    "alerts_match": true,
+    "audiences": [
+     "veterinary",
+     "water-authority"
+    ],
+    "audiences_match": true,
+    "approved": 5,
+    "rejected": 1,
+    "alert_count": 1,
+    "gemini_rows": 1,
+    "mean_latency_ms": 679.6,
+    "pass": true
+   },
+   "rows": [
+    {
+     "parameter": "free chlorine residual",
+     "value": 4.1,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2011-03-08T18:00:00Z",
+     "site_code": "akerselva-nydalen",
+     "site_name": "Akerselva at Nydalen",
+     "source_id": "oslo-vav-oset",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 4038.1,
+     "outcome": "no_code",
+     "proposer": "gemini-assisted",
+     "confidence": 0.0,
+     "code": null,
+     "display": null,
+     "leg": "environmental",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": null,
+     "rationale": "AI co-pilot found no safe match in the curated OAH catalog. The catalog does not contain a parameter for free chlorine residual. It only includes specific dissolved metals, nutrients, and biological indicators. A reviewer must supply a code or reject.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [
+      "free chlorine residual"
+     ],
+     "ai_disagreed": false,
+     "ai_latency_ms": 4025,
+     "approved": false,
+     "rejected": true,
+     "reject_reason": "No OAH code: concept absent from the temporary code system.",
+     "alerts": []
+    },
+    {
+     "parameter": "dissolved oxygen",
+     "value": 9.8,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2011-03-08T12:00:00Z",
+     "site_code": "akerselva-nydalen",
+     "site_name": "Akerselva at Nydalen",
+     "source_id": "oslo-vav-oset",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 12.9,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "dissolved-oxygen",
+     "display": "Dissolved Oxygen",
+     "leg": "environmental",
+     "normalized_value": 9.8,
+     "normalized_unit": "mg/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'dissolved oxygen'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": []
+    },
+    {
+     "parameter": "pH",
+     "value": 7.2,
+     "unit": "[pH]",
+     "coded_value": null,
+     "observed_at": "2011-03-08T18:00:00Z",
+     "site_code": "akerselva-nydalen",
+     "site_name": "Akerselva at Nydalen",
+     "source_id": "oslo-vav-oset",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 6.0,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "ph",
+     "display": "pH",
+     "leg": "environmental",
+     "normalized_value": 7.2,
+     "normalized_unit": "[pH]",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'ph'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": []
+    },
+    {
+     "parameter": "dissolved oxygen",
+     "value": 3.1,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2011-03-09T09:00:00Z",
+     "site_code": "akerselva-vaterland",
+     "site_name": "Akerselva at Vaterland",
+     "source_id": "oslo-vav-nedre",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 7.4,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "dissolved-oxygen",
+     "display": "Dissolved Oxygen",
+     "leg": "environmental",
+     "normalized_value": 3.1,
+     "normalized_unit": "mg/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'dissolved oxygen'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "dissolved-oxygen",
+       "severity": "critical",
+       "audiences": [
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Low dissolved oxygen may threaten aquatic life.",
+       "value": 3.1,
+       "unit": "mg/L",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "electrical conductivity",
+     "value": 0.86,
+     "unit": "mS/cm",
+     "coded_value": null,
+     "observed_at": "2011-03-09T09:00:00Z",
+     "site_code": "akerselva-vaterland",
+     "site_name": "Akerselva at Vaterland",
+     "source_id": "oslo-vav-nedre",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 7.6,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "electrical-conductivity",
+     "display": "Electrical conductivity",
+     "leg": "environmental",
+     "normalized_value": 0.86,
+     "normalized_unit": "mS/cm",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'electrical conductivity'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": []
+    },
+    {
+     "parameter": "water temperature",
+     "value": 3.1,
+     "unit": "Cel",
+     "coded_value": null,
+     "observed_at": "2011-03-09T09:00:00Z",
+     "site_code": "akerselva-vaterland",
+     "site_name": "Akerselva at Vaterland",
+     "source_id": "oslo-vav-nedre",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 5.8,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "waterTemperature",
+     "display": "Water temperature",
+     "leg": "environmental",
+     "normalized_value": 3.1,
+     "normalized_unit": "Cel",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'water temperature'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": []
+    }
+   ],
+   "intake": {
+    "http_status": 201,
+    "latency_ms": 53480.3,
+    "extracted": 4,
+    "rejected": 0,
+    "warnings": [
+     "The exact time of the chlorine measurement was not specified beyond 'kvelden 8. mars', so 21:00:00Z was used as a placeholder for the evening.",
+     "Site codes were assigned based on location names as none were provided in the text."
+    ],
+    "proposals": [
+     {
+      "parameter": "Fritt klor",
+      "value": 4.1,
+      "unit": "mg/l",
+      "code": null,
+      "normalized_value": null,
+      "normalized_unit": null
+     },
+     {
+      "parameter": "oksygen",
+      "value": 3.1,
+      "unit": "mg/l",
+      "code": "dissolved-oxygen",
+      "normalized_value": 3.1,
+      "normalized_unit": "mg/L"
+     },
+     {
+      "parameter": "ledningsevne",
+      "value": 0.86,
+      "unit": "mS/cm",
+      "code": "electrical-conductivity",
+      "normalized_value": 0.86,
+      "normalized_unit": "mS/cm"
+     },
+     {
+      "parameter": "vanntemperatur",
+      "value": 3.1,
+      "unit": "\u00b0C",
+      "code": "waterTemperature",
+      "normalized_value": 3.1,
+      "normalized_unit": "Cel"
+     }
+    ],
+    "model": "gemini-3.1-flash-lite"
+   },
+   "crosswalk": [
+    {
+     "oah_code": "dissolved-oxygen",
+     "top": [
+      {
+       "system": "http://snomed.info/sct",
+       "code": "469130006",
+       "display": "Dissolved oxygen meter, line-powered",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.63
+      },
+      {
+       "system": "http://snomed.info/sct",
+       "code": "468651000",
+       "display": "Dissolved oxygen meter, battery-powered",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.59
+      }
+     ],
+     "n": 5
+    },
+    {
+     "oah_code": "ph",
+     "top": [
+      {
+       "system": "http://loinc.org",
+       "code": "9481-3",
+       "display": "pH of Water",
+       "vocabulary": "LNC",
+       "score": 1.0
+      },
+      {
+       "system": "http://snomed.info/sct",
+       "code": "702230000",
+       "display": "pH meter",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.4
+      }
+     ],
+     "n": 5
+    },
+    {
+     "oah_code": "dissolved-oxygen",
+     "top": [
+      {
+       "system": "http://snomed.info/sct",
+       "code": "469130006",
+       "display": "Dissolved oxygen meter, line-powered",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.63
+      },
+      {
+       "system": "http://snomed.info/sct",
+       "code": "468651000",
+       "display": "Dissolved oxygen meter, battery-powered",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.59
+      }
+     ],
+     "n": 5
+    }
+   ],
+   "profiles": {
+    "http://hl7.eu/fhir/ig/oah/StructureDefinition/observation-indicators-oah": 5
+   }
+  },
+  {
+   "id": "seine-2024",
+   "title": "Seine bathing-water exceedances (Paris, France, July-August 2024)",
+   "expect": {
+    "coded": 4,
+    "blocked_qty": 1,
+    "no_code": 1,
+    "alerts": [
+     {
+      "code": "coliforms",
+      "severity": "critical"
+     }
+    ],
+    "audiences": [
+     "public-health",
+     "veterinary",
+     "water-authority"
+    ]
+   },
+   "summary": {
+    "counts": {
+     "coded": 4,
+     "blocked_qty": 1,
+     "no_code": 1,
+     "http_error": 0
+    },
+    "counts_match": true,
+    "alerts_fired": [
+     [
+      "coliforms",
+      "critical"
+     ]
+    ],
+    "alerts_documented": [
+     [
+      "coliforms",
+      "critical"
+     ]
+    ],
+    "alerts_match": true,
+    "audiences": [
+     "public-health",
+     "veterinary",
+     "water-authority"
+    ],
+    "audiences_match": true,
+    "approved": 4,
+    "rejected": 2,
+    "alert_count": 2,
+    "gemini_rows": 2,
+    "mean_latency_ms": 1935.0,
+    "pass": true
+   },
+   "rows": [
+    {
+     "parameter": "E. coli",
+     "value": 980.0,
+     "unit": "CFU/100mL",
+     "coded_value": null,
+     "observed_at": "2024-07-30T06:00:00Z",
+     "site_code": "seine-alexandre-iii",
+     "site_name": "Seine at Pont Alexandre III",
+     "source_id": "paris-eau-lab",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 5.6,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "coliforms",
+     "display": "Coliforms",
+     "leg": "environmental",
+     "normalized_value": 980.0,
+     "normalized_unit": "{cfu}/dL",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'e coli'. Converted from CFU/100mL.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "coliforms",
+       "severity": "critical",
+       "audiences": [
+        "public-health",
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Faecal indicator organisms above the demonstration recreational bound.",
+       "value": 980.0,
+       "unit": "{cfu}/dL",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "E. coli",
+     "value": 3400.0,
+     "unit": "MPN/100mL",
+     "coded_value": null,
+     "observed_at": "2024-07-30T06:00:00Z",
+     "site_code": "seine-alexandre-iii",
+     "site_name": "Seine at Pont Alexandre III",
+     "source_id": "fluidion-alert",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 7398.2,
+     "outcome": "blocked_qty",
+     "proposer": "gemini-assisted",
+     "confidence": 0.69,
+     "code": "coliforms",
+     "display": "Coliforms",
+     "leg": "environmental",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": null,
+     "rationale": "E. coli is a specific type of coliform. While MPN/100mL is a standard unit for bacterial enumeration, it is not explicitly listed in the catalog's known units, which only include CFU-based units. Unit 'MPN/100mL' needs reviewer correction.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [
+      "E. coli",
+      "MPN/100mL"
+     ],
+     "ai_disagreed": false,
+     "ai_latency_ms": 7385,
+     "approved": false,
+     "rejected": true,
+     "reject_reason": "Quantity withheld: unresolvable unit or implausible value. Needs source correction.",
+     "alerts": []
+    },
+    {
+     "parameter": "enterococci",
+     "value": 410.0,
+     "unit": "{cfu}/100mL",
+     "coded_value": null,
+     "observed_at": "2024-07-30T06:00:00Z",
+     "site_code": "seine-alexandre-iii",
+     "site_name": "Seine at Pont Alexandre III",
+     "source_id": "paris-eau-lab",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 4182.0,
+     "outcome": "no_code",
+     "proposer": "gemini-assisted",
+     "confidence": 0.0,
+     "code": null,
+     "display": null,
+     "leg": "environmental",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": null,
+     "rationale": "AI co-pilot found no safe match in the curated OAH catalog. The catalog includes coliforms and E. coli, but does not contain an entry for Enterococci. Enterococci are distinct from coliforms in microbiological monitoring. A reviewer must supply a code or reject.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [
+      "enterococci"
+     ],
+     "ai_disagreed": false,
+     "ai_latency_ms": 4165,
+     "approved": false,
+     "rejected": true,
+     "reject_reason": "No OAH code: concept absent from the temporary code system.",
+     "alerts": []
+    },
+    {
+     "parameter": "E. coli",
+     "value": 220.0,
+     "unit": "CFU/100mL",
+     "coded_value": null,
+     "observed_at": "2024-08-01T06:00:00Z",
+     "site_code": "seine-alexandre-iii",
+     "site_name": "Seine at Pont Alexandre III",
+     "source_id": "paris-eau-lab",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 9.5,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "coliforms",
+     "display": "Coliforms",
+     "leg": "environmental",
+     "normalized_value": 220.0,
+     "normalized_unit": "{cfu}/dL",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'e coli'. Converted from CFU/100mL.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": []
+    },
+    {
+     "parameter": "ammonium",
+     "value": 0.42,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2024-07-30T06:00:00Z",
+     "site_code": "seine-bras-marie",
+     "site_name": "Seine at Bras Marie",
+     "source_id": "paris-eau-lab",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 8.2,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "ammonium",
+     "display": "Ammonium",
+     "leg": "environmental",
+     "normalized_value": 0.42,
+     "normalized_unit": "mg/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'ammonium'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": []
+    },
+    {
+     "parameter": "E. coli",
+     "value": 1450.0,
+     "unit": "CFU/100mL",
+     "coded_value": null,
+     "observed_at": "2024-07-30T06:00:00Z",
+     "site_code": "seine-bras-marie",
+     "site_name": "Seine at Bras Marie",
+     "source_id": "paris-eau-lab",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 6.7,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "coliforms",
+     "display": "Coliforms",
+     "leg": "environmental",
+     "normalized_value": 1450.0,
+     "normalized_unit": "{cfu}/dL",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'e coli'. Converted from CFU/100mL.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "coliforms",
+       "severity": "critical",
+       "audiences": [
+        "public-health",
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Faecal indicator organisms above the demonstration recreational bound.",
+       "value": 1450.0,
+       "unit": "{cfu}/dL",
+       "value_code": null
+      }
+     ]
+    }
+   ],
+   "intake": null,
+   "crosswalk": [
+    {
+     "oah_code": "coliforms",
+     "top": [
+      {
+       "system": "http://snomed.info/sct",
+       "code": "23710009",
+       "display": "Coliform mastitis",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.69
+      },
+      {
+       "system": "http://snomed.info/sct",
+       "code": "77309002",
+       "display": "Coliform bacteria",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.62
+      }
+     ],
+     "n": 5
+    },
+    {
+     "oah_code": "coliforms",
+     "top": [
+      {
+       "system": "http://snomed.info/sct",
+       "code": "23710009",
+       "display": "Coliform mastitis",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.69
+      },
+      {
+       "system": "http://snomed.info/sct",
+       "code": "77309002",
+       "display": "Coliform bacteria",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.62
+      }
+     ],
+     "n": 5
+    },
+    {
+     "oah_code": "ammonium",
+     "top": [
+      {
+       "system": "http://loinc.org",
+       "code": "38589-8",
+       "display": "Ammonia [Mass/volume] in Air",
+       "vocabulary": "LNC",
+       "score": 0.8
+      },
+      {
+       "system": "http://loinc.org",
+       "code": "53500-5",
+       "display": "Ammonia [Moles/volume] in Water",
+       "vocabulary": "LNC",
+       "score": 0.8
+      }
+     ],
+     "n": 5
+    }
+   ],
+   "profiles": {
+    "http://hl7.eu/fhir/ig/oah/StructureDefinition/observation-indicators-oah": 4
+   }
+  },
+  {
+   "id": "brixham-2024",
+   "title": "Brixham cryptosporidiosis outbreak (Devon, UK, May 2024)",
+   "expect": {
+    "coded": 4,
+    "blocked_qty": 0,
+    "no_code": 1,
+    "alerts": [
+     {
+      "code": "coliforms",
+      "severity": "critical"
+     },
+     {
+      "code": "tss",
+      "severity": "high"
+     }
+    ],
+    "audiences": [
+     "public-health",
+     "veterinary",
+     "water-authority"
+    ]
+   },
+   "summary": {
+    "counts": {
+     "coded": 4,
+     "blocked_qty": 0,
+     "no_code": 1,
+     "http_error": 0
+    },
+    "counts_match": true,
+    "alerts_fired": [
+     [
+      "coliforms",
+      "critical"
+     ],
+     [
+      "tss",
+      "high"
+     ]
+    ],
+    "alerts_documented": [
+     [
+      "coliforms",
+      "critical"
+     ],
+     [
+      "tss",
+      "high"
+     ]
+    ],
+    "alerts_match": true,
+    "audiences": [
+     "public-health",
+     "veterinary",
+     "water-authority"
+    ],
+    "audiences_match": true,
+    "approved": 4,
+    "rejected": 1,
+    "alert_count": 2,
+    "gemini_rows": 1,
+    "mean_latency_ms": 1149.9,
+    "pass": true
+   },
+   "rows": [
+    {
+     "parameter": "total suspended solids",
+     "value": 38.0,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2024-05-14T09:00:00Z",
+     "site_code": "hillhead-reservoir",
+     "site_name": "Hillhead service reservoir",
+     "source_id": "sww-hillhead",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 7.4,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "tss",
+     "display": "Total suspended solids (TSS)",
+     "leg": "environmental",
+     "normalized_value": 38.0,
+     "normalized_unit": "mg/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'total suspended solids'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "tss",
+       "severity": "high",
+       "audiences": [
+        "public-health",
+        "water-authority"
+       ],
+       "message": "Suspended solids elevated; filtration performance and pathogen breakthrough warrant review.",
+       "value": 38.0,
+       "unit": "mg/L",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "total coliforms",
+     "value": 1250.0,
+     "unit": "{cfu}/100mL",
+     "coded_value": null,
+     "observed_at": "2024-05-15T09:00:00Z",
+     "site_code": "hillhead-reservoir",
+     "site_name": "Hillhead service reservoir",
+     "source_id": "sww-hillhead",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 5.7,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "coliforms",
+     "display": "Coliforms",
+     "leg": "environmental",
+     "normalized_value": 1250.0,
+     "normalized_unit": "{cfu}/dL",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'total coliforms'. Converted from {cfu}/100mL.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "coliforms",
+       "severity": "critical",
+       "audiences": [
+        "public-health",
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Faecal indicator organisms above the demonstration recreational bound.",
+       "value": 1250.0,
+       "unit": "{cfu}/dL",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "free chlorine residual",
+     "value": 0.06,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2024-05-15T09:00:00Z",
+     "site_code": "hillhead-reservoir",
+     "site_name": "Hillhead service reservoir",
+     "source_id": "sww-hillhead",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 5714.9,
+     "outcome": "no_code",
+     "proposer": "gemini-assisted",
+     "confidence": 0.0,
+     "code": null,
+     "display": null,
+     "leg": "environmental",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": null,
+     "rationale": "AI co-pilot found no safe match in the curated OAH catalog. The parameter 'free chlorine residual' is not present in the provided OAH catalog. The catalog contains parameters for dissolved metals and nutrients, but not chlorine or its residuals. A reviewer must supply a code or reject.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [
+      "free chlorine residual"
+     ],
+     "ai_disagreed": false,
+     "ai_latency_ms": 5701,
+     "approved": false,
+     "rejected": true,
+     "reject_reason": "No OAH code: concept absent from the temporary code system.",
+     "alerts": []
+    },
+    {
+     "parameter": "total coliforms",
+     "value": 640.0,
+     "unit": "CFU/100mL",
+     "coded_value": null,
+     "observed_at": "2024-05-16T09:00:00Z",
+     "site_code": "brixham-distribution",
+     "site_name": "Brixham distribution zone",
+     "source_id": "sww-brixham",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 12.5,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "coliforms",
+     "display": "Coliforms",
+     "leg": "environmental",
+     "normalized_value": 640.0,
+     "normalized_unit": "{cfu}/dL",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'total coliforms'. Converted from CFU/100mL.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": []
+    },
+    {
+     "parameter": "total suspended solids",
+     "value": 12.0,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2024-05-20T09:00:00Z",
+     "site_code": "brixham-distribution",
+     "site_name": "Brixham distribution zone",
+     "source_id": "sww-brixham",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 9.0,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "tss",
+     "display": "Total suspended solids (TSS)",
+     "leg": "environmental",
+     "normalized_value": 12.0,
+     "normalized_unit": "mg/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'total suspended solids'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": []
+    }
+   ],
+   "intake": {
+    "http_status": 201,
+    "latency_ms": 10580.3,
+    "extracted": 3,
+    "rejected": 0,
+    "warnings": [
+     "Cryptosporidium oocysts confirmed but no numerical value provided.",
+     "Timestamp for total suspended solids is date-only; converted to 00:00:00 UTC."
+    ],
+    "proposals": [
+     {
+      "parameter": "Total coliforms",
+      "value": 1250.0,
+      "unit": "CFU/100 mL",
+      "code": "coliforms",
+      "normalized_value": 1250.0,
+      "normalized_unit": "{cfu}/dL"
+     },
+     {
+      "parameter": "Free chlorine residual",
+      "value": 0.06,
+      "unit": "mg/L",
+      "code": null,
+      "normalized_value": null,
+      "normalized_unit": null
+     },
+     {
+      "parameter": "Total suspended solids",
+      "value": 38.0,
+      "unit": "mg/L",
+      "code": "tss",
+      "normalized_value": 38.0,
+      "normalized_unit": "mg/L"
+     }
+    ],
+    "model": "gemini-3.1-flash-lite"
+   },
+   "crosswalk": [
+    {
+     "oah_code": "tss",
+     "top": [],
+     "n": 0
+    },
+    {
+     "oah_code": "coliforms",
+     "top": [
+      {
+       "system": "http://snomed.info/sct",
+       "code": "23710009",
+       "display": "Coliform mastitis",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.69
+      },
+      {
+       "system": "http://snomed.info/sct",
+       "code": "77309002",
+       "display": "Coliform bacteria",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.62
+      }
+     ],
+     "n": 5
+    },
+    {
+     "oah_code": "coliforms",
+     "top": [
+      {
+       "system": "http://snomed.info/sct",
+       "code": "23710009",
+       "display": "Coliform mastitis",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.69
+      },
+      {
+       "system": "http://snomed.info/sct",
+       "code": "77309002",
+       "display": "Coliform bacteria",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.62
+      }
+     ],
+     "n": 5
+    }
+   ],
+   "profiles": {
+    "http://hl7.eu/fhir/ig/oah/StructureDefinition/observation-indicators-oah": 4
+   }
+  },
+  {
+   "id": "coimbra-citizen-2026",
+   "title": "Citizen stream assessment in a pilot city (Coimbra, synthetic, OneAquaHealth app shape)",
+   "expect": {
+    "coded": 5,
+    "blocked_qty": 2,
+    "no_code": 0,
+    "alerts": [
+     {
+      "code": "foam",
+      "severity": "moderate"
+     },
+     {
+      "code": "macroinvertebreates",
+      "severity": "moderate"
+     }
+    ],
+    "audiences": [
+     "veterinary",
+     "water-authority"
+    ]
+   },
+   "summary": {
+    "counts": {
+     "coded": 5,
+     "blocked_qty": 2,
+     "no_code": 0,
+     "http_error": 0
+    },
+    "counts_match": true,
+    "alerts_fired": [
+     [
+      "foam",
+      "moderate"
+     ],
+     [
+      "macroinvertebreates",
+      "moderate"
+     ]
+    ],
+    "alerts_documented": [
+     [
+      "foam",
+      "moderate"
+     ],
+     [
+      "macroinvertebreates",
+      "moderate"
+     ]
+    ],
+    "alerts_match": true,
+    "audiences": [
+     "veterinary",
+     "water-authority"
+    ],
+    "audiences_match": true,
+    "approved": 5,
+    "rejected": 2,
+    "alert_count": 2,
+    "gemini_rows": 2,
+    "mean_latency_ms": 1915.0,
+    "pass": true
+   },
+   "rows": [
+    {
+     "parameter": "foam",
+     "value": null,
+     "unit": null,
+     "coded_value": "present",
+     "observed_at": "2026-05-04T09:30:00Z",
+     "site_code": "ribeira-de-coselhas",
+     "site_name": "Ribeira de Coselhas at Coimbra",
+     "source_id": "oah-app-coimbra",
+     "source_type": "citizen",
+     "http_status": 201,
+     "latency_ms": 5.7,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "foam",
+     "display": "Foam/colour/smell",
+     "leg": "environmental",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": "present",
+     "rationale": "Matched input to curated alias 'foam'. Coded value 'present' is 'present' in the reviewed value set.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "foam",
+       "severity": "moderate",
+       "audiences": [
+        "water-authority"
+       ],
+       "message": "Foam, colour or smell reported on the stream surface; check for a discharge upstream.",
+       "value": null,
+       "unit": "",
+       "value_code": "present"
+      }
+     ]
+    },
+    {
+     "parameter": "macrophytes",
+     "value": null,
+     "unit": null,
+     "coded_value": "extensive",
+     "observed_at": "2026-05-04T09:30:00Z",
+     "site_code": "ribeira-de-coselhas",
+     "site_name": "Ribeira de Coselhas at Coimbra",
+     "source_id": "oah-app-coimbra",
+     "source_type": "citizen",
+     "http_status": 201,
+     "latency_ms": 7.6,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "macrophytes",
+     "display": "Macrophytes",
+     "leg": "environmental",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": "extensive",
+     "rationale": "Matched input to curated alias 'macrophytes'. Coded value 'extensive' is 'extensive' in the reviewed value set.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": []
+    },
+    {
+     "parameter": "macroinvertebrates",
+     "value": null,
+     "unit": null,
+     "coded_value": "none",
+     "observed_at": "2026-05-04T09:45:00Z",
+     "site_code": "ribeira-de-coselhas",
+     "site_name": "Ribeira de Coselhas at Coimbra",
+     "source_id": "oah-app-coimbra",
+     "source_type": "citizen",
+     "http_status": 201,
+     "latency_ms": 7.2,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "macroinvertebreates",
+     "display": "Benthic Macro invertebrates count",
+     "leg": "animal",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": "absent",
+     "rationale": "Matched input to curated alias 'macroinvertebrates'. Coded value 'none' is 'absent' in the reviewed value set.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "macroinvertebreates",
+       "severity": "moderate",
+       "audiences": [
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "No benthic macroinvertebrates found; the stream's biological quality may have collapsed.",
+       "value": null,
+       "unit": "",
+       "value_code": "absent"
+      }
+     ]
+    },
+    {
+     "parameter": "fish",
+     "value": 0.0,
+     "unit": "{count}",
+     "coded_value": null,
+     "observed_at": "2026-05-04T09:45:00Z",
+     "site_code": "ribeira-de-coselhas",
+     "site_name": "Ribeira de Coselhas at Coimbra",
+     "source_id": "oah-app-coimbra",
+     "source_type": "citizen",
+     "http_status": 201,
+     "latency_ms": 4.0,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "fishes",
+     "display": "Fish",
+     "leg": "animal",
+     "normalized_value": 0.0,
+     "normalized_unit": "{count}",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'fish'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": []
+    },
+    {
+     "parameter": "foam",
+     "value": null,
+     "unit": null,
+     "coded_value": "kinda foamy",
+     "observed_at": "2026-05-11T09:30:00Z",
+     "site_code": "ribeira-de-coselhas",
+     "site_name": "Ribeira de Coselhas at Coimbra",
+     "source_id": "oah-app-coimbra",
+     "source_type": "citizen",
+     "http_status": 201,
+     "latency_ms": 6396.2,
+     "outcome": "blocked_qty",
+     "proposer": "gemini-assisted",
+     "confidence": 0.6,
+     "code": "foam",
+     "display": "Foam/colour/smell",
+     "leg": "environmental",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": null,
+     "rationale": "The parameter 'foam' matches the OAH code 'foam'. However, the source value 'kinda foamy' is subjective and does not map to the catalog's defined values (absent, present, extensive). Coded value 'kinda foamy' is not in the reviewed value set (absent, present, extensive); needs reviewer correction.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [
+      "foam",
+      "kinda foamy"
+     ],
+     "ai_disagreed": false,
+     "ai_latency_ms": 6384,
+     "approved": false,
+     "rejected": true,
+     "reject_reason": "Quantity withheld: unresolvable unit or implausible value. Needs source correction.",
+     "alerts": []
+    },
+    {
+     "parameter": "foam",
+     "value": 2.0,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2026-05-11T09:30:00Z",
+     "site_code": "ribeira-de-coselhas",
+     "site_name": "Ribeira de Coselhas at Coimbra",
+     "source_id": "oah-app-coimbra",
+     "source_type": "citizen",
+     "http_status": 201,
+     "latency_ms": 6970.1,
+     "outcome": "blocked_qty",
+     "proposer": "gemini-assisted",
+     "confidence": 0.69,
+     "code": "foam",
+     "display": "Foam/colour/smell",
+     "leg": "environmental",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": null,
+     "rationale": "The parameter 'foam' matches the OAH code 'foam'. However, the source provided a numeric value (2.0) and a unit (mg/L), whereas the 'foam' code is defined as a coded value (absent/present/extensive) and has no known units. 'foam' publishes a coded value from a reviewed value set, not a quantity; a number cannot be published for it.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [
+      "foam"
+     ],
+     "ai_disagreed": false,
+     "ai_latency_ms": 6956,
+     "approved": false,
+     "rejected": true,
+     "reject_reason": "Quantity withheld: unresolvable unit or implausible value. Needs source correction.",
+     "alerts": []
+    },
+    {
+     "parameter": "water temperature",
+     "value": 17.5,
+     "unit": "degC",
+     "coded_value": null,
+     "observed_at": "2026-05-11T09:30:00Z",
+     "site_code": "ribeira-de-coselhas",
+     "site_name": "Ribeira de Coselhas at Coimbra",
+     "source_id": "oah-app-coimbra",
+     "source_type": "citizen",
+     "http_status": 201,
+     "latency_ms": 14.3,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "waterTemperature",
+     "display": "Water temperature",
+     "leg": "environmental",
+     "normalized_value": 17.5,
+     "normalized_unit": "Cel",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'water temperature'. Recognized 'degC' as 'Cel' using a reviewed alias. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": []
+    }
+   ],
+   "intake": null,
+   "crosswalk": [
+    {
+     "oah_code": "foam",
+     "top": [],
+     "n": 0
+    },
+    {
+     "oah_code": "macrophytes",
+     "top": [],
+     "n": 0
+    },
+    {
+     "oah_code": "macroinvertebreates",
+     "top": [],
+     "n": 0
+    }
+   ],
+   "profiles": {
+    "http://hl7.eu/fhir/ig/oah/StructureDefinition/observation-indicators-oah": 5
+   }
+  },
+  {
+   "id": "edge-cases",
+   "title": "Synthetic edge cases - sensor faults, boundaries, and unknown inputs",
+   "expect": {
+    "coded": 4,
+    "blocked_qty": 5,
+    "no_code": 1,
+    "alerts": [
+     {
+      "code": "dissolved-oxygen",
+      "severity": "critical"
+     },
+     {
+      "code": "electrical-conductivity",
+      "severity": "high"
+     }
+    ],
+    "audiences": [
+     "public-health",
+     "veterinary",
+     "water-authority"
+    ]
+   },
+   "summary": {
+    "counts": {
+     "coded": 4,
+     "blocked_qty": 5,
+     "no_code": 1,
+     "http_error": 0
+    },
+    "counts_match": true,
+    "alerts_fired": [
+     [
+      "dissolved-oxygen",
+      "critical"
+     ],
+     [
+      "electrical-conductivity",
+      "high"
+     ]
+    ],
+    "alerts_documented": [
+     [
+      "dissolved-oxygen",
+      "critical"
+     ],
+     [
+      "electrical-conductivity",
+      "high"
+     ]
+    ],
+    "alerts_match": true,
+    "audiences": [
+     "public-health",
+     "veterinary",
+     "water-authority"
+    ],
+    "audiences_match": true,
+    "approved": 4,
+    "rejected": 6,
+    "alert_count": 2,
+    "gemini_rows": 6,
+    "mean_latency_ms": 2193.0,
+    "pass": true
+   },
+   "rows": [
+    {
+     "parameter": "dissolved oxygen",
+     "value": -5.0,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2026-06-01T08:00:00Z",
+     "site_code": "edge-site",
+     "site_name": "Edge-case test site",
+     "source_id": "sensor-fault-lab",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 5236.6,
+     "outcome": "blocked_qty",
+     "proposer": "gemini-assisted",
+     "confidence": 0.69,
+     "code": "dissolved-oxygen",
+     "display": "Dissolved Oxygen",
+     "leg": "environmental",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": null,
+     "rationale": "The source parameter 'dissolved oxygen' matches the OAH code 'dissolved-oxygen' and the unit 'mg/L' is explicitly listed as a valid unit for this parameter. Unit is an accepted UCUM code. Normalized value -5 mg/L is outside the reviewed plausible range 0-25 mg/L; quantity withheld for reviewer correction.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [
+      "dissolved oxygen",
+      "mg/L"
+     ],
+     "ai_disagreed": false,
+     "ai_latency_ms": 5224,
+     "approved": false,
+     "rejected": true,
+     "reject_reason": "Quantity withheld: unresolvable unit or implausible value. Needs source correction.",
+     "alerts": []
+    },
+    {
+     "parameter": "pH",
+     "value": 130.0,
+     "unit": "[pH]",
+     "coded_value": null,
+     "observed_at": "2026-06-01T08:00:00Z",
+     "site_code": "edge-site",
+     "site_name": "Edge-case test site",
+     "source_id": "sensor-fault-lab",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 1892.2,
+     "outcome": "blocked_qty",
+     "proposer": "gemini-assisted",
+     "confidence": 0.69,
+     "code": "ph",
+     "display": "pH",
+     "leg": "environmental",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": null,
+     "rationale": "The source parameter 'pH' and unit '[pH]' directly match the OAH catalog entry for pH. Unit is an accepted UCUM code. Normalized value 130 [pH] is outside the reviewed plausible range 0-14 [pH]; quantity withheld for reviewer correction.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [
+      "pH",
+      "[pH]"
+     ],
+     "ai_disagreed": false,
+     "ai_latency_ms": 1878,
+     "approved": false,
+     "rejected": true,
+     "reject_reason": "Quantity withheld: unresolvable unit or implausible value. Needs source correction.",
+     "alerts": []
+    },
+    {
+     "parameter": "water temperature",
+     "value": -400.0,
+     "unit": "Cel",
+     "coded_value": null,
+     "observed_at": "2026-06-01T08:00:00Z",
+     "site_code": "edge-site",
+     "site_name": "Edge-case test site",
+     "source_id": "sensor-fault-lab",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 2314.5,
+     "outcome": "blocked_qty",
+     "proposer": "gemini-assisted",
+     "confidence": 0.69,
+     "code": "waterTemperature",
+     "display": "Water temperature",
+     "leg": "environmental",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": null,
+     "rationale": "The source parameter 'water temperature' and unit 'Cel' directly match the OAH catalog entry for waterTemperature. Unit is an accepted UCUM code. Normalized value -400 Cel is outside the reviewed plausible range -5-50 Cel; quantity withheld for reviewer correction.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [
+      "water temperature",
+      "Cel"
+     ],
+     "ai_disagreed": false,
+     "ai_latency_ms": 2297,
+     "approved": false,
+     "rejected": true,
+     "reject_reason": "Quantity withheld: unresolvable unit or implausible value. Needs source correction.",
+     "alerts": []
+    },
+    {
+     "parameter": "electrical conductivity",
+     "value": 999999.0,
+     "unit": "mS/cm",
+     "coded_value": null,
+     "observed_at": "2026-06-01T08:00:00Z",
+     "site_code": "edge-site",
+     "site_name": "Edge-case test site",
+     "source_id": "sensor-fault-lab",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 3210.9,
+     "outcome": "blocked_qty",
+     "proposer": "gemini-assisted",
+     "confidence": 0.69,
+     "code": "electrical-conductivity",
+     "display": "Electrical conductivity",
+     "leg": "environmental",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": null,
+     "rationale": "The source parameter label 'electrical conductivity' is an exact match for the OAH catalog code 'electrical-conductivity', and 'mS/cm' is a recognized unit for this parameter. Unit is an accepted UCUM code. Normalized value 999999 mS/cm is outside the reviewed plausible range 0-200 mS/cm; quantity withheld for reviewer correction.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [
+      "electrical conductivity",
+      "mS/cm"
+     ],
+     "ai_disagreed": false,
+     "ai_latency_ms": 3196,
+     "approved": false,
+     "rejected": true,
+     "reject_reason": "Quantity withheld: unresolvable unit or implausible value. Needs source correction.",
+     "alerts": []
+    },
+    {
+     "parameter": "dissolved oxygen",
+     "value": 4.0,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2026-06-01T09:00:00Z",
+     "site_code": "edge-site",
+     "site_name": "Edge-case test site",
+     "source_id": "boundary-lab",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 7.8,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "dissolved-oxygen",
+     "display": "Dissolved Oxygen",
+     "leg": "environmental",
+     "normalized_value": 4.0,
+     "normalized_unit": "mg/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'dissolved oxygen'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "dissolved-oxygen",
+       "severity": "critical",
+       "audiences": [
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Low dissolved oxygen may threaten aquatic life.",
+       "value": 4.0,
+       "unit": "mg/L",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "electrical conductivity",
+     "value": 2.0,
+     "unit": "mS/cm",
+     "coded_value": null,
+     "observed_at": "2026-06-01T09:00:00Z",
+     "site_code": "edge-site",
+     "site_name": "Edge-case test site",
+     "source_id": "boundary-lab",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 7.5,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "electrical-conductivity",
+     "display": "Electrical conductivity",
+     "leg": "environmental",
+     "normalized_value": 2.0,
+     "normalized_unit": "mS/cm",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'electrical conductivity'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": [
+      {
+       "rule": "electrical-conductivity",
+       "severity": "high",
+       "audiences": [
+        "public-health",
+        "veterinary",
+        "water-authority"
+       ],
+       "message": "Conductivity pattern warrants cross-border ecological review.",
+       "value": 2.0,
+       "unit": "mS/cm",
+       "value_code": null
+      }
+     ]
+    },
+    {
+     "parameter": "dissolved oxygen",
+     "value": 4.01,
+     "unit": "mg/L",
+     "coded_value": null,
+     "observed_at": "2026-06-01T10:00:00Z",
+     "site_code": "edge-site",
+     "site_name": "Edge-case test site",
+     "source_id": "boundary-lab",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 6.0,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "dissolved-oxygen",
+     "display": "Dissolved Oxygen",
+     "leg": "environmental",
+     "normalized_value": 4.01,
+     "normalized_unit": "mg/L",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'dissolved oxygen'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": []
+    },
+    {
+     "parameter": "electrical conductivity",
+     "value": 1.99,
+     "unit": "mS/cm",
+     "coded_value": null,
+     "observed_at": "2026-06-01T10:00:00Z",
+     "site_code": "edge-site",
+     "site_name": "Edge-case test site",
+     "source_id": "boundary-lab",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 6.6,
+     "outcome": "coded",
+     "proposer": "curated-rules",
+     "confidence": 0.99,
+     "code": "electrical-conductivity",
+     "display": "Electrical conductivity",
+     "leg": "environmental",
+     "normalized_value": 1.99,
+     "normalized_unit": "mS/cm",
+     "normalized_coding": null,
+     "rationale": "Matched input to curated alias 'electrical conductivity'. Unit is an accepted UCUM code.",
+     "ai_model": null,
+     "ai_evidence": null,
+     "ai_disagreed": null,
+     "ai_latency_ms": null,
+     "approved": true,
+     "rejected": false,
+     "reject_reason": null,
+     "alerts": []
+    },
+    {
+     "parameter": "radon activity concentration",
+     "value": 42.0,
+     "unit": "Bq/L",
+     "coded_value": null,
+     "observed_at": "2026-06-01T11:00:00Z",
+     "site_code": "edge-site",
+     "site_name": "Edge-case test site",
+     "source_id": "unknown-lab",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 5568.5,
+     "outcome": "no_code",
+     "proposer": "gemini-assisted",
+     "confidence": 0.0,
+     "code": null,
+     "display": null,
+     "leg": "environmental",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": null,
+     "rationale": "AI co-pilot found no safe match in the curated OAH catalog. Radon activity concentration is not included in the OAH catalog. The unit Bq/L is also not present in the allowed UCUM unit list. A reviewer must supply a code or reject.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [],
+     "ai_disagreed": false,
+     "ai_latency_ms": 5554,
+     "approved": false,
+     "rejected": true,
+     "reject_reason": "No OAH code: concept absent from the temporary code system.",
+     "alerts": []
+    },
+    {
+     "parameter": "dissolved oxygen",
+     "value": 6.2,
+     "unit": "quarts per fortnight",
+     "coded_value": null,
+     "observed_at": "2026-06-01T11:00:00Z",
+     "site_code": "edge-site",
+     "site_name": "Edge-case test site",
+     "source_id": "unknown-lab",
+     "source_type": "agency",
+     "http_status": 201,
+     "latency_ms": 3679.2,
+     "outcome": "blocked_qty",
+     "proposer": "gemini-assisted",
+     "confidence": 0.69,
+     "code": "dissolved-oxygen",
+     "display": "Dissolved Oxygen",
+     "leg": "environmental",
+     "normalized_value": null,
+     "normalized_unit": null,
+     "normalized_coding": null,
+     "rationale": "The parameter 'dissolved oxygen' matches the OAH code 'dissolved-oxygen'. The unit 'quarts per fortnight' is not a recognized unit for dissolved oxygen concentration in the catalog. Unit 'quarts per fortnight' needs reviewer correction.",
+     "ai_model": "gemini-3.1-flash-lite",
+     "ai_evidence": [
+      "dissolved oxygen"
+     ],
+     "ai_disagreed": false,
+     "ai_latency_ms": 3660,
+     "approved": false,
+     "rejected": true,
+     "reject_reason": "Quantity withheld: unresolvable unit or implausible value. Needs source correction.",
+     "alerts": []
+    }
+   ],
+   "intake": null,
+   "crosswalk": [
+    {
+     "oah_code": "dissolved-oxygen",
+     "top": [
+      {
+       "system": "http://snomed.info/sct",
+       "code": "469130006",
+       "display": "Dissolved oxygen meter, line-powered",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.63
+      },
+      {
+       "system": "http://snomed.info/sct",
+       "code": "468651000",
+       "display": "Dissolved oxygen meter, battery-powered",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.59
+      }
+     ],
+     "n": 5
+    },
+    {
+     "oah_code": "electrical-conductivity",
+     "top": [
+      {
+       "system": "http://loinc.org",
+       "code": "87444-6",
+       "display": "Electron [Electrical Conductivity] of Water",
+       "vocabulary": "LNC",
+       "score": 0.85
+      },
+      {
+       "system": "http://snomed.info/sct",
+       "code": "468605001",
+       "display": "Electrical conductivity meter",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.88
+      }
+     ],
+     "n": 5
+    },
+    {
+     "oah_code": "dissolved-oxygen",
+     "top": [
+      {
+       "system": "http://snomed.info/sct",
+       "code": "469130006",
+       "display": "Dissolved oxygen meter, line-powered",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.63
+      },
+      {
+       "system": "http://snomed.info/sct",
+       "code": "468651000",
+       "display": "Dissolved oxygen meter, battery-powered",
+       "vocabulary": "SNOMEDCT_US",
+       "score": 0.59
+      }
+     ],
+     "n": 5
+    }
+   ],
+   "profiles": {
+    "http://hl7.eu/fhir/ig/oah/StructureDefinition/observation-indicators-oah": 4
+   }
+  }
+ ],
+ "base_url_note": "uvicorn 127.0.0.1:8765"
+}

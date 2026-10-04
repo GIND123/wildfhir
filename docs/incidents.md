@@ -111,6 +111,15 @@ python scripts/simulate.py --brief           # also draft an advisory per alert 
 
 ### 3. Prove the review gate holds
 
+The console's **Load incidents** button (Create → Replay dataset) loads the twelve real
+incidents from one file, [data/incidents.csv](../data/incidents.csv), which is the twelve
+fixtures above concatenated with an `incident` column. With *Run the full round* ticked it
+proposes every row, approves what is publishable under your reviewer name, rejects the rest
+with the pipeline's reason, evaluates the policy, routes the alerts, verifies the chain, and
+shows the result per incident. `POST /api/v1/replay?dataset=incidents` only queues the rows;
+`POST /api/v1/replay/run?dataset=incidents&reviewer=` runs the round. Regenerate the file after
+editing a fixture by concatenating `data/incidents/*.csv` for the twelve real scenarios.
+
 `--propose-only` leaves everything `pending`. Open <http://localhost:8000>, and note that
 nothing has been published: 89 proposals, zero Observations. There is no confidence value,
 and no model, that changes this.
@@ -130,6 +139,30 @@ stored reading turns `/api/v1/provenance/verify` from `valid: true` to
 `first_invalid_sequence: 93` — it names the record, not just the fact of a change.
 
 ### 6. Capture the evidence
+
+A ready-made capture exists: [media/incident-atlas.html](media/incident-atlas.html) is a
+self-contained page of charts built from one full API run of this catalogue (published
+figures, per-row outcomes, alerts by severity and audience, readings against each public
+warning, model latency, refused concepts, the tamper drill, and a card per incident with
+images and coverage). The run behind it is logged in [incident-run-log.md](incident-run-log.md)
+and, call by call, in [media/incident-api-run.json](media/incident-api-run.json); every
+chart is also exported as a PNG in [media/atlas/](media/atlas/), light and dark. Rebuild
+the PNGs after an edit with `?card=<chart id>&theme=<light|dark>` on the page.
+
+A 35-second dark, cinematic teaser for the start of the presentation is
+[media/incident-teaser.mp4](media/incident-teaser.mp4) (1920 × 1080, 30 fps): three incident
+beats over photographs (Oder, Milwaukee, Flint), the signal-to-warning bar chart, the thesis
+line, the run's four numbers and the title card with the AquaFHIR mark. Source: [media/incident-teaser.html](media/incident-teaser.html), rendered
+the same way as below.
+
+The same data is also cut as a 68-second animated walkthrough,
+[media/incident-atlas.mp4](media/incident-atlas.mp4) (1920 × 1080, 30 fps): the record, the
+toll, the API run, outcomes, readings against each public warning, and the tamper drill.
+Its source is [media/incident-atlas-video.html](media/incident-atlas-video.html) (open with
+`?play=1` to preview in a browser; `?t=<seconds>` renders one frame); re-render with
+`node scripts/render-video.mjs docs/media/incident-atlas-video.html /tmp/frames 30` and
+encode the frames with ffmpeg.
+
 
 Numbers worth putting in the submission: readings ingested, coded, refused and why,
 alerts by severity and audience, chain length and verification status, reviewer override

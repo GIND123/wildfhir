@@ -52,6 +52,8 @@ HUBEAU_ROWS = [
      "date_prelevement": "2024-11-19", "heure_prelevement": "10:06:00", "code_parametre": "1449",
      "libelle_parametre": "Escherichia coli (E. coli)", "resultat": 179.0, "symbole_unite": "n/(100mL)",  # noqa: E501
      "code_unite": "226", "code_fraction": "23", "libelle_fraction": "Eau brute",
+     "code_methode_analyse": "334",
+     "nom_methode_analyse": "Qualité de l'eau - Recherche et dénombrement des Escherichia coli et des bactéries coliformes dans les eaux de surface et résiduaires - Partie 3 : méthode miniaturisée (npp) pour ensemencement en milieu liquide (NF EN ISO 9308-3 Mars 1999 / T90-433)",  # noqa: E501
      "code_remarque": "1", "mnemo_remarque": "Résultat > seuil de quantification",
      "code_prelevement": "A123", "nom_producteur": "AEAG", "longitude": 1.435571267, "latitude": 43.601939515},  # noqa: E501
 ]
@@ -155,10 +157,14 @@ def test_hubeau_readings_are_coded_by_the_ordinary_catalog(tmp_path) -> None:
     assert by_label["Nitrates"].coding.code == "nitrate"
     assert by_label["Nitrates"].normalized_value == pytest.approx(3.9)
     # E. coli in n/(100mL): MPN or CFU depends on the method, so the connector
-    # does not guess and the quantity is withheld for a reviewer.
+    # does not guess and the quantity is withheld for a reviewer. The Sandre
+    # method the laboratory reported travels with the reading so the reviewer
+    # can decide from the card (334 is NF EN ISO 9308-3, an MPN method).
     ecoli = by_label["Escherichia coli (E. coli)"]
     assert ecoli.coding.code == "coliforms"
     assert ecoli.normalized_value is None
+    assert ecoli.reading.raw_payload["analysis_method"] == "334"
+    assert "9308-3" in ecoli.reading.raw_payload["analysis_method_name"]
     assert all(p.status.value == "pending" for p in result.proposals)
 
 

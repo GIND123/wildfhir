@@ -34,6 +34,12 @@ conference Wi-Fi. `docker login` with a free account before you travel.
 
 ## Narrative
 
+**Cold open, optional (about 22 seconds before 0:00).** Four real incidents in which the
+reading already existed and sat in the wrong office, over the signal-to-warning graphic in
+`docs/media/`. Voice-over, dates, sources and the demo moment each incident earns are in
+[demo-intro.md](demo-intro.md). It ends on *"this is a tool for the person whose job is to
+make sure it doesn't"*, which hands straight to the next line.
+
 **0:00–0:15 — Name the user.** Say it before anything is on screen: *"This is a review
 console for a data steward at a municipal water authority in a OneAquaHealth pilot city.
 Readings reach her as CSV rows, French laboratory labels, a bulletin, a citizen's word that
@@ -82,9 +88,13 @@ now**. Real laboratory analyses from the Garonne inside Toulouse arrive, keyless
 French labels and units exactly as the laboratory wrote them: `Conductivité à 25°C 277
 µS/cm`, `Oxygène dissous 11.5 mg(O2)/L`, `Nitrates 3.9 mg(NO3)/L`. Each is coded through the
 same catalog, each cites its source record, each carries a **live** chip, and each is
-`pending`. Point at the E. coli row: `179 n/(100mL)` is withheld, because whether that count
-is MPN or CFU depends on the method and the connector does not guess. Press **List recent
-scenes** for the same reach: the Sentinel-2 products that covered it this month, with cloud
+`pending`. Nine parameters come back for the Toulouse stations (conductivity, oxygen,
+nitrates, nitrites, ammonium, total phosphorus, suspended solids, pH, temperature) and every
+one resolves to a UCUM quantity through a reviewed factor: `mg(NO3)/L`, `mg(O2)/L`,
+`unité pH` and `°C` are all catalog spellings, not guesses. The Toulouse stations report no
+E. coli series; if a station does, Hub'Eau's `n/(100mL)` is withheld because whether that
+count is MPN or CFU depends on the method, and the card shows the Sandre method the
+laboratory reported so the reviewer can decide. Press **List recent scenes** for the same reach: the Sentinel-2 products that covered it this month, with cloud
 cover, from the Copernicus catalogue.
 
 **3:30–4:10 — A failed sensor cannot raise an alert.** Open the edge-case card for

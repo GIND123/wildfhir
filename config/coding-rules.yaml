@@ -123,7 +123,10 @@ rules:
   # equating them is the class of error this bridge exists to prevent. An MPN
   # result therefore arrives as an unresolved unit for a reviewer to decide.
   # Hub'Eau's n/(100mL) is absent for the same reason: the method decides
-  # whether it is MPN or CFU, and the connector does not guess.
+  # whether it is MPN or CFU, and the connector does not guess. It records
+  # the Sandre analysis method on the reading (raw_payload.analysis_method)
+  # so the reviewer can. Hub'Eau's explicit spellings are handled: UFC/100mL
+  # is CFU and converts; NPP/100mL is MPN and is withheld like MPN/100mL.
   - code: coliforms
     display: Coliforms
     aliases: [coliforms, total coliforms, faecal coliforms, fecal coliforms, e coli, escherichia coli, escherichia coli (e. coli)]

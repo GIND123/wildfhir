@@ -154,6 +154,13 @@ def test_mpn_cannot_be_suggested_as_cfu(service):
     assert service.suggest_unit_conversion(proposal.id, "coliforms").status == "unavailable"
 
 
+def test_french_npp_cannot_be_suggested_as_cfu(service):
+    proposal = prepare(service, answer(
+        interpreted_unit="NPP/100mL", target_unit="{cfu}/dL", factor=1, offset=0,
+    ), code="coliforms", source="NPP/100mL", value=980)
+    assert service.suggest_unit_conversion(proposal.id, "coliforms").status == "unavailable"
+
+
 def test_intake_mpn_interpretation_is_refused_without_failing_ingestion(service):
     service.coding_agent = GeminiCodingAgent(service.catalog, FakeGemini([gemini_says(
         code="coliforms", unit_code="CFU/100mL",

@@ -510,3 +510,37 @@ class ConnectorStatus(BaseModel):
     detail: str
     api_base: str
     sites: list[dict[str, Any]] = Field(default_factory=list)
+
+
+
+class IncidentRunFixture(BaseModel):
+    """One fixture's share of a full-round run."""
+
+    id: str
+    title: str
+    rows: int
+    coded: int
+    withheld: int
+    refused: int
+    approved: int
+    rejected: int
+    alerts: int
+
+
+class IncidentRunReport(BaseModel):
+    """What happened when a fixture was loaded and driven through the whole round:
+    proposal, human decision, FHIR build, policy, routing, chain."""
+
+    dataset: str
+    title: str
+    reviewer: str
+    loaded: int
+    approved: int
+    rejected: int
+    alerts: list[Alert] = Field(default_factory=list)
+    audiences: list[str] = Field(default_factory=list)
+    fixtures: list[IncidentRunFixture] = Field(default_factory=list)
+    proposal_ids: list[str] = Field(default_factory=list)
+    chain: ChainVerification
+    fhir_write_mode: str
+    duration_ms: int

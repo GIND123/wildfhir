@@ -135,7 +135,7 @@ The prototype keeps its review queue, alerts, and provenance in SQLite. HAPI use
 **Known limits, tracked rather than hidden:**
 
 - **Sentinel-2 NDCI is implemented against the documented Statistical API but not verified live here.** Scene listing is verified against the real catalogue. Computing an index needs a Copernicus OAuth client, which this repository does not ship; the request and response shapes are tested against recorded payloads.
-- **Hub'Eau E. coli arrives as `n/(100mL)` and is withheld.** Whether that count is MPN or CFU depends on the laboratory method, and the connector does not guess; a reviewer decides. Total phosphorus as `mg(P2O5)/L` is withheld for the same reason.
+- **Hub'Eau E. coli arrives as `n/(100mL)` and is withheld.** Whether that count is MPN or CFU depends on the laboratory method, and the connector does not guess; it records the Sandre analysis method on the reading and a reviewer decides. Total phosphorus as `mg(P2O5)/L` is withheld for the same reason.
 - **The human leg has no cohort.** The IG's health measure can point at a `Group` (age band, sex); this bridge publishes the whole-district rate and no `Group`. The IG also has no concept for livestock, so the animal side of Havelock North (sheep) cannot be coded at all; it is in the gap list.
 - **Environmental LOINC coverage is genuinely incomplete.** No LOINC term exists for dissolved oxygen or water temperature in an environmental specimen, nor for NDCI. The crosswalk returns nothing rather than a wrong code.
 - **SNOMED CT candidates are unvalidated.** LOINC results are checked against the published term table; SNOMED concept ids are passed through, because this repository does not vendor the SNOMED release.

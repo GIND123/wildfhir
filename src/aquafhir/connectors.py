@@ -150,6 +150,13 @@ HUBEAU_FIELDS = ",".join(
         "mnemo_remarque",
         "code_prelevement",
         "nom_producteur",
+        # Sandre analysis method. It is what decides whether a microbiological
+        # count in the method-neutral unit n/(100mL) is an MPN (NF EN ISO
+        # 9308-3, Sandre 334; ISO 9308-2, Sandre 1150) or a plate count, so it
+        # is recorded on every live reading for the reviewer. Sandre 0 means
+        # the laboratory did not report a method.
+        "code_methode_analyse",
+        "nom_methode_analyse",
         "longitude",
         "latitude",
     ]
@@ -269,6 +276,8 @@ class HubEauClient(_HttpMixin):
                         "pilot_city": configured.get("pilot_city"),
                         "sandre_parameter": row.get("code_parametre"),
                         "sandre_unit": row.get("code_unite"),
+                        "analysis_method": row.get("code_methode_analyse"),
+                        "analysis_method_name": row.get("nom_methode_analyse"),
                         "fraction": row.get("libelle_fraction"),
                         "producer": row.get("nom_producteur"),
                         "sample": row.get("code_prelevement"),

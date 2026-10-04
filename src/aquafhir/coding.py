@@ -256,7 +256,16 @@ class ReviewedCodingAgent:
 
     @staticmethod
     def canonical_unit(unit: str, rule: dict[str, Any]) -> str:
-        """Resolve explicit spelling aliases without folding case-sensitive SI prefixes."""
+        """Resolve explicit spelling aliases without folding case-sensitive SI prefixes.
+
+        Only spellings with exactly one physical meaning are folded: whitespace,
+        the micro sign versus the letter u, lower-case litre (UCUM lists `l` and
+        `L` as the same unit), lower-case CFU, the French `UFC` (unités formant
+        colonie, the same colony count), and word spellings of Celsius.
+        `MG/L` stays unresolved on purpose: in UCUM `M` is mega, and guessing
+        that a shouting export meant milligrams is exactly the kind of silent
+        scale change this bridge exists to refuse.
+        """
         known = ReviewedCodingAgent.known_units_for_rule(rule)
         compact = re.sub(r"\s+", "", unit).replace("\u00b5", "u").replace("\u03bc", "u")
         aliases = {
@@ -266,9 +275,48 @@ class ReviewedCodingAgent:
             "celsius": "Cel",
             "degC": "Cel",
             "pH": "[pH]",
+            "pHunit": "[pH]",
+            "pHunits": "[pH]",
+            "unit\u00e9pH": "unit\u00e9 pH",
+            "unitepH": "unit\u00e9 pH",
+            "ppb": "[ppb]",
+            "per100000": "{cases}/100000",
+            "per100,000": "{cases}/100000",
+            "/100000": "{cases}/100000",
+            "/100,000": "{cases}/100000",
+            "cases/100000": "{cases}/100000",
+            "cases/100,000": "{cases}/100000",
         }
-        candidate = aliases.get(compact, compact)
-        return candidate if candidate in known else unit
+        # Word spellings of a unit are case-insensitive; symbols are not.
+        word_aliases = {
+            "celsius": "Cel",
+            "degc": "Cel",
+            "degreescelsius": "Cel",
+            "degreecelsius": "Cel",
+            "\u00b0c": "Cel",
+            "us/cm": "uS/cm",
+            # A band-ratio index is dimensionless; UCUM writes that as `1`.
+            # Only folded for a rule whose accepted unit is `1` (see `known`).
+            "index": "1",
+            "dimensionless": "1",
+            "unitless": "1",
+        }
+        candidates = [aliases.get(compact, compact)]
+        lowered = word_aliases.get(compact.casefold())
+        if lowered:
+            candidates.append(lowered)
+        # UCUM: `l` and `L` are both the litre, so a lower-case denominator is a
+        # spelling, not a scale. The prefix in front of it is left untouched.
+        litre_fixed = re.sub(r"(/(?:100)?[mdc]?)l$", lambda m: m.group(1) + "L", compact)
+        litre_fixed = re.sub(r"^cfu(?=/)", "CFU", litre_fixed)
+        litre_fixed = re.sub(r"^ufc(?=/)", "CFU", litre_fixed, flags=re.IGNORECASE)
+        litre_fixed = re.sub(r"^\{cfu\}", "{cfu}", litre_fixed)
+        if litre_fixed != compact:
+            candidates.append(aliases.get(litre_fixed, litre_fixed))
+        for candidate in candidates:
+            if candidate in known:
+                return candidate
+        return unit
 
     @classmethod
     def normalize_unit(
@@ -303,6 +351,10 @@ class ReviewedCodingAgent:
             converted = value * float(conversion["factor"])
             target = conversion["target"]
             note = f"Converted from {unit}."
+        # A source that wrote -0.0 (or a factor that underflowed to it) must
+        # not publish a signed zero: FHIR readers treat "-0.0" as a value.
+        if converted == 0:
+            converted = 0.0
 
         if unit != original_unit:
             note = f"Recognized '{original_unit}' as '{unit}' using a reviewed alias. {note}"
@@ -346,7 +398,22 @@ class ReviewedCodingAgent:
 
 
 def range_violation(value: float, unit: str, rule: dict[str, Any]) -> str | None:
-    """Describe why a normalized quantity is outside its reviewed bounds, or None."""
+    """Describe why a normalized quantity is outside its reviewed bounds, or None.
+
+    A count (`{count}`, `{cfu}/dL`, `{cases}/100000` share the annotation
+    form) is also held to being a whole number when its unit is a bare count:
+    12.5 dead fish is not a measurement any source can have made.
+    """
+    if value != value or value in (float("inf"), float("-inf")):
+        return (
+            f"Normalized value {value!r} {unit} is not a finite number; "
+            "quantity withheld for reviewer correction."
+        )
+    if unit == "{count}" and value != int(value):
+        return (
+            f"Normalized value {value:g} {unit} is not a whole number; a count cannot "
+            "be fractional, so the quantity is withheld for reviewer correction."
+        )
     limits = rule.get("plausible_range")
     if not limits:
         return None

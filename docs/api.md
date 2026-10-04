@@ -20,7 +20,8 @@ Interactive documentation is available at `/docs`; the OpenAPI document is `/ope
 | `GET` | `/api/v1/proposals/{id}` | Read one proposal | no | no |
 | `GET` | `/api/v1/proposals/{id}/terminology-suggestions` | Suggest real LOINC/SNOMED CT candidates for the proposal's OAH code | no | optional |
 | `GET` | `/api/v1/proposals/{id}/taxon-suggestions` | Suggest a GBIF Backbone taxon for the organism named in the source label | no | no |
-| `POST` | `/api/v1/replay` | Load `data/oder-replay.csv` as pending proposals | optional | no |
+| `POST` | `/api/v1/replay?dataset=` | Load a fixture as pending proposals: `oder-replay` (default, `data/oder-replay.csv`) or `incidents` (`data/incidents.csv`, the twelve real incidents from the catalogue in one file). Each proposal's `raw_payload` names its `replay_source` and `incident_fixture` | optional | no |
+| `POST` | `/api/v1/replay/run?dataset=&reviewer=` | Load a fixture and drive it through the whole round under the named reviewer: publishable rows approved (FHIR build, policy, routing), the rest rejected with the pipeline's reason, chain verified; returns an `IncidentRunReport` with per-incident counts and the alerts | optional | no |
 | `POST` | `/api/v1/intake` | Extract readings from an unstructured note | **yes** | no |
 | `GET` | `/api/v1/proposals/{id}/normalization?code=` | What approving under a given catalog code would publish, with the formula | no | no |
 | `GET` | `/api/v1/proposals/{id}/observation` | The stored Observation and FHIR receipt for an approved proposal | no | no |
