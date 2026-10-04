@@ -199,13 +199,23 @@ def build_service(settings: Settings) -> BridgeService:
 async def lifespan(app: FastAPI):
     settings = get_settings()
     app.state.service = build_service(settings)
-    if settings.seed_demo_board:
+    # Reported by /api/v1/health: a seed that fails is swallowed below so the
+    # console still starts, and without this an empty board gives a hosted
+    # deployment no way to say why it is empty.
+    app.state.board_seed = "off"
+    if settings.should_seed_demo_board:
         try:
             counts = app.state.service.seed_demo_board()
-        except Exception:  # a failed seed must never keep the console from starting
+        except Exception as error:  # a failed seed must never keep the console from starting
             logger.exception("Seeding the demo board failed; starting with what is stored")
+            app.state.board_seed = f"failed: {error}"
         else:
             logger.info("Demo board seed: %s", counts)
+            app.state.board_seed = (
+                ", ".join(f"{name} {total}" for name, total in counts.items())
+                if counts["loaded"] or counts["approved"] or counts["rejected"]
+                else "already loaded"
+            )
     yield
 
 
@@ -332,10 +342,11 @@ Service = Annotated[BridgeService, Depends(get_service)]
 
 
 @app.get("/api/v1/health")
-def health(service: Service) -> dict[str, Any]:
+def health(request: Request, service: Service) -> dict[str, Any]:
     settings = get_settings()
     return {
         "status": "ok",
+        "board_seed": getattr(request.app.state, "board_seed", "off"),
         "fhir_write_mode": "enabled" if settings.fhir_write_enabled else "dry-run",
         "threshold_policy": service.thresholds.policy_id,
         "threshold_policy_status": service.thresholds.status,

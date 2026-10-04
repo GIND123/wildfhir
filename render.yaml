@@ -2,6 +2,9 @@
 # FHIR stays in dry-run. The free plan has no persistent disk: every deploy or
 # restart starts from an empty database, and SEED_DEMO_BOARD reloads the twelve
 # incidents so the board always shows pending, approved and rejected cards.
+# The variable is belt and braces -- a service that never picked up this
+# blueprint still seeds, because Render sets RENDER=true itself and the app
+# reads that as "this is the hosted demo" (see config.should_seed_demo_board).
 services:
   - type: web
     name: aquafhir

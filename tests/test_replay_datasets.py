@@ -140,3 +140,69 @@ def test_startup_seeds_the_board_only_when_asked(monkeypatch, tmp_path):
     monkeypatch.setattr(main, "get_settings", lambda: plain)
     with TestClient(main.app) as client:
         assert client.get("/api/v1/proposals").json() == []
+
+
+def test_the_seed_tops_up_a_column_that_would_open_empty(service, settings_without_key):
+    """A shared demo whose visitors decided everything still opens with cards.
+
+    The load pass skips readings the board already holds, so on its own it
+    would leave such a board exactly as the visitors left it: loaded, and
+    missing a column.
+    """
+    client = client_for(service)
+    # The board a visitor leaves behind by pressing the replay button: every
+    # reading loaded, nothing reviewed, so two of the three columns are empty.
+    client.post("/api/v1/replay", params={"dataset": "incidents"})
+    assert {p["status"] for p in client.get("/api/v1/proposals", params={"limit": 500}).json()} == {
+        "pending"
+    }
+
+    service.seed_demo_board()
+
+    proposals = client.get("/api/v1/proposals", params={"limit": 500}).json()
+    counts: dict[str, int] = {}
+    for proposal in proposals:
+        counts[proposal["status"]] = counts.get(proposal["status"], 0) + 1
+    assert all(counts.get(column) for column in ("pending", "approved", "rejected"))
+    # One publishable reading per incident stays pending, the shape a fresh
+    # seed leaves, and no reading is shown twice.
+    assert counts["pending"] >= 12
+    assert not any(p["duplicate_of"] for p in proposals)
+
+
+def test_the_seed_refills_pending_after_every_card_was_decided(service, settings_without_key):
+    client = client_for(service)
+    service.seed_demo_board()
+    for proposal in client.get("/api/v1/proposals", params={"limit": 500}).json():
+        if proposal["status"] == "pending":
+            client.post(
+                f"/api/v1/proposals/{proposal['id']}/approve", json={"reviewer": "judge@x.org"}
+            )
+    assert not [
+        p
+        for p in client.get("/api/v1/proposals", params={"limit": 500}).json()
+        if p["status"] == "pending"
+    ]
+
+    service.seed_demo_board()
+
+    proposals = client.get("/api/v1/proposals", params={"limit": 500}).json()
+    assert [p for p in proposals if p["status"] == "pending"]
+    assert not any(p["duplicate_of"] for p in proposals)
+
+
+def test_a_render_service_seeds_itself_without_the_setting(monkeypatch, tmp_path):
+    """RENDER is set by Render itself, so the hosted board fills even if the
+    dashboard predates render.yaml and never carried SEED_DEMO_BOARD."""
+    hosted = Settings(_env_file=None, database_path=tmp_path / "hosted.db", render=True)
+    assert hosted.should_seed_demo_board and not hosted.seed_demo_board
+    monkeypatch.setattr(main, "get_settings", lambda: hosted)
+    main.app.dependency_overrides.clear()
+
+    with TestClient(main.app) as client:
+        listed = client.get("/api/v1/proposals", params={"limit": 500}).json()
+        health = client.get("/api/v1/health").json()
+
+    assert {p["status"] for p in listed} == {"pending", "approved", "rejected"}
+    # An empty board has to be able to say why, so the seed reports itself.
+    assert "loaded 83" in health["board_seed"]

@@ -59,6 +59,10 @@ from aquafhir.unit_assist import suggest_unit
 INCIDENTS = "incidents"
 DEMO_SEED_REVIEWER = "demo-seed@aquafhir.example"
 ODER_REPLAY = "oder-replay"
+# The three board columns a demo boot guarantees are not empty.
+_DEMO_COLUMNS = ("pending", "approved", "rejected")
+# Both fixtures together are under a hundred rows, so one scan sees the board.
+_DEMO_BOARD_SCAN = 1000
 
 logger = logging.getLogger(__name__)
 
@@ -258,8 +262,9 @@ class BridgeService:
         its publishable readings are approved through the normal review gate,
         and readings that cannot be published are rejected with the reason the
         pipeline gave. Curated rules only, so a boot never spends model calls.
-        Readings already on the board are skipped, which makes this a no-op on
-        every boot after the first one that shares the database.
+        Readings already on the board are skipped, so a boot that shares a
+        database adds nothing and the same reading never appears twice. What it
+        does still do is top up an empty column: see `_top_up_demo_board`.
         """
         counts = {"loaded": 0, "pending": 0, "approved": 0, "rejected": 0}
         if self.incidents_path is None or not self.incidents_path.exists():
@@ -284,7 +289,65 @@ class BridgeService:
                     continue
             self.reject(proposal.id, RejectDecision(reviewer=reviewer, reason=reason))
             counts["rejected"] += 1
+        self._top_up_demo_board(reviewer, counts)
         return counts
+
+    def _top_up_demo_board(self, reviewer: str, counts: dict[str, int]) -> None:
+        """Decide leftover pending rows so no column opens empty.
+
+        The load pass above skips readings the board already holds, which is
+        what keeps the board free of duplicates but also makes it powerless on
+        a board that is loaded and lopsided: a shared demo whose visitors
+        approved every pending card, or a database that outlived the deploy
+        that seeded it. Here the undecided rows left on such a board are put
+        through the same review gate the load pass uses, holding back one
+        publishable reading per incident exactly as the load pass does, so the
+        pending column ends up the shape a fresh board has. A board whose three
+        columns are already filled -- every fresh deployment -- is left alone.
+        """
+        stored = self.repository.count_proposals_by_status()
+        if all(stored.get(column) for column in _DEMO_COLUMNS):
+            return
+        # Only rows the board has never seen come back, so a thin board gains
+        # cards without gaining a duplicate; a fully loaded one gains nothing.
+        restocked: set[str] = set()
+        for dataset in (INCIDENTS, ODER_REPLAY):
+            try:
+                fresh = self.replay(dataset=dataset, proposer=self.catalog)
+            except FileNotFoundError:
+                continue
+            counts["loaded"] += len(fresh)
+            restocked.update(item.id for item in fresh)
+        held: set[str] = set()
+        decided: set[str] = set()
+        for proposal in self.repository.list_proposals(_DEMO_BOARD_SCAN):
+            if proposal.status is not ReviewStatus.PENDING:
+                continue
+            outcome, reason = _replay_outcome(proposal)
+            column = "approved" if outcome == "coded" else "rejected"
+            fixture = str(proposal.reading.raw_payload.get("incident_fixture", INCIDENTS))
+            if outcome == "coded" and fixture not in held:
+                held.add(fixture)
+                continue
+            if not held:
+                # Nothing publishable came first: keep one card either way.
+                held.add(fixture)
+                continue
+            if stored.get(column):
+                continue
+            if outcome == "coded":
+                try:
+                    self.approve(proposal.id, ReviewDecision(reviewer=reviewer))
+                except ValueError as error:
+                    reason = f"Approval refused by the server: {error}"
+                else:
+                    counts["approved"] += 1
+                    decided.add(proposal.id)
+                    continue
+            self.reject(proposal.id, RejectDecision(reviewer=reviewer, reason=reason))
+            counts["rejected"] += 1
+            decided.add(proposal.id)
+        counts["pending"] += len(restocked - decided)
 
 
     def ingest_unstructured(self, request: IntakeRequest) -> IntakeResult:

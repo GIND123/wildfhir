@@ -38,6 +38,13 @@ class Settings(BaseSettings):
     # rejected cards straight away. Off by default: local runs and tests start
     # from whatever database they already have.
     seed_demo_board: bool = False
+    # Read from RENDER, which Render sets to "true" in every service it runs.
+    # A service created before render.yaml existed never picked up the
+    # SEED_DEMO_BOARD line from the blueprint, and the symptom is the one thing
+    # a hosted demo cannot afford: an empty board on the page a visitor opens
+    # first. Treat "running on Render" as reason enough to seed, so the hosted
+    # board fills itself whether or not the dashboard carries the variable.
+    render: bool = False
 
     # --- Gemini co-pilot -------------------------------------------------
     # The key is read from GEMINI_API_KEY. An absent key disables every AI
@@ -123,6 +130,11 @@ class Settings(BaseSettings):
     )
     cdse_timeout_seconds: float = 60.0
     cdse_max_retries: int = 2
+
+    @property
+    def should_seed_demo_board(self) -> bool:
+        """Whether startup fills the board. Explicit setting, or any Render service."""
+        return self.seed_demo_board or self.render
 
     @property
     def cdse_enabled(self) -> bool:

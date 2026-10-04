@@ -390,13 +390,15 @@
     const f = state.filters.board;
     const shown = applyProposalFilters(state.proposals, f);
     const cols = [
-      { s: "pending", title: "Pending review", hint: "Drag a card to Approved or Rejected, or open it." },
+      // `hint` is the column's empty state, so each one reads as what to do
+      // next rather than as instructions for cards that are not there.
+      { s: "pending", title: "Pending review", hint: "Nothing waiting. Load the incidents from Data flow, or pull live readings from Hub'Eau." },
       { s: "approved",
         title: state.health.fhir_write_mode === "enabled" ? "Approved · published" : "Approved · built (dry run)",
         hint: state.health.fhir_write_mode === "enabled"
           ? "Approved mappings are sent to HAPI as OAH Observations."
           : "Approved mappings are built and stored locally. Nothing is sent while FHIR_WRITE_ENABLED is false." },
-      { s: "rejected", title: "Rejected", hint: "Decisions are immutable and hash-chained." },
+      { s: "rejected", title: "Rejected", hint: "Nothing rejected yet. Decisions are immutable and hash-chained." },
     ];
     $("#board").innerHTML = cols.map((c) => {
       const items = shown.filter((p) => p.status === c.s);
