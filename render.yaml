@@ -1,0 +1,28 @@
+# Render Blueprint for the hosted demo console. No HAPI server runs here, so
+# FHIR stays in dry-run. The free plan has no persistent disk: every deploy or
+# restart starts from an empty database, and SEED_DEMO_BOARD reloads the twelve
+# incidents so the board always shows pending, approved and rejected cards.
+services:
+  - type: web
+    name: aquafhir
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: PORT
+        value: "8000"
+      - key: DATABASE_PATH
+        value: /data/aquafhir.db
+      - key: FHIR_WRITE_ENABLED
+        value: "false"
+      - key: SEED_DEMO_BOARD
+        value: "true"
+      - key: WEBHOOK_SHARED_SECRET
+        generateValue: true
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.1-flash-lite
+      - key: UMLS_API_KEY
+        sync: false

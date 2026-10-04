@@ -11,12 +11,25 @@ from aquafhir.models import (
     ChainVerification,
     MappingProposal,
     ProvenanceEntry,
+    RawReading,
     UnitSuggestionResult,
 )
 
 
 def _canonical(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def reading_key(reading: RawReading) -> tuple:
+    """The six fields that identify one measurement event."""
+    return (
+        reading.source_id,
+        reading.site_code,
+        reading.parameter,
+        reading.observed_at,
+        reading.value,
+        reading.unit,
+    )
 
 
 class Repository:
@@ -185,24 +198,25 @@ class Repository:
         deliberately *not* treated as duplicates: that is a conflict for a
         reviewer to see, not something to merge away.
         """
-        reading = proposal.reading
+        key = reading_key(proposal.reading)
         with self._connect() as connection:
             rows = connection.execute(
                 "SELECT id, document FROM proposals WHERE id != ? ORDER BY created_at",
                 (proposal.id,),
             ).fetchall()
         for row in rows:
-            other = MappingProposal.model_validate_json(row["document"]).reading
-            if (
-                other.source_id == reading.source_id
-                and other.site_code == reading.site_code
-                and other.parameter == reading.parameter
-                and other.observed_at == reading.observed_at
-                and other.value == reading.value
-                and other.unit == reading.unit
-            ):
+            if reading_key(MappingProposal.model_validate_json(row["document"]).reading) == key:
                 return row["id"]
         return None
+
+    def reading_keys(self) -> set[tuple]:
+        """The identity of every reading already ingested, for skipping re-loads."""
+        with self._connect() as connection:
+            rows = connection.execute("SELECT document FROM proposals").fetchall()
+        return {
+            reading_key(MappingProposal.model_validate_json(row["document"]).reading)
+            for row in rows
+        }
 
     def save_alert(self, alert: Alert) -> bool:
         with self._connect() as connection:

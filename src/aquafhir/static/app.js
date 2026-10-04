@@ -447,7 +447,7 @@
         <td class="nowrap dim" title="${esc(fdate(p.reading.observed_at))}">${esc(fdate(p.reading.observed_at).slice(0, 16))}</td>
         <td class="nowrap">${p.reviewer ? `<span class="avatar" title="${esc(p.reviewer)}" style="display:inline-grid;vertical-align:middle">${esc(initials(p.reviewer))}</span> <span class="dim">${esc(p.reviewer)}</span>` : '<span class="dim">Unassigned</span>'}</td>
       </tr>`).join("")
-      : `<tr><td colspan="10"><div class="empty" style="box-shadow:none"><b>No proposals match</b>${state.proposals.length ? "Adjust the filters above." : "Create a reading or load the Oder replay."}</div></td></tr>`;
+      : `<tr><td colspan="10"><div class="empty" style="box-shadow:none"><b>No proposals match</b>${state.proposals.length ? "Adjust the filters above." : "Create a reading or load the incidents."}</div></td></tr>`;
 
     const counts = { pending: 0, approved: 0, rejected: 0 };
     state.proposals.forEach((p) => { counts[p.status] = (counts[p.status] || 0) + 1; });
@@ -1043,7 +1043,7 @@
         </div>
       </div>
       ${unres && p.status === "pending" ? `<div class="sec"><div class="note">${icon("alert")}<span>Approval needs a publishable value: a UCUM quantity, or a concept from the indicator's reviewed value set. Use <b>Approve</b> and tick <i>Enter an expert correction</i> to supply it.</span></div></div>` : ""}
-      ${isLive(p) ? `<div class="sec"><div class="note ok">${icon("check")}<span><b>Live reading.</b> Pulled from ${esc(r.raw_payload.connector === "hubeau" ? "Hub'Eau (French national water open data)" : "the Copernicus Data Space Ecosystem")}${r.raw_payload.pilot_city ? `, ${esc(r.raw_payload.pilot_city)}, a OneAquaHealth pilot city` : ""}. The label and unit are exactly what the source returned.${r.evidence_url ? ` <a href="${esc(r.evidence_url)}" target="_blank" rel="noreferrer">Source record ${icon("external")}</a>` : ""}</span></div></div>` : ""}
+      ${isLive(p) ? `<div class="sec"><div class="note ok">${icon("check")}<span><b>Live reading.</b> Pulled from ${esc(r.raw_payload.connector === "hubeau" ? "Hub'Eau (French national water open data)" : "the Copernicus Data Space Ecosystem")}${r.raw_payload.pilot_city ? `, ${esc(r.raw_payload.pilot_city)}, a OneAquaHealth pilot city` : ""}. The label and unit are exactly what the source returned.${r.raw_payload.analysis_method_name ? ` Analysis method: ${esc(r.raw_payload.analysis_method_name)} (Sandre ${esc(String(r.raw_payload.analysis_method ?? "?"))}).` : ""}${r.evidence_url ? ` <a href="${esc(r.evidence_url)}" target="_blank" rel="noreferrer">Source record ${icon("external")}</a>` : ""}</span></div></div>` : ""}
       <div class="sec"><h4>Rationale</h4><p class="quote">${esc(p.rationale)}</p></div>
       ${p.candidates?.length ? `<div class="sec"><h4>Candidates considered</h4><div class="chips">${p.candidates.map((c) => `<span class="chipbtn ${p.coding?.code === c.code ? "is-on" : ""}" title="${esc(c.origin)}"><span class="mono">${esc(c.code)}</span><span class="dim">${Math.round(c.score * 100)}%</span></span>`).join("")}</div></div>` : ""}
       ${p.secondary_coding ? `<div class="sec"><h4>Second coding ${builtWord()}</h4><p>${tagm(p.secondary_coding.code)} ${esc(p.secondary_coding.display)} <span class="dim mono">${esc(p.secondary_coding.system)}</span></p></div>` : ""}
@@ -1429,12 +1429,40 @@
     createTab = tab;
     $$("#create-tabs .tab").forEach((t) => t.classList.toggle("is-active", t.dataset.ct === tab));
     $$("#modal-create [data-ct]:not(.tab)").forEach((f) => { f.hidden = f.dataset.ct !== tab; });
-    $("#create-submit").textContent = { reading: "Create proposal", bulletin: "Extract readings", replay: "Load 5 readings", live: "Pull Hub'Eau now" }[tab];
+    $("#create-submit").textContent = { reading: "Create proposal", bulletin: "Extract readings", replay: "Load readings", live: "Pull Hub'Eau now" }[tab];
     const hub = (state.connectors || []).find((c) => c.name === "hubeau");
     $("#create-submit").disabled = (tab === "bulletin" && !state.ai.enabled) || (tab === "live" && !(hub && hub.live));
-    $("#create-foot-hint").textContent = tab === "bulletin" && !state.ai.enabled ? "Bulletin intake needs GEMINI_API_KEY." : tab === "reading" ? "Lands in the queue as pending. Nothing is published." : tab === "live" ? "Real readings, queued as pending. A live source gets no shortcut past review." : "";
+    $("#create-foot-hint").textContent = tab === "bulletin" && !state.ai.enabled ? "Bulletin intake needs GEMINI_API_KEY." : tab === "reading" ? "Lands in the queue as pending. Nothing is published." : tab === "live" ? "Real readings, queued as pending. A live source gets no shortcut past review." : tab === "replay" ? "A full round on the twelve incidents takes about two minutes with the co-pilot enabled; keep the dialog open." : "";
     if (tab === "live") renderLiveTab();
-    if (tab === "replay") $("#replay-preview").innerHTML = `<p>Five synthetic readings across two sites, 24–29 July 2022: conductivity, NDCI, and dissolved oxygen. Three cross the demo policy once approved.</p><p class="quote dim">Loading the replay again creates a second set of proposals; the dataset is not de-duplicated.</p>`;
+    if (tab === "replay") renderReplayTab();
+  }
+  const REPLAY_SETS = {
+    incidents: { rows: 83, text: "Eighty-three synthetic readings shaped around the published record of twelve incidents, Oder 2022 to Brixham 2024, exactly the rows in data/incidents/*.csv. Expected with no model key: 66 coded, 3 withheld, 14 refused; every incident raises at least one routed alert once approved. Where the co-pilot is consulted the run takes about a minute." },
+    "oder-replay": { rows: 5, text: "Five synthetic readings across two sites, 24–29 July 2022: conductivity, NDCI, and dissolved oxygen. Three cross the demo policy once approved." },
+  };
+  function renderReplayTab() {
+    const select = $("#replay-dataset");
+    if (!select.dataset.ready) { select.addEventListener("change", renderReplayPreview); $("#replay-run").addEventListener("change", renderReplayPreview); select.dataset.ready = "1"; }
+    renderReplayPreview();
+  }
+  function renderReplayPreview() {
+    const d = REPLAY_SETS[$("#replay-dataset").value] || REPLAY_SETS.incidents;
+    $("#create-submit").textContent = `${$("#replay-run").checked ? "Run full round on" : "Load"} ${d.rows} readings`;
+    $("#replay-preview").innerHTML = `<p>${esc(d.text)}</p><p class="quote dim">Readings already on the board are skipped, so loading a dataset again never shows the same reading twice.</p>`;
+  }
+  function renderReplayResult(r) {
+    const byRule = new Map();
+    r.alerts.forEach((a) => { const k = `${a.rule_code}|${a.severity}`; const e = byRule.get(k) || { rule: a.rule_code, severity: a.severity, n: 0, audiences: a.audiences, sites: new Set() }; e.n += 1; a.site_code && e.sites.add(a.site_code); byRule.set(k, e); });
+    const rules = [...byRule.values()].sort((a, b) => ({ critical: 0, high: 1, moderate: 2 }[a.severity] ?? 3) - ({ critical: 0, high: 1, moderate: 2 }[b.severity] ?? 3));
+    const fx = r.fixtures.length > 1 ? `<table class="tbl" style="margin-top:10px"><thead><tr><th>Incident</th><th class="n">Rows</th><th class="n">Coded</th><th class="n">Withheld</th><th class="n">Refused</th><th class="n">Alerts</th></tr></thead><tbody>${r.fixtures.map((f) => `<tr><td>${esc(f.title)}</td><td class="n">${f.rows}</td><td class="n">${f.coded}</td><td class="n">${f.withheld}</td><td class="n">${f.refused}</td><td class="n">${f.alerts}</td></tr>`).join("")}</tbody></table>` : "";
+    $("#replay-result").innerHTML = `
+      <div class="sec-head" style="margin-top:14px"><h4 class="form-h">Full round · ${esc(r.title)}</h4><span class="dim">${(r.duration_ms / 1000).toFixed(1)} s · reviewer ${esc(r.reviewer)} · FHIR ${esc(r.fhir_write_mode)}</span></div>
+      <div class="chips" style="margin-top:8px">
+        <span class="lz blue">${r.loaded} proposed</span><span class="lz green">${r.approved} approved &amp; built</span><span class="lz amber">${r.rejected} rejected with reason</span><span class="lz ${r.alerts.length ? "bold red" : ""}">${r.alerts.length} alert${r.alerts.length === 1 ? "" : "s"} routed</span><span class="lz ${r.chain.valid ? "green" : "red"}">chain ${r.chain.valid ? "valid" : "INVALID"} · ${r.chain.entries_checked} entries</span>
+      </div>
+      ${rules.length ? `<table class="tbl" style="margin-top:10px"><thead><tr><th>Rule</th><th>Severity</th><th class="n">Fired</th><th>Routed to</th></tr></thead><tbody>${rules.map((x) => `<tr><td><code>${esc(x.rule)}</code></td><td>${sevLz(x.severity)}</td><td class="n">${x.n}</td><td>${x.audiences.map(esc).join(", ")}</td></tr>`).join("")}</tbody></table>` : `<p class="dim" style="margin-top:10px">No policy rule fired for this dataset.</p>`}
+      ${fx}
+      <p class="quote dim" style="margin-top:10px">Every decision above is in the audit log and on the board. Refused and withheld rows are the bridge declining to guess.</p>`;
   }
   function renderLiveTab() {
     const hub = (state.connectors || []).find((c) => c.name === "hubeau");
@@ -1492,6 +1520,7 @@
     const dt = $("#form-reading [name=observed_at]");
     if (!dt.value) dt.value = new Date().toISOString().slice(0, 16);
     $("#bulletin-result").innerHTML = "";
+    $("#replay-result").innerHTML = "";
     showCreateTab(tab);
     openModal("modal-create");
   }
@@ -1538,10 +1567,21 @@
       await pullHubEau(button, stations);
     } else {
       await busy(button, async () => {
-        const list = await api("/replay", { method: "POST" });
+        const dataset = $("#replay-dataset").value || "incidents";
+        const chosen = { title: dataset === "incidents" ? "the twelve real incidents" : "the synthetic Oder timeline" };
+        if ($("#replay-run").checked) {
+          $("#replay-result").innerHTML = `<p class="dim" style="margin-top:12px">Running the full round on ${esc(chosen.title)}: proposing, deciding, building, evaluating, routing, verifying…</p>`;
+          const r = await api(`/replay/run?dataset=${encodeURIComponent(dataset)}&reviewer=${encodeURIComponent(reviewer())}`, { method: "POST" });
+          if (!r.loaded) { $("#replay-result").innerHTML = ""; toast(`Every reading in ${chosen.title} is already on the board.`, "ok", { label: "Board", run: () => { closeModals(); go("board"); } }); return; }
+          renderReplayResult(r);
+          await refresh();
+          toast(`${r.loaded} readings run: ${r.approved} approved, ${r.rejected} rejected, ${r.alerts.length} alert${r.alerts.length === 1 ? "" : "s"} routed.`, "ok", { label: "Incidents", run: () => { closeModals(); go("incidents"); } });
+          return;
+        }
+        const list = await api(`/replay?dataset=${encodeURIComponent(dataset)}`, { method: "POST" });
         closeModals();
         await refresh();
-        toast(`Loaded ${list.length} readings from the synthetic Oder timeline.`, "ok", { label: "Board", run: () => go("board") });
+        toast(list.length ? `Loaded ${list.length} readings from ${chosen.title}.` : `Every reading in ${chosen.title} is already on the board.`, "ok", { label: "Board", run: () => go("board") });
       });
     }
   }
@@ -1554,7 +1594,7 @@
     const actions = [
       { group: "Actions", label: "Create reading", icon: "plus", hint: "C", run: () => openCreate("reading") },
       { group: "Actions", label: "Extract from bulletin", icon: "sparkle", run: () => openCreate("bulletin") },
-      { group: "Actions", label: "Load Oder replay", icon: "play", run: () => openCreate("replay") },
+      { group: "Actions", label: "Load incidents (replay dataset)", icon: "play", run: () => openCreate("replay") },
       { group: "Actions", label: "Pull live data (Hub'Eau, Sentinel-2)", icon: "plug", run: () => openCreate("live") },
       { group: "Actions", label: "Approve all pending", icon: "check", run: () => approveMany(state.proposals.filter((p) => p.status === "pending").map((p) => p.id), null) },
       { group: "Actions", label: "Verify hash chain", icon: "shield", run: () => verifyChain(null) },
@@ -1791,6 +1831,7 @@
 
   // board
   $("#btn-replay").addEventListener("click", () => openCreate("replay"));
+  $("#form-bulletin").addEventListener("submit", (e) => { e.preventDefault(); submitCreate($("#create-submit")); });
   $("#btn-approve-all").addEventListener("click", (e) => approveMany(state.proposals.filter((p) => p.status === "pending").map((p) => p.id), e.currentTarget));
   $("#board-search").addEventListener("input", (e) => { state.filters.board.q = e.target.value; renderBoard(); });
   $("#board-site").addEventListener("change", (e) => { state.filters.board.site = e.target.value; renderBoard(); });
@@ -1881,7 +1922,6 @@
   $("#create-tabs").addEventListener("click", (e) => { const t = e.target.closest(".tab"); if (t) showCreateTab(t.dataset.ct); });
   $("#create-submit").addEventListener("click", (e) => submitCreate(e.currentTarget));
   $("#form-reading").addEventListener("submit", (e) => { e.preventDefault(); submitCreate($("#create-submit")); });
-  $("#form-bulletin").addEventListener("submit", (e) => { e.preventDefault(); submitCreate($("#create-submit")); });
   $("#create-value-kind").addEventListener("change", (e) => { const coded = e.target.value === "coded"; $$("#form-reading [data-kind]").forEach((f) => { f.hidden = (f.dataset.kind === "coded") !== coded; }); });
   $("#live-scenes").addEventListener("click", (e) => listScenes(e.currentTarget, $("#live-site").value));
   $("#live-ndci").addEventListener("click", (e) => pullNdci(e.currentTarget, $("#live-site").value));

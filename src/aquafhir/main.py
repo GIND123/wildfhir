@@ -45,6 +45,7 @@ from aquafhir.models import (
     ConnectorPullRequest,
     ConnectorPullResult,
     ConnectorStatus,
+    IncidentRunReport,
     IntakeRequest,
     IntakeResult,
     MappingProposal,
@@ -181,6 +182,7 @@ def build_service(settings: Settings) -> BridgeService:
             gbif=build_gbif_client(settings),
         ),
         replay_path=settings.replay_data_path,
+        incidents_path=settings.incidents_data_path,
         gemini=gemini,
         hubeau=build_hubeau_client(
             settings, connectors.get("hubeau", {}).get("source_id", "hubeau-naiades")
@@ -195,7 +197,15 @@ def build_service(settings: Settings) -> BridgeService:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.service = build_service(get_settings())
+    settings = get_settings()
+    app.state.service = build_service(settings)
+    if settings.seed_demo_board:
+        try:
+            counts = app.state.service.seed_demo_board()
+        except Exception:  # a failed seed must never keep the console from starting
+            logger.exception("Seeding the demo board failed; starting with what is stored")
+        else:
+            logger.info("Demo board seed: %s", counts)
     yield
 
 
@@ -691,14 +701,40 @@ def list_proposals(
 
 
 @app.post(
+    "/api/v1/replay/run",
+    response_model=IncidentRunReport,
+    status_code=status.HTTP_201_CREATED,
+    summary="Load a fixture and drive it through the whole round under a named reviewer",
+)
+def run_replay_dataset(
+    service: Service,
+    reviewer: Annotated[str, Query(min_length=1, max_length=120)],
+    dataset: Annotated[str | None, Query(pattern=r"^(oder-replay|incidents)$")] = None,
+) -> IncidentRunReport:
+    try:
+        return service.run_replay(dataset, reviewer)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.post(
     "/api/v1/replay",
     response_model=list[MappingProposal],
     status_code=status.HTTP_201_CREATED,
-    summary="Load the synthetic Oder timeline as pending proposals",
+    summary="Load a fixture as pending proposals (the synthetic Oder timeline by default)",
 )
-def replay_dataset(service: Service) -> list[MappingProposal]:
+def replay_dataset(
+    service: Service,
+    dataset: Annotated[
+        str | None,
+        Query(
+            pattern=r"^(oder-replay|incidents)$",
+            description="`incidents` loads data/incidents.csv; omitted = the Oder replay",
+        ),
+    ] = None,
+) -> list[MappingProposal]:
     try:
-        return service.replay()
+        return service.replay(dataset=dataset)
     except FileNotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 

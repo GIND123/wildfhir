@@ -30,6 +30,14 @@ class Settings(BaseSettings):
     thresholds_path: Path = Path("config/thresholds.yaml")
     connectors_path: Path = Path("config/connectors.yaml")
     replay_data_path: Path = Path("data/oder-replay.csv")
+    # The twelve real incidents from docs/incidents.md as one file, loadable from
+    # the console's replay button the same way the Oder timeline is.
+    incidents_data_path: Path = Path("data/incidents.csv")
+    # Hosted demos (render.yaml) start from an empty disk. When true, startup
+    # loads the twelve incidents so the board shows pending, approved and
+    # rejected cards straight away. Off by default: local runs and tests start
+    # from whatever database they already have.
+    seed_demo_board: bool = False
 
     # --- Gemini co-pilot -------------------------------------------------
     # The key is read from GEMINI_API_KEY. An absent key disables every AI

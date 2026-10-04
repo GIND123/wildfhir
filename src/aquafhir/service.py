@@ -35,6 +35,8 @@ from aquafhir.models import (
     ConnectorPullRequest,
     ConnectorPullResult,
     ConnectorStatus,
+    IncidentRunFixture,
+    IncidentRunReport,
     IntakeRequest,
     IntakeResult,
     MappingProposal,
@@ -49,10 +51,14 @@ from aquafhir.models import (
     TerminologyMatch,
     UnitSuggestionResult,
 )
-from aquafhir.repository import Repository
+from aquafhir.repository import Repository, reading_key
 from aquafhir.terminology import TerminologyCrosswalk
 from aquafhir.thresholds import ThresholdPolicy
 from aquafhir.unit_assist import suggest_unit
+
+INCIDENTS = "incidents"
+DEMO_SEED_REVIEWER = "demo-seed@aquafhir.example"
+ODER_REPLAY = "oder-replay"
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +112,7 @@ class BridgeService:
         briefing_writer: BriefingWriter | None = None,
         terminology: TerminologyCrosswalk | None = None,
         replay_path: Path | None = None,
+        incidents_path: Path | None = None,
         gemini: "GeminiClient | None" = None,
         hubeau: HubEauClient | None = None,
         copernicus: CopernicusClient | None = None,
@@ -119,6 +126,7 @@ class BridgeService:
         self.briefing_writer = briefing_writer
         self.terminology = terminology
         self.replay_path = replay_path
+        self.incidents_path = incidents_path
         # Held only so status reporting can read the outcome of the last real
         # call. Nothing in the pipeline reaches the model through this handle.
         self.gemini = gemini
@@ -131,10 +139,12 @@ class BridgeService:
 
     # -- ingestion ---------------------------------------------------------
 
-    def propose(self, reading: RawReading) -> MappingProposal:
-        proposal = self.coding_agent.propose(reading)
-        # Flagged, never merged. Replaying a dataset intentionally produces
-        # duplicates, so this warns the reviewer rather than blocking ingestion.
+    def propose(
+        self, reading: RawReading, proposer: CodingProposer | None = None
+    ) -> MappingProposal:
+        proposal = (proposer or self.coding_agent).propose(reading)
+        # Flagged, never merged. A reading created or pulled twice warns the
+        # reviewer rather than blocking ingestion; replays skip them instead.
         proposal.duplicate_of = self.repository.find_duplicate(proposal)
         if proposal.duplicate_of:
             proposal.rationale = (
@@ -148,16 +158,134 @@ class BridgeService:
         self._chain_ai_call(proposal.id, proposal.ai_audit)
         return proposal
 
-    def replay(self, path: Path | None = None) -> list[MappingProposal]:
-        """Load the transparent synthetic Oder timeline as pending proposals."""
-        source = path or self.replay_path
+    def replay(
+        self,
+        path: Path | None = None,
+        dataset: str | None = None,
+        proposer: CodingProposer | None = None,
+    ) -> list[MappingProposal]:
+        """Load a fixture as pending proposals: the synthetic Oder timeline by
+        default, or `incidents` for the twelve real incidents in data/incidents.csv.
+
+        Rows already on the board are skipped, so loading a fixture twice never
+        shows the same incident reading twice. Only the new proposals return."""
+        if path is not None or dataset in (None, "", ODER_REPLAY):
+            fixture_id, source = ODER_REPLAY, (path or self.replay_path)
+        elif dataset == INCIDENTS:
+            fixture_id, source = INCIDENTS, self.incidents_path
+        else:
+            raise FileNotFoundError(f"Replay dataset not found: {dataset}")
         if source is None or not source.exists():
             raise FileNotFoundError(f"Replay dataset not found: {source}")
+        seen = self.repository.reading_keys()
         proposals: list[MappingProposal] = []
         with source.open(encoding="utf-8", newline="") as handle:
             for row in csv.DictReader(handle):
-                proposals.append(self.propose(_reading_from_csv_row(row)))
+                reading = _reading_from_csv_row(row, fixture_id, source)
+                key = reading_key(reading)
+                if key in seen:
+                    continue
+                seen.add(key)
+                proposals.append(self.propose(reading, proposer))
         return proposals
+
+    def run_replay(self, dataset: str | None, reviewer: str) -> IncidentRunReport:
+        """Load a fixture and drive it through the whole round under one named
+        reviewer: publishable rows are approved (FHIR build, policy, routing), the
+        rest are rejected with the reason the pipeline gave, and the chain is
+        verified at the end. Nothing here bypasses the review gate; it exercises it."""
+        started = datetime.now(UTC)
+        proposals = self.replay(dataset=dataset)
+        per_fixture: dict[str, dict[str, int]] = {}
+        titles: dict[str, str] = {}
+        alerts: list[Alert] = []
+        approved = rejected = 0
+        for proposal in proposals:
+            fixture = str(proposal.reading.raw_payload.get("incident_fixture", ODER_REPLAY))
+            titles.setdefault(
+                fixture, str(proposal.reading.raw_payload.get("incident_title") or fixture)
+            )
+            tally = per_fixture.setdefault(
+                fixture,
+                {"rows": 0, "coded": 0, "withheld": 0, "refused": 0,
+                 "approved": 0, "rejected": 0, "alerts": 0},
+            )
+            tally["rows"] += 1
+            outcome, reason = _replay_outcome(proposal)
+            tally[outcome] += 1
+            if outcome == "coded":
+                try:
+                    result = self.approve(proposal.id, ReviewDecision(reviewer=reviewer))
+                except ValueError as error:
+                    reason = f"Approval refused by the server: {error}"
+                else:
+                    approved += 1
+                    tally["approved"] += 1
+                    tally["alerts"] += len(result.alerts)
+                    alerts.extend(result.alerts)
+                    continue
+            self.reject(proposal.id, RejectDecision(reviewer=reviewer, reason=reason))
+            rejected += 1
+            tally["rejected"] += 1
+        fixtures = [
+            IncidentRunFixture(id=fixture, title=titles[fixture], **tally)
+            for fixture, tally in per_fixture.items()
+        ]
+        return IncidentRunReport(
+            dataset=dataset or ODER_REPLAY,
+            title=(
+                "Twelve real incidents (data/incidents.csv)"
+                if dataset == INCIDENTS
+                else "Oder 2022 replay (data/oder-replay.csv)"
+            ),
+            reviewer=reviewer,
+            loaded=len(proposals),
+            approved=approved,
+            rejected=rejected,
+            alerts=alerts,
+            audiences=sorted({audience for alert in alerts for audience in alert.audiences}),
+            fixtures=fixtures,
+            proposal_ids=[item.id for item in proposals],
+            chain=self.repository.verify_chain(),
+            fhir_write_mode="enabled" if self.fhir_client.write_enabled else "dry-run",
+            duration_ms=int((datetime.now(UTC) - started).total_seconds() * 1000),
+        )
+
+    def seed_demo_board(self, reviewer: str = DEMO_SEED_REVIEWER) -> dict[str, int]:
+        """Fill a fresh deployment's board with the twelve incidents in all three columns.
+
+        Each incident keeps its first publishable reading pending, the rest of
+        its publishable readings are approved through the normal review gate,
+        and readings that cannot be published are rejected with the reason the
+        pipeline gave. Curated rules only, so a boot never spends model calls.
+        Readings already on the board are skipped, which makes this a no-op on
+        every boot after the first one that shares the database.
+        """
+        counts = {"loaded": 0, "pending": 0, "approved": 0, "rejected": 0}
+        if self.incidents_path is None or not self.incidents_path.exists():
+            return counts
+        proposals = self.replay(dataset=INCIDENTS, proposer=self.catalog)
+        counts["loaded"] = len(proposals)
+        held: set[str] = set()
+        for proposal in proposals:
+            fixture = str(proposal.reading.raw_payload.get("incident_fixture", INCIDENTS))
+            outcome, reason = _replay_outcome(proposal)
+            if outcome == "coded" and fixture not in held:
+                held.add(fixture)
+                counts["pending"] += 1
+                continue
+            if outcome == "coded":
+                try:
+                    self.approve(proposal.id, ReviewDecision(reviewer=reviewer))
+                except ValueError as error:
+                    reason = f"Approval refused by the server: {error}"
+                else:
+                    counts["approved"] += 1
+                    continue
+            self.reject(proposal.id, RejectDecision(reviewer=reviewer, reason=reason))
+            counts["rejected"] += 1
+        return counts
+
 
     def ingest_unstructured(self, request: IntakeRequest) -> IntakeResult:
         if self.intake is None or not self.intake.available:
@@ -569,7 +697,10 @@ class BridgeService:
         accepted = self.catalog.accepted_units_for_rule(rule)
         if decision.normalized_value is not None:
             value = decision.normalized_value
-            unit = decision.normalized_unit or ""
+            # Spelling only: "mg/l" becomes "mg/L". A source unit such as
+            # "uS/cm" still fails the accepted-unit check below, because an
+            # expert correction states the *published* quantity.
+            unit = self.catalog.canonical_unit((decision.normalized_unit or "").strip(), rule)
             reason = (decision.correction_reason or "").strip()
         else:
             derived, derived_unit, note = self.catalog.normalize_unit(
@@ -906,10 +1037,28 @@ def reading_from_csv_row(row: dict[str, str], raw_payload: dict[str, Any]) -> Ra
     )
 
 
-def _reading_from_csv_row(row: dict[str, str]) -> RawReading:
-    return reading_from_csv_row(
-        row, {"replay_source": "data/oder-replay.csv", "synthetic": True}
-    )
+def _replay_outcome(proposal: MappingProposal) -> tuple[str, str]:
+    """`coded`, `withheld` or `refused`, and the rejection reason for the last two."""
+    if proposal.coding is None:
+        return "refused", "No OAH code: the concept is absent from the temporary code system."
+    if not proposal.has_publishable_value:
+        return "withheld", (
+            "Value withheld: unresolvable unit, implausible value or a word outside "
+            "the reviewed value set. Needs a source correction."
+        )
+    return "coded", ""
+
+
+def _reading_from_csv_row(row: dict[str, str], fixture_id: str, source: Path) -> RawReading:
+    """A replay row keeps its file and, for data/incidents.csv, the incident the
+    row belongs to, so the board and the run report can group by incident."""
+    parts = source.parts
+    shown = "/".join(parts[parts.index("data") :]) if "data" in parts else source.name
+    payload: dict[str, Any] = {"replay_source": shown, "synthetic": True}
+    payload["incident_fixture"] = (row.get("incident") or "").strip() or fixture_id
+    if (row.get("incident_title") or "").strip():
+        payload["incident_title"] = row["incident_title"].strip()
+    return reading_from_csv_row(row, payload)
 
 
 __all__ = [
